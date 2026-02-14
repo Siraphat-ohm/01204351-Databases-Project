@@ -94,8 +94,8 @@ try:
     with open(output_json, "w", encoding="utf-8") as f:
         json.dump(cleaned_data, f, indent=2)
 
-    print(f"✅ Processed {len(cleaned_data)} aircraft models.")
-    print(f"📁 Data saved to: {output_json}")
+    print(f"Processed {len(cleaned_data)} aircraft models.")
+    print(f"Data saved to: {output_json}")
 
 except FileNotFoundError:
-    print(f"❌ Error: Could not find '{input_csv}'")
+    print(f"Error: Could not find '{input_csv}'")

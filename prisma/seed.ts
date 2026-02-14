@@ -20,6 +20,7 @@ const prisma = new PrismaClient({
 
 const airportsFilePath = "prisma/data/airports.json";
 const planesFilePath = "prisma/data/planes.json";
+const routesFilePath = "prisma/data/routes.json";
 
 interface AirportData {
   name: string;
@@ -35,12 +36,17 @@ interface PlaneTypeData {
   capacityBiz: number;
 }
 
+interface RouteData {
+  origin: string;
+  dest: string;
+  distance: number;
+  duration: number;
+}
+
 async function main() {
   console.log("🌱 Starting seed...");
   const rawData = fs.readFileSync(airportsFilePath, "utf-8");
   const airports: AirportData[] = JSON.parse(rawData);
-
-  console.log(`✈️  Found ${airports.length} airports to process.`);
 
   for (const airport of airports) {
     await prisma.airport.upsert({
@@ -93,6 +99,43 @@ async function main() {
         },
       });
     }
+  }
+
+  const rawRoutes = fs.readFileSync(routesFilePath, "utf-8");
+  const routes: RouteData[] = JSON.parse(rawRoutes);
+
+  const dbAirports = await prisma.airport.findMany({
+    select: { id: true, iataCode: true },
+  });
+  const airportMap = new Map(dbAirports.map((a) => [a.iataCode, a.id]));
+
+  let routeCount = 0;
+
+  for (const route of routes) {
+    const originId = airportMap.get(route.origin);
+    const destId = airportMap.get(route.dest);
+
+    if (!originId || !destId) continue;
+
+    await prisma.route.upsert({
+      where: {
+        originAirportId_destAirportId: {
+          originAirportId: originId,
+          destAirportId: destId,
+        },
+      },
+      update: {
+        distanceKm: route.distance,
+        durationMins: route.duration,
+      },
+      create: {
+        originAirportId: originId,
+        destAirportId: destId,
+        distanceKm: route.distance,
+        durationMins: route.duration,
+      },
+    });
+    routeCount++;
   }
 
   console.log("Seeding completed successfully.");
