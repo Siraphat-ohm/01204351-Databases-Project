@@ -178,3 +178,10 @@ model Transaction {
 
   booking Booking @relation(fields: [bookingId], references: [id])
 }
+
+model Country {
+  code String @id
+  name String
+
+  // airports Airport[]
+}
