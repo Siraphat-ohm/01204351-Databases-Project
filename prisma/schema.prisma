@@ -10,9 +10,8 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
 }
-
 
 enum Role {
   PASSENGER
@@ -56,35 +55,35 @@ enum TransactionStatus {
 }
 
 model User {
-  id            Int      @id @default(autoincrement())
-  username      String   @unique
-  passwordHash  String
-  email         String   @unique
-  role          Role     @default(PASSENGER)
+  id           Int    @id @default(autoincrement())
+  username     String @unique
+  passwordHash String
+  email        String @unique
+  role         Role   @default(PASSENGER)
 
   // Crew / Captain
   licenseNumber String?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  bookings      Booking[]
-  flights       Flight[]  @relation("CaptainFlights")
+  bookings Booking[]
+  flights  Flight[]  @relation("CaptainFlights")
 }
 
 model Airport {
-  id        Int      @id @default(autoincrement())
-  iataCode  String   @unique
-  name      String
-  city      String
-  country   String
+  id       Int    @id @default(autoincrement())
+  iataCode String @unique
+  name     String
+  city     String
+  country  String
 
   origins      Route[] @relation("OriginAirport")
   destinations Route[] @relation("DestAirport")
 }
 
 model Route {
-  id              Int      @id @default(autoincrement())
+  id              Int  @id @default(autoincrement())
   originAirportId Int
   destAirportId   Int
   distanceKm      Int
@@ -97,35 +96,45 @@ model Route {
   @@unique([originAirportId, destAirportId])
 }
 
-model Aircraft {
-  id            Int            @id @default(autoincrement())
-  tailNumber    String         @unique
-  model         String
-  capacityEco   Int
-  capacityBiz   Int
-  status        AircraftStatus @default(ACTIVE)
+model AircraftType {
+  id          Int    @id @default(autoincrement())
+  iataCode    String @unique
+  model       String
+  capacityEco Int
+  capacityBiz Int
 
-  flights       Flight[]
+  fleet Aircraft[]
+}
+
+model Aircraft {
+  id         Int            @id @default(autoincrement())
+  tailNumber String         @unique
+  status     AircraftStatus @default(ACTIVE)
+
+  aircraftTypeId Int
+  type           AircraftType @relation(fields: [aircraftTypeId], references: [id])
+
+  flights Flight[]
 }
 
 model Flight {
-  id            Int          @id @default(autoincrement())
-  flightCode    String       @unique
-  routeId       Int
-  aircraftId    Int
-  captainId     Int
-  gate          String?
+  id         Int     @id @default(autoincrement())
+  flightCode String  @unique
+  routeId    Int
+  aircraftId Int
+  captainId  Int
+  gate       String?
 
   departureTime DateTime
   arrivalTime   DateTime
   status        FlightStatus @default(SCHEDULED)
 
-  basePrice     Decimal      @db.Decimal(10, 2)
+  basePrice Decimal @db.Decimal(10, 2)
 
-  route     Route    @relation(fields: [routeId], references: [id])
-  aircraft  Aircraft @relation(fields: [aircraftId], references: [id])
-  captain   User     @relation("CaptainFlights", fields: [captainId], references: [id])
-  bookings  Booking[]
+  route    Route     @relation(fields: [routeId], references: [id])
+  aircraft Aircraft  @relation(fields: [aircraftId], references: [id])
+  captain  User      @relation("CaptainFlights", fields: [captainId], references: [id])
+  bookings Booking[]
 }
 
 model Booking {
@@ -151,21 +160,21 @@ model Ticket {
   class         TicketClass @default(ECONOMY)
   price         Decimal     @db.Decimal(10, 2)
 
-  booking       Booking     @relation(fields: [bookingId], references: [id])
+  booking Booking @relation(fields: [bookingId], references: [id])
 
   @@unique([bookingId, seatNumber])
 }
 
 model Transaction {
-  id             Int               @id @default(autoincrement())
-  bookingId      Int
-  amount         Decimal           @db.Decimal(10, 2)
-  status         TransactionStatus @default(PENDING)
-  paymentMethod  String
+  id            Int               @id @default(autoincrement())
+  bookingId     Int
+  amount        Decimal           @db.Decimal(10, 2)
+  status        TransactionStatus @default(PENDING)
+  paymentMethod String
 
   stripeChargeId String?
 
-  createdAt      DateTime          @default(now())
+  createdAt DateTime @default(now())
 
-  booking        Booking           @relation(fields: [bookingId], references: [id])
+  booking Booking @relation(fields: [bookingId], references: [id])
 }

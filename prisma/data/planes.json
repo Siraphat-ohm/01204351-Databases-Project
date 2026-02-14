@@ -1,0 +1,1478 @@
+[
+  {
+    "model": "Aerospatiale (Nord) 262",
+    "code": "ND2",
+    "capacityEco": 84,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Aerospatiale (Sud Aviation) Se.210 Caravelle",
+    "code": "CRV",
+    "capacityEco": 82,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Aerospatiale SN.601 Corvette",
+    "code": "NDC",
+    "capacityEco": 90,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Aerospatiale/Alenia ATR 42-300",
+    "code": "AT4",
+    "capacityEco": 48,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Aerospatiale/Alenia ATR 42-500",
+    "code": "AT5",
+    "capacityEco": 69,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Aerospatiale/Alenia ATR 42-600",
+    "code": "ATR",
+    "capacityEco": 70,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Aerospatiale/Alenia ATR 72",
+    "code": "AT7",
+    "capacityEco": 70,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Airbus A300",
+    "code": "AB3",
+    "capacityEco": 185,
+    "capacityBiz": 18
+  },
+  {
+    "model": "Airbus A300-600",
+    "code": "AB6",
+    "capacityEco": 177,
+    "capacityBiz": 37
+  },
+  {
+    "model": "Airbus A300-600ST Super Transporter / Beluga",
+    "code": "ABB",
+    "capacityEco": 235,
+    "capacityBiz": 39
+  },
+  {
+    "model": "Airbus A310",
+    "code": "310",
+    "capacityEco": 191,
+    "capacityBiz": 35
+  },
+  {
+    "model": "Airbus A318",
+    "code": "318",
+    "capacityEco": 218,
+    "capacityBiz": 16
+  },
+  {
+    "model": "Airbus A319",
+    "code": "319",
+    "capacityEco": 124,
+    "capacityBiz": 8
+  },
+  {
+    "model": "Airbus A319neo",
+    "code": "31N",
+    "capacityEco": 181,
+    "capacityBiz": 26
+  },
+  {
+    "model": "Airbus A320",
+    "code": "320",
+    "capacityEco": 150,
+    "capacityBiz": 12
+  },
+  {
+    "model": "Airbus A320neo",
+    "code": "32N",
+    "capacityEco": 160,
+    "capacityBiz": 12
+  },
+  {
+    "model": "Airbus A321",
+    "code": "321",
+    "capacityEco": 185,
+    "capacityBiz": 16
+  },
+  {
+    "model": "Airbus A321neo",
+    "code": "32Q",
+    "capacityEco": 195,
+    "capacityBiz": 16
+  },
+  {
+    "model": "Airbus A330",
+    "code": "330",
+    "capacityEco": 250,
+    "capacityBiz": 30
+  },
+  {
+    "model": "Airbus A330-200",
+    "code": "332",
+    "capacityEco": 210,
+    "capacityBiz": 30
+  },
+  {
+    "model": "Airbus A330-300",
+    "code": "333",
+    "capacityEco": 260,
+    "capacityBiz": 36
+  },
+  {
+    "model": "Airbus A330-700 Beluga XL",
+    "code": "A337",
+    "capacityEco": 186,
+    "capacityBiz": 26
+  },
+  {
+    "model": "Airbus A330-800neo",
+    "code": "338",
+    "capacityEco": 212,
+    "capacityBiz": 39
+  },
+  {
+    "model": "Airbus A330-900neo",
+    "code": "339",
+    "capacityEco": 298,
+    "capacityBiz": 34
+  },
+  {
+    "model": "Airbus A340",
+    "code": "340",
+    "capacityEco": 230,
+    "capacityBiz": 40
+  },
+  {
+    "model": "Airbus A340-200",
+    "code": "342",
+    "capacityEco": 213,
+    "capacityBiz": 17
+  },
+  {
+    "model": "Airbus A340-300",
+    "code": "343",
+    "capacityEco": 262,
+    "capacityBiz": 18
+  },
+  {
+    "model": "Airbus A340-500",
+    "code": "345",
+    "capacityEco": 283,
+    "capacityBiz": 14
+  },
+  {
+    "model": "Airbus A340-600",
+    "code": "346",
+    "capacityEco": 203,
+    "capacityBiz": 28
+  },
+  {
+    "model": "Airbus A350",
+    "code": "350",
+    "capacityEco": 280,
+    "capacityBiz": 44
+  },
+  {
+    "model": "Airbus A350-1000",
+    "code": "351",
+    "capacityEco": 310,
+    "capacityBiz": 48
+  },
+  {
+    "model": "Airbus A350-900",
+    "code": "359",
+    "capacityEco": 280,
+    "capacityBiz": 44
+  },
+  {
+    "model": "Airbus A380",
+    "code": "380",
+    "capacityEco": 400,
+    "capacityBiz": 70
+  },
+  {
+    "model": "Airbus A380-800",
+    "code": "388",
+    "capacityEco": 400,
+    "capacityBiz": 70
+  },
+  {
+    "model": "Antonov AN-12",
+    "code": "ANF",
+    "capacityEco": 73,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Antonov AN-124 Ruslan",
+    "code": "A4F",
+    "capacityEco": 53,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Antonov AN-140",
+    "code": "A40",
+    "capacityEco": 69,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Antonov An-148",
+    "code": "A81",
+    "capacityEco": 58,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Antonov An-158",
+    "code": "A58",
+    "capacityEco": 67,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Antonov An-225 Mriya",
+    "code": "A25",
+    "capacityEco": 98,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Antonov AN-24",
+    "code": "AN4",
+    "capacityEco": 58,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Antonov AN-26",
+    "code": "A26",
+    "capacityEco": 87,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Antonov AN-28",
+    "code": "A28",
+    "capacityEco": 83,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Antonov AN-30",
+    "code": "A30",
+    "capacityEco": 91,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Antonov AN-32",
+    "code": "A32",
+    "capacityEco": 85,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Antonov AN-72",
+    "code": "AN7",
+    "capacityEco": 75,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Avro RJ100",
+    "code": "AR1",
+    "capacityEco": 83,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Avro RJ70",
+    "code": "AR7",
+    "capacityEco": 83,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Avro RJ85",
+    "code": "AR8",
+    "capacityEco": 99,
+    "capacityBiz": 0
+  },
+  {
+    "model": "BAe 146",
+    "code": "146",
+    "capacityEco": 54,
+    "capacityBiz": 0
+  },
+  {
+    "model": "BAe 146-100",
+    "code": "141",
+    "capacityEco": 86,
+    "capacityBiz": 0
+  },
+  {
+    "model": "BAe 146-200",
+    "code": "142",
+    "capacityEco": 53,
+    "capacityBiz": 0
+  },
+  {
+    "model": "BAe 146-300",
+    "code": "143",
+    "capacityEco": 72,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Beechcraft 1900",
+    "code": "BEH",
+    "capacityEco": 97,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Beechcraft Baron",
+    "code": "BE58",
+    "capacityEco": 91,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Beechcraft Baron / 55 Baron",
+    "code": "BE55",
+    "capacityEco": 77,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Bell 212",
+    "code": "BH2",
+    "capacityEco": 52,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Boeing 707",
+    "code": "703",
+    "capacityEco": 235,
+    "capacityBiz": 36
+  },
+  {
+    "model": "Boeing 717",
+    "code": "717",
+    "capacityEco": 265,
+    "capacityBiz": 38
+  },
+  {
+    "model": "Boeing 720B",
+    "code": "B72",
+    "capacityEco": 238,
+    "capacityBiz": 13
+  },
+  {
+    "model": "Boeing 727",
+    "code": "727",
+    "capacityEco": 284,
+    "capacityBiz": 16
+  },
+  {
+    "model": "Boeing 727-100",
+    "code": "721",
+    "capacityEco": 212,
+    "capacityBiz": 35
+  },
+  {
+    "model": "Boeing 727-200",
+    "code": "722",
+    "capacityEco": 278,
+    "capacityBiz": 32
+  },
+  {
+    "model": "Boeing 737",
+    "code": "737",
+    "capacityEco": 130,
+    "capacityBiz": 8
+  },
+  {
+    "model": "Boeing 737 MAX 10",
+    "code": "7MJ",
+    "capacityEco": 160,
+    "capacityBiz": 14
+  },
+  {
+    "model": "Boeing 737 MAX 7",
+    "code": "7M7",
+    "capacityEco": 228,
+    "capacityBiz": 23
+  },
+  {
+    "model": "Boeing 737 MAX 8",
+    "code": "7M8",
+    "capacityEco": 162,
+    "capacityBiz": 12
+  },
+  {
+    "model": "Boeing 737 MAX 9",
+    "code": "7M9",
+    "capacityEco": 166,
+    "capacityBiz": 23
+  },
+  {
+    "model": "Boeing 737-200",
+    "code": "732",
+    "capacityEco": 203,
+    "capacityBiz": 25
+  },
+  {
+    "model": "Boeing 737-300",
+    "code": "733",
+    "capacityEco": 173,
+    "capacityBiz": 13
+  },
+  {
+    "model": "Boeing 737-400",
+    "code": "734",
+    "capacityEco": 193,
+    "capacityBiz": 34
+  },
+  {
+    "model": "Boeing 737-500",
+    "code": "735",
+    "capacityEco": 210,
+    "capacityBiz": 23
+  },
+  {
+    "model": "Boeing 737-600",
+    "code": "736",
+    "capacityEco": 170,
+    "capacityBiz": 34
+  },
+  {
+    "model": "Boeing 737-700",
+    "code": "73G",
+    "capacityEco": 175,
+    "capacityBiz": 21
+  },
+  {
+    "model": "Boeing 737-800",
+    "code": "738",
+    "capacityEco": 162,
+    "capacityBiz": 12
+  },
+  {
+    "model": "Boeing 737-900",
+    "code": "739",
+    "capacityEco": 180,
+    "capacityBiz": 16
+  },
+  {
+    "model": "Boeing 747",
+    "code": "747",
+    "capacityEco": 350,
+    "capacityBiz": 50
+  },
+  {
+    "model": "Boeing 747 LCF Dreamlifter",
+    "code": "74B",
+    "capacityEco": 214,
+    "capacityBiz": 31
+  },
+  {
+    "model": "Boeing 747-100",
+    "code": "741",
+    "capacityEco": 193,
+    "capacityBiz": 16
+  },
+  {
+    "model": "Boeing 747-200",
+    "code": "742",
+    "capacityEco": 257,
+    "capacityBiz": 13
+  },
+  {
+    "model": "Boeing 747-300",
+    "code": "743",
+    "capacityEco": 183,
+    "capacityBiz": 28
+  },
+  {
+    "model": "Boeing 747-400",
+    "code": "744",
+    "capacityEco": 350,
+    "capacityBiz": 50
+  },
+  {
+    "model": "Boeing 747-400D",
+    "code": "74J",
+    "capacityEco": 159,
+    "capacityBiz": 30
+  },
+  {
+    "model": "Boeing 747-8",
+    "code": "748",
+    "capacityEco": 224,
+    "capacityBiz": 12
+  },
+  {
+    "model": "Boeing 747SP",
+    "code": "74L",
+    "capacityEco": 188,
+    "capacityBiz": 20
+  },
+  {
+    "model": "Boeing 747SR",
+    "code": "74R",
+    "capacityEco": 228,
+    "capacityBiz": 38
+  },
+  {
+    "model": "Boeing 757",
+    "code": "757",
+    "capacityEco": 188,
+    "capacityBiz": 20
+  },
+  {
+    "model": "Boeing 757-200",
+    "code": "752",
+    "capacityEco": 264,
+    "capacityBiz": 12
+  },
+  {
+    "model": "Boeing 757-300",
+    "code": "753",
+    "capacityEco": 294,
+    "capacityBiz": 31
+  },
+  {
+    "model": "Boeing 767",
+    "code": "767",
+    "capacityEco": 211,
+    "capacityBiz": 24
+  },
+  {
+    "model": "Boeing 767-200",
+    "code": "762",
+    "capacityEco": 178,
+    "capacityBiz": 26
+  },
+  {
+    "model": "Boeing 767-300",
+    "code": "763",
+    "capacityEco": 200,
+    "capacityBiz": 30
+  },
+  {
+    "model": "Boeing 767-400",
+    "code": "764",
+    "capacityEco": 289,
+    "capacityBiz": 19
+  },
+  {
+    "model": "Boeing 777",
+    "code": "777",
+    "capacityEco": 221,
+    "capacityBiz": 15
+  },
+  {
+    "model": "Boeing 777-200",
+    "code": "772",
+    "capacityEco": 240,
+    "capacityBiz": 40
+  },
+  {
+    "model": "Boeing 777-200LR",
+    "code": "77L",
+    "capacityEco": 176,
+    "capacityBiz": 21
+  },
+  {
+    "model": "Boeing 777-300",
+    "code": "773",
+    "capacityEco": 300,
+    "capacityBiz": 50
+  },
+  {
+    "model": "Boeing 777-300ER",
+    "code": "77W",
+    "capacityEco": 300,
+    "capacityBiz": 50
+  },
+  {
+    "model": "Boeing 777-8",
+    "code": "778",
+    "capacityEco": 177,
+    "capacityBiz": 25
+  },
+  {
+    "model": "Boeing 777-9",
+    "code": "779",
+    "capacityEco": 156,
+    "capacityBiz": 13
+  },
+  {
+    "model": "Boeing 787",
+    "code": "787",
+    "capacityEco": 255,
+    "capacityBiz": 34
+  },
+  {
+    "model": "Boeing 787-10",
+    "code": "78J",
+    "capacityEco": 249,
+    "capacityBiz": 36
+  },
+  {
+    "model": "Boeing 787-8",
+    "code": "788",
+    "capacityEco": 210,
+    "capacityBiz": 24
+  },
+  {
+    "model": "Boeing 787-9",
+    "code": "789",
+    "capacityEco": 250,
+    "capacityBiz": 30
+  },
+  {
+    "model": "Bombardier 415",
+    "code": "CL2T",
+    "capacityEco": 66,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Bombardier BD-100 Challenger 300",
+    "code": "CL30",
+    "capacityEco": 76,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Bombardier CS100",
+    "code": "CS1",
+    "capacityEco": 68,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Bombardier CS300",
+    "code": "CS3",
+    "capacityEco": 95,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Bombardier Global Express",
+    "code": "CCX",
+    "capacityEco": 65,
+    "capacityBiz": 0
+  },
+  {
+    "model": "British Aerospace (BAC) One Eleven",
+    "code": "B11",
+    "capacityEco": 51,
+    "capacityBiz": 0
+  },
+  {
+    "model": "British Aerospace 125 series / Hawker/Raytheon 700/800/800XP/850/900",
+    "code": "H25",
+    "capacityEco": 97,
+    "capacityBiz": 0
+  },
+  {
+    "model": "British Aerospace 125-1000 series / Hawker/Raytheon 1000",
+    "code": "H25",
+    "capacityEco": 94,
+    "capacityBiz": 0
+  },
+  {
+    "model": "British Aerospace ATP",
+    "code": "ATP",
+    "capacityEco": 52,
+    "capacityBiz": 0
+  },
+  {
+    "model": "British Aerospace Jetstream 31",
+    "code": "J31",
+    "capacityEco": 69,
+    "capacityBiz": 0
+  },
+  {
+    "model": "British Aerospace Jetstream 32",
+    "code": "J32",
+    "capacityEco": 81,
+    "capacityBiz": 0
+  },
+  {
+    "model": "British Aerospace Jetstream 41",
+    "code": "J41",
+    "capacityEco": 65,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Canadair Challenger",
+    "code": "CCJ",
+    "capacityEco": 54,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Canadair CL-44",
+    "code": "CL4",
+    "capacityEco": 76,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Canadair Regional Jet 100",
+    "code": "CR1",
+    "capacityEco": 81,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Canadair Regional Jet 1000",
+    "code": "CRK",
+    "capacityEco": 98,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Canadair Regional Jet 200",
+    "code": "CR2",
+    "capacityEco": 64,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Canadair Regional Jet 700",
+    "code": "CR7",
+    "capacityEco": 71,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Canadair Regional Jet 900",
+    "code": "CR9",
+    "capacityEco": 91,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna 152",
+    "code": "C152",
+    "capacityEco": 92,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna 172",
+    "code": "CN1",
+    "capacityEco": 97,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna 182 Skylane",
+    "code": "CN1",
+    "capacityEco": 81,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna 208 Caravan",
+    "code": "CN1",
+    "capacityEco": 84,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna 210 Centurion",
+    "code": "CN1",
+    "capacityEco": 83,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna Citation CJ3",
+    "code": "CNJ",
+    "capacityEco": 56,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna Citation CJ4",
+    "code": "CNJ",
+    "capacityEco": 83,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna Citation Excel",
+    "code": "CNJ",
+    "capacityEco": 68,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna Citation I",
+    "code": "CNJ",
+    "capacityEco": 63,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna Citation II",
+    "code": "CNJ",
+    "capacityEco": 77,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna Citation Mustang",
+    "code": "CNJ",
+    "capacityEco": 98,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna Citation Sovereign",
+    "code": "CNJ",
+    "capacityEco": 75,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Cessna Citation X",
+    "code": "CNJ",
+    "capacityEco": 75,
+    "capacityBiz": 0
+  },
+  {
+    "model": "COMAC C-919",
+    "code": "C919",
+    "capacityEco": 91,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Concorde",
+    "code": "SSC",
+    "capacityEco": 72,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Dassault Falcon 2000",
+    "code": "D20",
+    "capacityEco": 66,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Dassault Falcon 50",
+    "code": "DF3",
+    "capacityEco": 93,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Dassault Falcon 7X",
+    "code": "DF7",
+    "capacityEco": 100,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Dassault Falcon 900",
+    "code": "DF9",
+    "capacityEco": 93,
+    "capacityBiz": 0
+  },
+  {
+    "model": "De Havilland Canada DHC-2 Beaver",
+    "code": "DHP",
+    "capacityEco": 68,
+    "capacityBiz": 0
+  },
+  {
+    "model": "De Havilland Canada DHC-2 Turbo-Beaver",
+    "code": "DHR",
+    "capacityEco": 50,
+    "capacityBiz": 0
+  },
+  {
+    "model": "De Havilland Canada DHC-3 Otter",
+    "code": "DHL",
+    "capacityEco": 67,
+    "capacityBiz": 0
+  },
+  {
+    "model": "De Havilland Canada DHC-4 Caribou",
+    "code": "DHC",
+    "capacityEco": 62,
+    "capacityBiz": 0
+  },
+  {
+    "model": "De Havilland Canada DHC-6 Twin Otter",
+    "code": "DHT",
+    "capacityEco": 55,
+    "capacityBiz": 0
+  },
+  {
+    "model": "De Havilland Canada DHC-7 Dash 7",
+    "code": "DH7",
+    "capacityEco": 94,
+    "capacityBiz": 0
+  },
+  {
+    "model": "De Havilland Canada DHC-8-100 Dash 8 / 8Q",
+    "code": "DH1",
+    "capacityEco": 73,
+    "capacityBiz": 0
+  },
+  {
+    "model": "De Havilland Canada DHC-8-200 Dash 8 / 8Q",
+    "code": "DH2",
+    "capacityEco": 82,
+    "capacityBiz": 0
+  },
+  {
+    "model": "De Havilland Canada DHC-8-300 Dash 8",
+    "code": "DH3",
+    "capacityEco": 72,
+    "capacityBiz": 0
+  },
+  {
+    "model": "De Havilland Canada DHC-8-400 Dash 8Q",
+    "code": "DH4",
+    "capacityEco": 70,
+    "capacityBiz": 0
+  },
+  {
+    "model": "De Havilland DH.104 Dove",
+    "code": "DHD",
+    "capacityEco": 92,
+    "capacityBiz": 0
+  },
+  {
+    "model": "De Havilland DH.114 Heron",
+    "code": "DHH",
+    "capacityEco": 65,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Douglas DC-10",
+    "code": "D10",
+    "capacityEco": 87,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Douglas DC-3",
+    "code": "D3F",
+    "capacityEco": 76,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Douglas DC-6",
+    "code": "D6F",
+    "capacityEco": 86,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Douglas DC-8-50",
+    "code": "D8T",
+    "capacityEco": 87,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Douglas DC-8-62",
+    "code": "D8L",
+    "capacityEco": 56,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Douglas DC-8-72",
+    "code": "D8Q",
+    "capacityEco": 68,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Douglas DC-9-10",
+    "code": "D91",
+    "capacityEco": 68,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Douglas DC-9-20",
+    "code": "D92",
+    "capacityEco": 84,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Douglas DC-9-30",
+    "code": "D93",
+    "capacityEco": 51,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Douglas DC-9-40",
+    "code": "D94",
+    "capacityEco": 74,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Douglas DC-9-50",
+    "code": "D95",
+    "capacityEco": 62,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer 170",
+    "code": "E70",
+    "capacityEco": 81,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer 175",
+    "code": "E75",
+    "capacityEco": 64,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer 175 (long wing)",
+    "code": "E7W",
+    "capacityEco": 62,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer 175 (short wing)",
+    "code": "E7W",
+    "capacityEco": 56,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer 190",
+    "code": "E90",
+    "capacityEco": 95,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer 195",
+    "code": "E95",
+    "capacityEco": 62,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer E190-E2",
+    "code": "290",
+    "capacityEco": 85,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer E195-E2",
+    "code": "295",
+    "capacityEco": 94,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer EMB 110 Bandeirante",
+    "code": "EMB",
+    "capacityEco": 56,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer EMB 120 Brasilia",
+    "code": "EM2",
+    "capacityEco": 89,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer Legacy 450",
+    "code": "E545",
+    "capacityEco": 59,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer Legacy 600",
+    "code": "ER3",
+    "capacityEco": 95,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer Phenom 100",
+    "code": "EP1",
+    "capacityEco": 71,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer Phenom 300",
+    "code": "EP3",
+    "capacityEco": 94,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer RJ135",
+    "code": "ER3",
+    "capacityEco": 85,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer RJ140",
+    "code": "ERD",
+    "capacityEco": 100,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Embraer RJ145",
+    "code": "ER4",
+    "capacityEco": 88,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Fairchild Dornier 328JET",
+    "code": "FRJ",
+    "capacityEco": 94,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Fairchild Dornier Do.228",
+    "code": "D28",
+    "capacityEco": 59,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Fairchild Dornier Do.328",
+    "code": "D38",
+    "capacityEco": 70,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Fokker 100",
+    "code": "100",
+    "capacityEco": 61,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Fokker 50",
+    "code": "F50",
+    "capacityEco": 99,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Fokker 70",
+    "code": "F70",
+    "capacityEco": 100,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Fokker F27 Friendship",
+    "code": "F27",
+    "capacityEco": 76,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Fokker F28 Fellowship",
+    "code": "F21",
+    "capacityEco": 75,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Gulfstream Aerospace G-159 Gulfstream I",
+    "code": "GRS",
+    "capacityEco": 61,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Gulfstream G280",
+    "code": "GR3",
+    "capacityEco": 73,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Gulfstream G650",
+    "code": "GJ6",
+    "capacityEco": 79,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Gulfstream IV",
+    "code": "GJ4",
+    "capacityEco": 63,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Gulfstream V",
+    "code": "GJ5",
+    "capacityEco": 52,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Gulfstream/Rockwell (Aero) Commander",
+    "code": "ACP",
+    "capacityEco": 94,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Gulfstream/Rockwell (Aero) Turbo Commander",
+    "code": "ACT",
+    "capacityEco": 65,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Harbin Yunshuji Y12",
+    "code": "YN2",
+    "capacityEco": 81,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Hawker Siddeley HS 748",
+    "code": "HS7",
+    "capacityEco": 69,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Ilyushin IL114",
+    "code": "I14",
+    "capacityEco": 94,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Ilyushin IL18",
+    "code": "IL8",
+    "capacityEco": 84,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Ilyushin IL62",
+    "code": "IL6",
+    "capacityEco": 73,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Ilyushin IL76",
+    "code": "IL7",
+    "capacityEco": 88,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Ilyushin IL86",
+    "code": "ILW",
+    "capacityEco": 91,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Ilyushin IL96",
+    "code": "I93",
+    "capacityEco": 74,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Learjet 35",
+    "code": "LRJ",
+    "capacityEco": 88,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Learjet 60",
+    "code": "LRJ",
+    "capacityEco": 90,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Lockheed L-1011 Tristar",
+    "code": "L10",
+    "capacityEco": 57,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Lockheed L-1049 Super Constellation",
+    "code": "L49",
+    "capacityEco": 82,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Lockheed L-182 / 282 / 382 (L-100) Hercules",
+    "code": "LOH",
+    "capacityEco": 56,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Lockheed L-188 Electra",
+    "code": "LOE",
+    "capacityEco": 53,
+    "capacityBiz": 0
+  },
+  {
+    "model": "McDonnell Douglas MD-11",
+    "code": "M11",
+    "capacityEco": 82,
+    "capacityBiz": 0
+  },
+  {
+    "model": "McDonnell Douglas MD-81",
+    "code": "M81",
+    "capacityEco": 84,
+    "capacityBiz": 0
+  },
+  {
+    "model": "McDonnell Douglas MD-82",
+    "code": "M82",
+    "capacityEco": 74,
+    "capacityBiz": 0
+  },
+  {
+    "model": "McDonnell Douglas MD-83",
+    "code": "M83",
+    "capacityEco": 100,
+    "capacityBiz": 0
+  },
+  {
+    "model": "McDonnell Douglas MD-87",
+    "code": "M87",
+    "capacityEco": 65,
+    "capacityBiz": 0
+  },
+  {
+    "model": "McDonnell Douglas MD-88",
+    "code": "M88",
+    "capacityEco": 98,
+    "capacityBiz": 0
+  },
+  {
+    "model": "McDonnell Douglas MD-90",
+    "code": "M90",
+    "capacityEco": 84,
+    "capacityBiz": 0
+  },
+  {
+    "model": "NAMC YS-11",
+    "code": "YS1",
+    "capacityEco": 86,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Partenavia P.68",
+    "code": "PN6",
+    "capacityEco": 94,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Pilatus Britten-Norman BN-2A Mk III Trislander",
+    "code": "BNT",
+    "capacityEco": 83,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Pilatus Britten-Norman BN-2A/B Islander",
+    "code": "BNI",
+    "capacityEco": 63,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Pilatus PC-12",
+    "code": "PL2",
+    "capacityEco": 87,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Pilatus PC-6 Turbo Porter",
+    "code": "PL6",
+    "capacityEco": 50,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Piper PA-28\u00a0(above 200\u00a0hp)",
+    "code": "P28B",
+    "capacityEco": 82,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Piper PA-28\u00a0(up to 180\u00a0hp)",
+    "code": "P28A",
+    "capacityEco": 97,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Piper PA-31 Navajo",
+    "code": "PA2",
+    "capacityEco": 96,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Piper PA-44 Seminole",
+    "code": "PA44",
+    "capacityEco": 66,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Piper PA-46",
+    "code": "PAG",
+    "capacityEco": 55,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Saab 2000",
+    "code": "S20",
+    "capacityEco": 68,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Saab SF340A/B",
+    "code": "SF3",
+    "capacityEco": 82,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Shorts SC-5 Belfast",
+    "code": "SHB",
+    "capacityEco": 90,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Shorts SC-7 Skyvan",
+    "code": "SHS",
+    "capacityEco": 73,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Shorts SD.330",
+    "code": "SH3",
+    "capacityEco": 62,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Shorts SD.360",
+    "code": "SH6",
+    "capacityEco": 82,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Sikorsky S-58T",
+    "code": "S58",
+    "capacityEco": 70,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Sikorsky S-61",
+    "code": "S61",
+    "capacityEco": 69,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Sikorsky S-76",
+    "code": "S76",
+    "capacityEco": 53,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Sikorsky S-92",
+    "code": "S92",
+    "capacityEco": 93,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Sukhoi Superjet 100-95",
+    "code": "SU9",
+    "capacityEco": 83,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Tupolev Tu-134",
+    "code": "TU3",
+    "capacityEco": 52,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Tupolev Tu-144",
+    "code": "T144",
+    "capacityEco": 98,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Tupolev Tu-154",
+    "code": "TU5",
+    "capacityEco": 74,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Tupolev Tu-204",
+    "code": "T20",
+    "capacityEco": 82,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Yakovlev Yak-40",
+    "code": "YK4",
+    "capacityEco": 98,
+    "capacityBiz": 0
+  },
+  {
+    "model": "Yakovlev Yak-42",
+    "code": "YK2",
+    "capacityEco": 63,
+    "capacityBiz": 0
+  }
+]
