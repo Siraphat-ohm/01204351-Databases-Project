@@ -1,6 +1,11 @@
 import fs from "fs";
 import path from "path";
-import { PrismaClient, AircraftStatus } from "@/generated/prisma/client";
+import {
+  PrismaClient,
+  AircraftStatus,
+  Role,
+  Rank,
+} from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
@@ -25,6 +30,15 @@ const routesFilePath = path.join(process.cwd(), "prisma/data/routes.json");
 const countriesFilePath = path.join(
   process.cwd(),
   "prisma/data/countries.json",
+);
+
+// User data files
+const adminsFilePath = path.join(process.cwd(), "prisma/data/admins.json");
+const pilotsFilePath = path.join(process.cwd(), "prisma/data/pilots.json");
+const crewsFilePath = path.join(process.cwd(), "prisma/data/crews.json");
+const passengersFilePath = path.join(
+  process.cwd(),
+  "prisma/data/passengers.json",
 );
 
 // Interfaces
@@ -52,6 +66,23 @@ interface RouteData {
   dest: string;
   distance: number;
   duration: number;
+}
+
+interface UserSeed {
+  username: string;
+  email: string;
+  passwordHash: string;
+  role: Role;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  staffProfile?: {
+    employeeId: string;
+    rank?: Rank;
+    licenseNumber?: string;
+    flightHours?: number;
+    skills?: string[];
+  };
 }
 
 function chunkArray<T>(array: T[], size: number): T[][] {
@@ -163,7 +194,7 @@ async function main() {
   // --------------------------------------------------------
   // 4. SEED ROUTES (Batch Insert with Map Lookup)
   // --------------------------------------------------------
-  console.log("📍 Seeding Routes...");
+  console.log("🗺️ Seeding Routes...");
   if (fs.existsSync(routesFilePath)) {
     const rawRoutes = fs.readFileSync(routesFilePath, "utf-8");
     const routes: RouteData[] = JSON.parse(rawRoutes);
@@ -200,6 +231,52 @@ async function main() {
     }
     console.log(`   ✅ Processed ${validRoutes.length} routes.`);
   }
+
+  // --------------------------------------------------------
+  // 5. SEED USERS (Admins, Pilots, Crew, Passengers)
+  // --------------------------------------------------------
+  console.log("👥 Seeding Users...");
+
+  // Get BKK airport for default base
+  const bkk = await prisma.airport.findUnique({ where: { iataCode: "BKK" } });
+
+  const seedUsers = async (filePath: string, label: string) => {
+    if (fs.existsSync(filePath)) {
+      const users: UserSeed[] = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      for (const u of users) {
+        await prisma.user.upsert({
+          where: { email: u.email },
+          update: {},
+          create: {
+            username: u.username,
+            email: u.email,
+            passwordHash: u.passwordHash,
+            role: u.role,
+            firstName: u.firstName,
+            lastName: u.lastName,
+            phone: u.phone,
+            staffProfile: u.staffProfile
+              ? {
+                  create: {
+                    employeeId: u.staffProfile.employeeId,
+                    role: u.role,
+                    rank: u.staffProfile.rank,
+                    baseAirportId: bkk?.id, // Default base ที่ BKK
+                  },
+                }
+              : undefined,
+          },
+        });
+      }
+      console.log(`   ✅ Processed ${users.length} ${label}`);
+    }
+  };
+
+  // Seed each user type
+  await seedUsers(adminsFilePath, "admins");
+  await seedUsers(pilotsFilePath, "pilots");
+  await seedUsers(crewsFilePath, "cabin crew");
+  await seedUsers(passengersFilePath, "passengers");
 
   console.log("✨ Seeding completed successfully.");
   console.timeEnd("⏱️ Seeding Duration");
