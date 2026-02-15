@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { AircraftStatus, PrismaClient } from "@/generated/prisma/client";
+import { PrismaClient, AircraftStatus } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
@@ -15,13 +15,23 @@ const adapter = new PrismaPg(pool);
 // Initialize Prisma with adapter
 const prisma = new PrismaClient({
   adapter,
-  log: ["query", "info", "warn", "error"],
+  // log: ["query", "info", "warn", "error"],
 });
 
-const airportsFilePath = "prisma/data/airports.json";
-const planesFilePath = "prisma/data/planes.json";
-const routesFilePath = "prisma/data/routes.json";
-const countriesFilePath = "prisma/data/countries.json";
+// Paths to JSON files
+const airportsFilePath = path.join(process.cwd(), "prisma/data/airports.json");
+const planesFilePath = path.join(process.cwd(), "prisma/data/planes.json");
+const routesFilePath = path.join(process.cwd(), "prisma/data/routes.json");
+const countriesFilePath = path.join(
+  process.cwd(),
+  "prisma/data/countries.json",
+);
+
+// Interfaces
+interface CountryData {
+  name: string;
+  code: string;
+}
 
 interface AirportData {
   name: string;
@@ -44,118 +54,155 @@ interface RouteData {
   duration: number;
 }
 
-interface CountryData {
-  name: string;
-  code: string;
+function chunkArray<T>(array: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    result.push(array.slice(i, i + size));
+  }
+  return result;
 }
 
 async function main() {
-  console.log("🌱 Starting seed...");
-  const rawData = fs.readFileSync(airportsFilePath, "utf-8");
-  const airports: AirportData[] = JSON.parse(rawData);
+  console.time("⏱️ Seeding Duration");
+  console.log("🌱 Starting optimized seed...");
 
-  // for (const airport of airports) {
-  //   await prisma.airport.upsert({
-  //     where: { iataCode: airport.iataCode },
-  //     update: {
-  //       name: airport.name,
-  //       city: airport.city,
-  //       country: airport.country,
-  //     },
-  //     create: {
-  //       iataCode: airport.iataCode,
-  //       name: airport.name,
-  //       city: airport.city,
-  //       country: airport.country,
-  //     },
-  //   });
-  // }
+  // --------------------------------------------------------
+  // 1. SEED COUNTRIES (Batch Insert)
+  // --------------------------------------------------------
+  console.log("🌍 Seeding Countries...");
+  if (fs.existsSync(countriesFilePath)) {
+    const rawCountries = fs.readFileSync(countriesFilePath, "utf-8");
+    const countries: CountryData[] = JSON.parse(rawCountries);
 
-  // const rawPlanes = fs.readFileSync(planesFilePath, "utf-8");
-  // const planeTypes: PlaneTypeData[] = JSON.parse(rawPlanes);
-
-  // for (const typeData of planeTypes) {
-  //   const aircraftType = await prisma.aircraftType.upsert({
-  //     where: { iataCode: typeData.code },
-  //     update: {
-  //       model: typeData.model,
-  //       capacityEco: typeData.capacityEco,
-  //       capacityBiz: typeData.capacityBiz,
-  //     },
-  //     create: {
-  //       iataCode: typeData.code,
-  //       model: typeData.model,
-  //       capacityEco: typeData.capacityEco,
-  //       capacityBiz: typeData.capacityBiz,
-  //     },
-  //   });
-
-  //   for (let i = 1; i <= 2; i++) {
-  //     const mockTailNumber = `HS-${typeData.code}-${i}`;
-
-  //     await prisma.aircraft.upsert({
-  //       where: { tailNumber: mockTailNumber },
-  //       update: {
-  //         aircraftTypeId: aircraftType.id,
-  //       },
-  //       create: {
-  //         tailNumber: mockTailNumber,
-  //         aircraftTypeId: aircraftType.id,
-  //         status: AircraftStatus.ACTIVE,
-  //       },
-  //     });
-  //   }
-  // }
-
-  // const rawRoutes = fs.readFileSync(routesFilePath, "utf-8");
-  // const routes: RouteData[] = JSON.parse(rawRoutes);
-
-  // const dbAirports = await prisma.airport.findMany({
-  //   select: { id: true, iataCode: true },
-  // });
-  // const airportMap = new Map(dbAirports.map((a) => [a.iataCode, a.id]));
-
-  // let routeCount = 0;
-
-  // for (const route of routes) {
-  //   const originId = airportMap.get(route.origin);
-  //   const destId = airportMap.get(route.dest);
-
-  //   if (!originId || !destId) continue;
-
-  //   await prisma.route.upsert({
-  //     where: {
-  //       originAirportId_destAirportId: {
-  //         originAirportId: originId,
-  //         destAirportId: destId,
-  //       },
-  //     },
-  //     update: {
-  //       distanceKm: route.distance,
-  //       durationMins: route.duration,
-  //     },
-  //     create: {
-  //       originAirportId: originId,
-  //       destAirportId: destId,
-  //       distanceKm: route.distance,
-  //       durationMins: route.duration,
-  //     },
-  //   });
-  //   routeCount++;
-  // }
-
-  const rawCountries = fs.readFileSync(countriesFilePath, "utf-8");
-  const countries: CountryData[] = JSON.parse(rawCountries);
-
-  for (const country of countries) {
-    await prisma.country.upsert({
-      where: { code: country.code },
-      update: { name: country.name },
-      create: { code: country.code, name: country.name },
+    await prisma.country.createMany({
+      data: countries.map((c) => ({
+        code: c.code,
+        name: c.name,
+      })),
+      skipDuplicates: true,
     });
+    console.log(`   ✅ Processed ${countries.length} countries.`);
   }
 
-  console.log("Seeding completed successfully.");
+  // --------------------------------------------------------
+  // 2. SEED AIRPORTS (Batch Insert with Chunking)
+  // --------------------------------------------------------
+  console.log("✈️ Seeding Airports...");
+  if (fs.existsSync(airportsFilePath)) {
+    const rawAirports = fs.readFileSync(airportsFilePath, "utf-8");
+    const airports: AirportData[] = JSON.parse(rawAirports);
+
+    const airportData = airports.map((a) => ({
+      iataCode: a.iataCode,
+      name: a.name,
+      city: a.city,
+      country: a.country,
+    }));
+
+    const chunks = chunkArray(airportData, 500);
+    for (const chunk of chunks) {
+      await prisma.airport.createMany({
+        data: chunk,
+        skipDuplicates: true,
+      });
+    }
+    console.log(`   ✅ Processed ${airports.length} airports.`);
+  }
+
+  // --------------------------------------------------------
+  // 3. SEED AIRCRAFT & TYPES (Hybrid)
+  // --------------------------------------------------------
+  console.log("🛩️ Seeding Aircraft Types & Fleet...");
+  if (fs.existsSync(planesFilePath)) {
+    const planeTypes: PlaneTypeData[] = JSON.parse(
+      fs.readFileSync(planesFilePath, "utf-8"),
+    );
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    for (const [index, typeData] of planeTypes.entries()) {
+      // Create Type (จำเป็นต้อง Upsert เพื่อเอา ID)
+      const aircraftType = await prisma.aircraftType.upsert({
+        where: { iataCode: typeData.code },
+        update: {
+          model: typeData.model,
+          capacityEco: typeData.capacityEco,
+          capacityBiz: typeData.capacityBiz,
+        },
+        create: {
+          iataCode: typeData.code,
+          model: typeData.model,
+          capacityEco: typeData.capacityEco,
+          capacityBiz: typeData.capacityBiz,
+        },
+      });
+
+      // Prepare Planes Data
+      const fleetLetter = alphabet[index % 26];
+      const planesData = [];
+
+      for (let i = 0; i < 3; i++) {
+        const sequenceLetter = alphabet[i];
+        const tailNumber = `HS-Y${fleetLetter}${sequenceLetter}`;
+        planesData.push({
+          tailNumber: tailNumber,
+          aircraftTypeId: aircraftType.id,
+          status: AircraftStatus.ACTIVE,
+        });
+      }
+
+      // Batch Insert Planes for this type
+      await prisma.aircraft.createMany({
+        data: planesData,
+        skipDuplicates: true,
+      });
+      console.log(`      -> Created fleet for ${typeData.model}`);
+    }
+    console.log("   ✅ Seeded aircraft fleet.");
+  }
+
+  // --------------------------------------------------------
+  // 4. SEED ROUTES (Batch Insert with Map Lookup)
+  // --------------------------------------------------------
+  console.log("📍 Seeding Routes...");
+  if (fs.existsSync(routesFilePath)) {
+    const rawRoutes = fs.readFileSync(routesFilePath, "utf-8");
+    const routes: RouteData[] = JSON.parse(rawRoutes);
+
+    // Cache Airport IDs
+    const dbAirports = await prisma.airport.findMany({
+      select: { id: true, iataCode: true },
+    });
+    const airportMap = new Map(dbAirports.map((a) => [a.iataCode, a.id]));
+
+    const validRoutes = [];
+
+    for (const route of routes) {
+      const originId = airportMap.get(route.origin);
+      const destId = airportMap.get(route.dest);
+
+      if (originId && destId) {
+        validRoutes.push({
+          originAirportId: originId,
+          destAirportId: destId,
+          distanceKm: route.distance,
+          durationMins: route.duration,
+        });
+      }
+    }
+
+    // Chunk Insert Routes
+    const routeChunks = chunkArray(validRoutes, 500);
+    for (const chunk of routeChunks) {
+      await prisma.route.createMany({
+        data: chunk,
+        skipDuplicates: true,
+      });
+    }
+    console.log(`   ✅ Processed ${validRoutes.length} routes.`);
+  }
+
+  console.log("✨ Seeding completed successfully.");
+  console.timeEnd("⏱️ Seeding Duration");
 }
 
 main()
