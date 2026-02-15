@@ -6,6 +6,8 @@ import {
   Role,
   Rank,
   FlightStatus,
+  BookingStatus,
+  TicketClass,
 } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
@@ -28,6 +30,7 @@ const countriesFilePath = path.join(
   "prisma/data/countries.json",
 );
 const flightsFilePath = path.join(process.cwd(), "prisma/data/flights.json");
+const bookingsFilePath = path.join(process.cwd(), "prisma/data/bookings.json");
 
 const adminsFilePath = path.join(process.cwd(), "prisma/data/admins.json");
 const pilotsFilePath = path.join(process.cwd(), "prisma/data/pilots.json");
@@ -91,6 +94,28 @@ interface FlightSeed {
   basePrice: number;
 }
 
+interface TicketSeed {
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  passportNumber: string | null;
+  gender: string;
+  seatNumber: string;
+  class: string;
+  price: number;
+}
+
+interface BookingSeed {
+  bookingRef: string;
+  flightCode: string;
+  status: string;
+  totalPrice: number;
+  contactEmail: string;
+  contactPhone: string;
+  createdAt: string;
+  tickets: TicketSeed[];
+}
+
 function chunkArray<T>(array: T[], size: number): T[][] {
   const result: T[][] = [];
   for (let i = 0; i < array.length; i += size) {
@@ -105,6 +130,7 @@ function readJsonFile<T>(filePath: string): T[] {
 }
 
 async function seedCountries() {
+  console.log("🌍 Seeding Countries...");
   const countries = readJsonFile<CountryData>(countriesFilePath);
   if (!countries.length) return;
 
@@ -116,10 +142,11 @@ async function seedCountries() {
     skipDuplicates: true,
   });
 
-  console.log(`Processed ${countries.length} countries`);
+  console.log(`   ✅ Processed ${countries.length} countries`);
 }
 
 async function seedAirports() {
+  console.log("✈️ Seeding Airports...");
   const airports = readJsonFile<AirportData>(airportsFilePath);
   if (!airports.length) return;
 
@@ -139,10 +166,11 @@ async function seedAirports() {
     });
   }
 
-  console.log(`Processed ${airports.length} airports`);
+  console.log(`   ✅ Processed ${airports.length} airports`);
 }
 
 async function seedAircraft() {
+  console.log("🛩️ Seeding Aircraft...");
   const planeTypes = readJsonFile<PlaneTypeData>(planesFilePath);
   if (!planeTypes.length) return;
 
@@ -183,10 +211,11 @@ async function seedAircraft() {
     });
   }
 
-  console.log("Aircraft seeded");
+  console.log("   ✅ Aircraft seeded");
 }
 
 async function seedRoutes() {
+  console.log("🗺️ Seeding Routes...");
   const routes = readJsonFile<RouteData>(routesFilePath);
   if (!routes.length) return;
 
@@ -220,7 +249,7 @@ async function seedRoutes() {
     });
   }
 
-  console.log(`Processed ${validRoutes.length} routes`);
+  console.log(`   ✅ Processed ${validRoutes.length} routes`);
 }
 
 async function seedUsersFromFile(filePath: string) {
@@ -258,11 +287,12 @@ async function seedUsersFromFile(filePath: string) {
   }
 
   console.log(
-    `Processed ${users.length} users from ${path.basename(filePath)}`,
+    `   ✅ Processed ${users.length} users from ${path.basename(filePath)}`,
   );
 }
 
 async function seedAllUsers() {
+  console.log("👥 Seeding Users...");
   await seedUsersFromFile(adminsFilePath);
   await seedUsersFromFile(pilotsFilePath);
   await seedUsersFromFile(crewsFilePath);
@@ -270,8 +300,12 @@ async function seedAllUsers() {
 }
 
 async function seedFlights() {
+  console.log("🛫 Seeding Flights...");
   const flights = readJsonFile<FlightSeed>(flightsFilePath);
-  if (!flights.length) return;
+  if (!flights.length) {
+    console.log("   ⚠️  No flights found");
+    return;
+  }
 
   const routes = await prisma.route.findMany({
     include: {
@@ -342,25 +376,123 @@ async function seedFlights() {
     }
   }
 
-  console.log(`Flights created: ${successCount}, skipped: ${skipCount}`);
+  console.log(`   ✅ Flights created: ${successCount}, skipped: ${skipCount}`);
+}
+
+async function seedBookings() {
+  console.log("🎫 Seeding Bookings...");
+
+  const bookings = readJsonFile<BookingSeed>(bookingsFilePath);
+  if (!bookings.length) {
+    console.log("   ⚠️  No bookings.json file found. Skipping bookings.");
+    return;
+  }
+
+  console.log(`   📋 Loading flights and passengers...`);
+
+  const flights = await prisma.flight.findMany({
+    select: { id: true, flightCode: true },
+  });
+
+  const flightMap = new Map(flights.map((f) => [f.flightCode, f.id]));
+
+  const passengers = await prisma.user.findMany({
+    where: { role: "PASSENGER" },
+    select: { id: true },
+  });
+
+  if (passengers.length === 0) {
+    console.log("   ⚠️  No passengers found. Please seed users first.");
+    return;
+  }
+
+  console.log(
+    `   Found ${flights.length} flights and ${passengers.length} passengers`,
+  );
+
+  let successCount = 0;
+  let skipCount = 0;
+  let ticketCount = 0;
+
+  for (const booking of bookings) {
+    const flightId = flightMap.get(booking.flightCode);
+
+    if (!flightId) {
+      skipCount++;
+      continue;
+    }
+
+    const randomPassenger =
+      passengers[Math.floor(Math.random() * passengers.length)];
+
+    try {
+      await prisma.booking.create({
+        data: {
+          bookingRef: booking.bookingRef,
+          userId: randomPassenger.id,
+          flightId: flightId,
+          status: booking.status as BookingStatus,
+          totalPrice: booking.totalPrice,
+          contactEmail: booking.contactEmail,
+          contactPhone: booking.contactPhone,
+          createdAt: new Date(booking.createdAt),
+          tickets: {
+            create: booking.tickets.map((ticket) => ({
+              firstName: ticket.firstName,
+              lastName: ticket.lastName,
+              dateOfBirth: ticket.dateOfBirth
+                ? new Date(ticket.dateOfBirth)
+                : null,
+              passportNumber: ticket.passportNumber,
+              gender: ticket.gender,
+              seatNumber: ticket.seatNumber,
+              class: ticket.class as TicketClass,
+              price: ticket.price,
+            })),
+          },
+        },
+      });
+
+      successCount++;
+      ticketCount += booking.tickets.length;
+    } catch (error) {
+      skipCount++;
+    }
+
+    if (successCount % 50 === 0 && successCount > 0) {
+      console.log(`   📊 Progress: ${successCount} bookings processed`);
+    }
+  }
+
+  console.log(
+    `   ✅ Created ${successCount} bookings with ${ticketCount} tickets`,
+  );
+  if (skipCount > 0) {
+    console.log(
+      `   ⚠️  Skipped ${skipCount} bookings (flight not found or duplicate)`,
+    );
+  }
 }
 
 async function main() {
-  console.time("Seeding Duration");
+  console.time("⏱️ Seeding Duration");
+  console.log("🌱 Starting seed...");
 
   // await seedCountries();
   // await seedAirports();
   // await seedAircraft();
   // await seedRoutes();
   // await seedAllUsers();
-  await seedFlights();
+  // await seedFlights();
+  await seedBookings();
 
-  console.timeEnd("Seeding Duration");
+  console.log("✨ Seeding completed successfully");
+  console.timeEnd("⏱️ Seeding Duration");
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("❌ Seeding failed:", e);
     process.exit(1);
   })
   .finally(async () => {
