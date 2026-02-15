@@ -8,6 +8,7 @@ import {
   FlightStatus,
   BookingStatus,
   TicketClass,
+  EmergencyStatus,
 } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
@@ -22,6 +23,7 @@ const prisma = new PrismaClient({
   adapter,
 });
 
+// File paths
 const airportsFilePath = path.join(process.cwd(), "prisma/data/airports.json");
 const planesFilePath = path.join(process.cwd(), "prisma/data/planes.json");
 const routesFilePath = path.join(process.cwd(), "prisma/data/routes.json");
@@ -31,6 +33,10 @@ const countriesFilePath = path.join(
 );
 const flightsFilePath = path.join(process.cwd(), "prisma/data/flights.json");
 const bookingsFilePath = path.join(process.cwd(), "prisma/data/bookings.json");
+const emergencyTypesFilePath = path.join(
+  process.cwd(),
+  "prisma/data/emergency-types.json",
+);
 
 const adminsFilePath = path.join(process.cwd(), "prisma/data/admins.json");
 const pilotsFilePath = path.join(process.cwd(), "prisma/data/pilots.json");
@@ -40,6 +46,7 @@ const passengersFilePath = path.join(
   "prisma/data/passengers.json",
 );
 
+// Interfaces
 interface CountryData {
   name: string;
   code: string;
@@ -116,6 +123,20 @@ interface BookingSeed {
   tickets: TicketSeed[];
 }
 
+interface EmergencyTaskTemplateSeed {
+  role: Role;
+  description: string;
+  priority: number;
+}
+
+interface EmergencyTypeSeed {
+  code: string;
+  name: string;
+  description: string;
+  templates: EmergencyTaskTemplateSeed[];
+}
+
+// Utility functions
 function chunkArray<T>(array: T[], size: number): T[][] {
   const result: T[][] = [];
   for (let i = 0; i < array.length; i += size) {
@@ -129,6 +150,7 @@ function readJsonFile<T>(filePath: string): T[] {
   return JSON.parse(fs.readFileSync(filePath, "utf-8"));
 }
 
+// Seeding functions
 async function seedCountries() {
   console.log("🌍 Seeding Countries...");
   const countries = readJsonFile<CountryData>(countriesFilePath);
@@ -384,11 +406,9 @@ async function seedBookings() {
 
   const bookings = readJsonFile<BookingSeed>(bookingsFilePath);
   if (!bookings.length) {
-    console.log("   ⚠️  No bookings.json file found. Skipping bookings.");
+    console.log("   ⚠️  No bookings found");
     return;
   }
-
-  console.log(`   📋 Loading flights and passengers...`);
 
   const flights = await prisma.flight.findMany({
     select: { id: true, flightCode: true },
@@ -402,13 +422,9 @@ async function seedBookings() {
   });
 
   if (passengers.length === 0) {
-    console.log("   ⚠️  No passengers found. Please seed users first.");
+    console.log("   ⚠️  No passengers found");
     return;
   }
-
-  console.log(
-    `   Found ${flights.length} flights and ${passengers.length} passengers`,
-  );
 
   let successCount = 0;
   let skipCount = 0;
@@ -468,23 +484,183 @@ async function seedBookings() {
     `   ✅ Created ${successCount} bookings with ${ticketCount} tickets`,
   );
   if (skipCount > 0) {
-    console.log(
-      `   ⚠️  Skipped ${skipCount} bookings (flight not found or duplicate)`,
-    );
+    console.log(`   ⚠️  Skipped ${skipCount} bookings`);
   }
+}
+
+async function seedEmergencyTypes() {
+  console.log("🚨 Seeding Emergency Types...");
+
+  const emergencyTypes = readJsonFile<EmergencyTypeSeed>(
+    emergencyTypesFilePath,
+  );
+
+  if (!emergencyTypes.length) {
+    console.log("   ⚠️  No emergency types found");
+    return;
+  }
+
+  let typesCreated = 0;
+  let templatesCreated = 0;
+
+  for (const emergencyType of emergencyTypes) {
+    const created = await prisma.emergencyType.upsert({
+      where: { code: emergencyType.code },
+      update: {
+        name: emergencyType.name,
+        description: emergencyType.description,
+      },
+      create: {
+        code: emergencyType.code,
+        name: emergencyType.name,
+        description: emergencyType.description,
+        templates: {
+          create: emergencyType.templates.map((template) => ({
+            role: template.role,
+            description: template.description,
+            priority: template.priority,
+          })),
+        },
+      },
+      include: {
+        templates: true,
+      },
+    });
+
+    typesCreated++;
+
+    if (created.templates.length === 0) {
+      await prisma.emergencyTaskTemplate.deleteMany({
+        where: { emergencyTypeId: created.id },
+      });
+
+      await prisma.emergencyTaskTemplate.createMany({
+        data: emergencyType.templates.map((template) => ({
+          emergencyTypeId: created.id,
+          role: template.role,
+          description: template.description,
+          priority: template.priority,
+        })),
+      });
+      templatesCreated += emergencyType.templates.length;
+    } else {
+      templatesCreated += created.templates.length;
+    }
+  }
+
+  console.log(
+    `   ✅ Processed ${typesCreated} emergency types with ${templatesCreated} templates`,
+  );
+}
+
+async function seedEmergencyIncidents() {
+  console.log("🚨 Seeding Emergency Incidents (testing)...");
+
+  const flights = await prisma.flight.findMany({
+    where: {
+      status: { in: ["DEPARTED", "BOARDING", "ARRIVED"] },
+    },
+    take: 20,
+  });
+
+  if (flights.length === 0) {
+    console.log("   ⚠️  No suitable flights found");
+    return;
+  }
+
+  const emergencyTypes = await prisma.emergencyType.findMany({
+    include: { templates: true },
+  });
+
+  if (emergencyTypes.length === 0) {
+    console.log("   ⚠️  No emergency types found");
+    return;
+  }
+
+  let incidentsCreated = 0;
+  let tasksCreated = 0;
+
+  const numIncidents = Math.floor(Math.random() * 6) + 5;
+
+  for (let i = 0; i < numIncidents && i < flights.length; i++) {
+    const flight = flights[i];
+
+    const weights = emergencyTypes.map((type) => {
+      if (type.code.startsWith("MED-002")) return 30;
+      if (type.code.startsWith("MED-001")) return 10;
+      if (type.code.startsWith("SEC-001")) return 15;
+      if (type.code.startsWith("WX-001")) return 20;
+      if (type.code.startsWith("TECH")) return 5;
+      return 1;
+    });
+
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let random = Math.random() * totalWeight;
+    let selectedType = emergencyTypes[0];
+
+    for (let j = 0; j < emergencyTypes.length; j++) {
+      random -= weights[j];
+      if (random <= 0) {
+        selectedType = emergencyTypes[j];
+        break;
+      }
+    }
+
+    const status: EmergencyStatus = Math.random() < 0.8 ? "RESOLVED" : "ACTIVE";
+
+    const declaredAt = new Date(
+      flight.departureTime.getTime() + Math.random() * 3600000,
+    );
+
+    const resolvedAt =
+      status === "RESOLVED"
+        ? new Date(declaredAt.getTime() + Math.random() * 1800000)
+        : null;
+
+    const incident = await prisma.emergencyIncident.create({
+      data: {
+        flightId: flight.id,
+        emergencyTypeId: selectedType.id,
+        status: status,
+        declaredAt: declaredAt,
+        resolvedAt: resolvedAt,
+        tasks: {
+          create: selectedType.templates.map((template) => ({
+            description: template.description,
+            assignedRole: template.role,
+            isCompleted: status === "RESOLVED" ? Math.random() > 0.1 : false,
+            completedAt:
+              status === "RESOLVED" && Math.random() > 0.1
+                ? new Date(declaredAt.getTime() + Math.random() * 1200000)
+                : null,
+          })),
+        },
+      },
+      include: { tasks: true },
+    });
+
+    incidentsCreated++;
+    tasksCreated += incident.tasks.length;
+  }
+
+  console.log(
+    `   ✅ Created ${incidentsCreated} incidents with ${tasksCreated} tasks`,
+  );
 }
 
 async function main() {
   console.time("⏱️ Seeding Duration");
-  console.log("🌱 Starting seed...");
+  console.log("🌱 Starting complete seed...");
 
-  // await seedCountries();
-  // await seedAirports();
-  // await seedAircraft();
-  // await seedRoutes();
-  // await seedAllUsers();
-  // await seedFlights();
+  await seedCountries();
+  await seedAirports();
+  await seedAircraft();
+  await seedRoutes();
+  await seedAllUsers();
+  await seedFlights();
   await seedBookings();
+  await seedEmergencyTypes();
+  await seedEmergencyIncidents();
 
   console.log("✨ Seeding completed successfully");
   console.timeEnd("⏱️ Seeding Duration");
