@@ -5,25 +5,21 @@ import {
   AircraftStatus,
   Role,
   Rank,
+  FlightStatus,
 } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 
-// Create PostgreSQL connection pool
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-// Create adapter
 const adapter = new PrismaPg(pool);
 
-// Initialize Prisma with adapter
 const prisma = new PrismaClient({
   adapter,
-  // log: ["query", "info", "warn", "error"],
 });
 
-// Paths to JSON files
 const airportsFilePath = path.join(process.cwd(), "prisma/data/airports.json");
 const planesFilePath = path.join(process.cwd(), "prisma/data/planes.json");
 const routesFilePath = path.join(process.cwd(), "prisma/data/routes.json");
@@ -31,8 +27,8 @@ const countriesFilePath = path.join(
   process.cwd(),
   "prisma/data/countries.json",
 );
+const flightsFilePath = path.join(process.cwd(), "prisma/data/flights.json");
 
-// User data files
 const adminsFilePath = path.join(process.cwd(), "prisma/data/admins.json");
 const pilotsFilePath = path.join(process.cwd(), "prisma/data/pilots.json");
 const crewsFilePath = path.join(process.cwd(), "prisma/data/crews.json");
@@ -41,7 +37,6 @@ const passengersFilePath = path.join(
   "prisma/data/passengers.json",
 );
 
-// Interfaces
 interface CountryData {
   name: string;
   code: string;
@@ -85,6 +80,17 @@ interface UserSeed {
   };
 }
 
+interface FlightSeed {
+  flightCode: string;
+  origin: string;
+  dest: string;
+  departureTime: string;
+  arrivalTime: string;
+  status: string;
+  gate: string;
+  basePrice: number;
+}
+
 function chunkArray<T>(array: T[], size: number): T[][] {
   const result: T[][] = [];
   for (let i = 0; i < array.length; i += size) {
@@ -93,198 +99,268 @@ function chunkArray<T>(array: T[], size: number): T[][] {
   return result;
 }
 
-async function main() {
-  console.time("⏱️ Seeding Duration");
-  console.log("🌱 Starting optimized seed...");
+function readJsonFile<T>(filePath: string): T[] {
+  if (!fs.existsSync(filePath)) return [];
+  return JSON.parse(fs.readFileSync(filePath, "utf-8"));
+}
 
-  // --------------------------------------------------------
-  // 1. SEED COUNTRIES (Batch Insert)
-  // --------------------------------------------------------
-  console.log("🌍 Seeding Countries...");
-  if (fs.existsSync(countriesFilePath)) {
-    const rawCountries = fs.readFileSync(countriesFilePath, "utf-8");
-    const countries: CountryData[] = JSON.parse(rawCountries);
+async function seedCountries() {
+  const countries = readJsonFile<CountryData>(countriesFilePath);
+  if (!countries.length) return;
 
-    await prisma.country.createMany({
-      data: countries.map((c) => ({
-        code: c.code,
-        name: c.name,
-      })),
+  await prisma.country.createMany({
+    data: countries.map((c) => ({
+      code: c.code,
+      name: c.name,
+    })),
+    skipDuplicates: true,
+  });
+
+  console.log(`Processed ${countries.length} countries`);
+}
+
+async function seedAirports() {
+  const airports = readJsonFile<AirportData>(airportsFilePath);
+  if (!airports.length) return;
+
+  const airportData = airports.map((a) => ({
+    iataCode: a.iataCode,
+    name: a.name,
+    city: a.city,
+    country: a.country,
+  }));
+
+  const chunks = chunkArray(airportData, 500);
+
+  for (const chunk of chunks) {
+    await prisma.airport.createMany({
+      data: chunk,
       skipDuplicates: true,
     });
-    console.log(`   ✅ Processed ${countries.length} countries.`);
   }
 
-  // --------------------------------------------------------
-  // 2. SEED AIRPORTS (Batch Insert with Chunking)
-  // --------------------------------------------------------
-  console.log("✈️ Seeding Airports...");
-  if (fs.existsSync(airportsFilePath)) {
-    const rawAirports = fs.readFileSync(airportsFilePath, "utf-8");
-    const airports: AirportData[] = JSON.parse(rawAirports);
+  console.log(`Processed ${airports.length} airports`);
+}
 
-    const airportData = airports.map((a) => ({
-      iataCode: a.iataCode,
-      name: a.name,
-      city: a.city,
-      country: a.country,
-    }));
+async function seedAircraft() {
+  const planeTypes = readJsonFile<PlaneTypeData>(planesFilePath);
+  if (!planeTypes.length) return;
 
-    const chunks = chunkArray(airportData, 500);
-    for (const chunk of chunks) {
-      await prisma.airport.createMany({
-        data: chunk,
-        skipDuplicates: true,
-      });
-    }
-    console.log(`   ✅ Processed ${airports.length} airports.`);
-  }
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-  // --------------------------------------------------------
-  // 3. SEED AIRCRAFT & TYPES (Hybrid)
-  // --------------------------------------------------------
-  console.log("🛩️ Seeding Aircraft Types & Fleet...");
-  if (fs.existsSync(planesFilePath)) {
-    const planeTypes: PlaneTypeData[] = JSON.parse(
-      fs.readFileSync(planesFilePath, "utf-8"),
-    );
-    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-    for (const [index, typeData] of planeTypes.entries()) {
-      // Create Type (จำเป็นต้อง Upsert เพื่อเอา ID)
-      const aircraftType = await prisma.aircraftType.upsert({
-        where: { iataCode: typeData.code },
-        update: {
-          model: typeData.model,
-          capacityEco: typeData.capacityEco,
-          capacityBiz: typeData.capacityBiz,
-        },
-        create: {
-          iataCode: typeData.code,
-          model: typeData.model,
-          capacityEco: typeData.capacityEco,
-          capacityBiz: typeData.capacityBiz,
-        },
-      });
-
-      // Prepare Planes Data
-      const fleetLetter = alphabet[index % 26];
-      const planesData = [];
-
-      for (let i = 0; i < 3; i++) {
-        const sequenceLetter = alphabet[i];
-        const tailNumber = `HS-Y${fleetLetter}${sequenceLetter}`;
-        planesData.push({
-          tailNumber: tailNumber,
-          aircraftTypeId: aircraftType.id,
-          status: AircraftStatus.ACTIVE,
-        });
-      }
-
-      // Batch Insert Planes for this type
-      await prisma.aircraft.createMany({
-        data: planesData,
-        skipDuplicates: true,
-      });
-      console.log(`      -> Created fleet for ${typeData.model}`);
-    }
-    console.log("   ✅ Seeded aircraft fleet.");
-  }
-
-  // --------------------------------------------------------
-  // 4. SEED ROUTES (Batch Insert with Map Lookup)
-  // --------------------------------------------------------
-  console.log("🗺️ Seeding Routes...");
-  if (fs.existsSync(routesFilePath)) {
-    const rawRoutes = fs.readFileSync(routesFilePath, "utf-8");
-    const routes: RouteData[] = JSON.parse(rawRoutes);
-
-    // Cache Airport IDs
-    const dbAirports = await prisma.airport.findMany({
-      select: { id: true, iataCode: true },
+  for (const [index, typeData] of planeTypes.entries()) {
+    const aircraftType = await prisma.aircraftType.upsert({
+      where: { iataCode: typeData.code },
+      update: {
+        model: typeData.model,
+        capacityEco: typeData.capacityEco,
+        capacityBiz: typeData.capacityBiz,
+      },
+      create: {
+        iataCode: typeData.code,
+        model: typeData.model,
+        capacityEco: typeData.capacityEco,
+        capacityBiz: typeData.capacityBiz,
+      },
     });
-    const airportMap = new Map(dbAirports.map((a) => [a.iataCode, a.id]));
 
-    const validRoutes = [];
+    const fleetLetter = alphabet[index % 26];
+    const planesData = [];
 
-    for (const route of routes) {
+    for (let i = 0; i < 3; i++) {
+      const sequenceLetter = alphabet[i];
+      const tailNumber = `HS-Y${fleetLetter}${sequenceLetter}`;
+      planesData.push({
+        tailNumber,
+        aircraftTypeId: aircraftType.id,
+        status: AircraftStatus.ACTIVE,
+      });
+    }
+
+    await prisma.aircraft.createMany({
+      data: planesData,
+      skipDuplicates: true,
+    });
+  }
+
+  console.log("Aircraft seeded");
+}
+
+async function seedRoutes() {
+  const routes = readJsonFile<RouteData>(routesFilePath);
+  if (!routes.length) return;
+
+  const dbAirports = await prisma.airport.findMany({
+    select: { id: true, iataCode: true },
+  });
+
+  const airportMap = new Map(dbAirports.map((a) => [a.iataCode, a.id]));
+
+  const validRoutes = routes
+    .map((route) => {
       const originId = airportMap.get(route.origin);
       const destId = airportMap.get(route.dest);
+      if (!originId || !destId) return null;
 
-      if (originId && destId) {
-        validRoutes.push({
-          originAirportId: originId,
-          destAirportId: destId,
-          distanceKm: route.distance,
-          durationMins: route.duration,
-        });
-      }
-    }
+      return {
+        originAirportId: originId,
+        destAirportId: destId,
+        distanceKm: route.distance,
+        durationMins: route.duration,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
 
-    // Chunk Insert Routes
-    const routeChunks = chunkArray(validRoutes, 500);
-    for (const chunk of routeChunks) {
-      await prisma.route.createMany({
-        data: chunk,
-        skipDuplicates: true,
-      });
-    }
-    console.log(`   ✅ Processed ${validRoutes.length} routes.`);
+  const chunks = chunkArray(validRoutes, 500);
+
+  for (const chunk of chunks) {
+    await prisma.route.createMany({
+      data: chunk,
+      skipDuplicates: true,
+    });
   }
 
-  // --------------------------------------------------------
-  // 5. SEED USERS (Admins, Pilots, Crew, Passengers)
-  // --------------------------------------------------------
-  console.log("👥 Seeding Users...");
+  console.log(`Processed ${validRoutes.length} routes`);
+}
 
-  // Get BKK airport for default base
-  const bkk = await prisma.airport.findUnique({ where: { iataCode: "BKK" } });
+async function seedUsersFromFile(filePath: string) {
+  const users = readJsonFile<UserSeed>(filePath);
+  if (!users.length) return;
 
-  const seedUsers = async (filePath: string, label: string) => {
-    if (fs.existsSync(filePath)) {
-      const users: UserSeed[] = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-      for (const u of users) {
-        await prisma.user.upsert({
-          where: { email: u.email },
-          update: {},
-          create: {
-            username: u.username,
-            email: u.email,
-            passwordHash: u.passwordHash,
-            role: u.role,
-            firstName: u.firstName,
-            lastName: u.lastName,
-            phone: u.phone,
-            staffProfile: u.staffProfile
-              ? {
-                  create: {
-                    employeeId: u.staffProfile.employeeId,
-                    role: u.role,
-                    rank: u.staffProfile.rank,
-                    baseAirportId: bkk?.id, // Default base ที่ BKK
-                  },
-                }
-              : undefined,
-          },
-        });
-      }
-      console.log(`   ✅ Processed ${users.length} ${label}`);
+  const bkk = await prisma.airport.findUnique({
+    where: { iataCode: "BKK" },
+  });
+
+  for (const u of users) {
+    await prisma.user.upsert({
+      where: { email: u.email },
+      update: {},
+      create: {
+        username: u.username,
+        email: u.email,
+        passwordHash: u.passwordHash,
+        role: u.role,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        phone: u.phone,
+        staffProfile: u.staffProfile
+          ? {
+              create: {
+                employeeId: u.staffProfile.employeeId,
+                role: u.role,
+                rank: u.staffProfile.rank,
+                baseAirportId: bkk?.id,
+              },
+            }
+          : undefined,
+      },
+    });
+  }
+
+  console.log(
+    `Processed ${users.length} users from ${path.basename(filePath)}`,
+  );
+}
+
+async function seedAllUsers() {
+  await seedUsersFromFile(adminsFilePath);
+  await seedUsersFromFile(pilotsFilePath);
+  await seedUsersFromFile(crewsFilePath);
+  await seedUsersFromFile(passengersFilePath);
+}
+
+async function seedFlights() {
+  const flights = readJsonFile<FlightSeed>(flightsFilePath);
+  if (!flights.length) return;
+
+  const routes = await prisma.route.findMany({
+    include: {
+      origin: { select: { iataCode: true } },
+      destination: { select: { iataCode: true } },
+    },
+  });
+
+  const routeMap = new Map(
+    routes.map((r) => [`${r.origin.iataCode}-${r.destination.iataCode}`, r.id]),
+  );
+
+  const aircraft = await prisma.aircraft.findMany({
+    where: { status: "ACTIVE" },
+  });
+
+  const pilots = await prisma.staffProfile.findMany({
+    where: {
+      role: "PILOT",
+      rank: { in: ["CAPTAIN", "FIRST_OFFICER"] },
+    },
+  });
+
+  const batchSize = 100;
+  let successCount = 0;
+  let skipCount = 0;
+
+  for (let i = 0; i < flights.length; i += batchSize) {
+    const batch = flights.slice(i, i + batchSize);
+
+    const flightData = batch
+      .map((flight) => {
+        const routeId = routeMap.get(`${flight.origin}-${flight.dest}`);
+        if (!routeId) {
+          skipCount++;
+          return null;
+        }
+
+        const randomAircraft =
+          aircraft[Math.floor(Math.random() * aircraft.length)];
+
+        let captainId = null;
+        if (pilots.length > 0 && Math.random() > 0.3) {
+          const randomPilot = pilots[Math.floor(Math.random() * pilots.length)];
+          captainId = randomPilot.id;
+        }
+
+        return {
+          flightCode: flight.flightCode,
+          routeId,
+          aircraftId: randomAircraft?.id,
+          captainId,
+          gate: flight.gate,
+          departureTime: new Date(flight.departureTime),
+          arrivalTime: new Date(flight.arrivalTime),
+          status: flight.status as FlightStatus,
+          basePrice: flight.basePrice,
+        };
+      })
+      .filter((f): f is NonNullable<typeof f> => f !== null);
+
+    if (flightData.length) {
+      await prisma.flight.createMany({
+        data: flightData,
+        skipDuplicates: true,
+      });
+      successCount += flightData.length;
     }
-  };
+  }
 
-  // Seed each user type
-  await seedUsers(adminsFilePath, "admins");
-  await seedUsers(pilotsFilePath, "pilots");
-  await seedUsers(crewsFilePath, "cabin crew");
-  await seedUsers(passengersFilePath, "passengers");
+  console.log(`Flights created: ${successCount}, skipped: ${skipCount}`);
+}
 
-  console.log("✨ Seeding completed successfully.");
-  console.timeEnd("⏱️ Seeding Duration");
+async function main() {
+  console.time("Seeding Duration");
+
+  // await seedCountries();
+  // await seedAirports();
+  // await seedAircraft();
+  // await seedRoutes();
+  // await seedAllUsers();
+  await seedFlights();
+
+  console.timeEnd("Seeding Duration");
 }
 
 main()
   .catch((e) => {
-    console.error("❌ Seeding failed:", e);
+    console.error(e);
     process.exit(1);
   })
   .finally(async () => {
