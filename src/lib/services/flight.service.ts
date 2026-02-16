@@ -28,7 +28,7 @@ export class FlightService {
     if (params.date) {
       const startDate = new Date(params.date);
       const endDate = new Date(startDate);
-      endDate.setDate(startDate.getDate() + 1); // บวกไป 1 วัน
+      endDate.setDate(startDate.getDate() + 1);
 
       where.departureTime = {
         gte: startDate,
@@ -51,7 +51,12 @@ export class FlightService {
           },
           captain: {
             include: {
-              user: { select: { firstName: true, lastName: true } },
+              user: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                },
+              },
             },
           },
         },
@@ -68,5 +73,82 @@ export class FlightService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  static async getFlightById(id: number) {
+    return await prisma.flight.findUnique({
+      where: { id },
+      include: {
+        route: {
+          include: {
+            origin: true,
+            destination: true,
+          },
+        },
+        aircraft: {
+          include: { type: true },
+        },
+        captain: {
+          include: {
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
+        bookings: {
+          select: {
+            id: true,
+            bookingRef: true,
+            status: true,
+            tickets: {
+              select: {
+                id: true,
+                seatNumber: true,
+                class: true,
+              },
+            },
+          },
+        },
+        incidents: {
+          where: { status: "ACTIVE" },
+          select: {
+            id: true,
+            status: true,
+            declaredAt: true,
+            type: {
+              select: {
+                code: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  static async getFlightByCode(flightCode: string) {
+    return await prisma.flight.findUnique({
+      where: { flightCode },
+      include: {
+        route: {
+          include: { origin: true, destination: true },
+        },
+        aircraft: { include: { type: true } },
+        captain: {
+          include: {
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
+      },
+    });
   }
 }
