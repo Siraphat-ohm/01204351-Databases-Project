@@ -6,6 +6,7 @@ export interface FlightWithDetails {
   departureTime: Date;
   arrivalTime: Date;
   status: FlightStatus;
+  gate: string;
   basePrice: number;
   route: {
     origin: { iataCode: string; city: string };
