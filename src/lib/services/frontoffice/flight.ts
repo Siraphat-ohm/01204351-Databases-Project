@@ -59,7 +59,7 @@ export class FlightService {
     ]);
 
     return {
-      data: flights as unknown as FlightWithDetails[],
+      data: flights as FlightWithDetails[],
       meta: {
         total,
         page: pageNum,
