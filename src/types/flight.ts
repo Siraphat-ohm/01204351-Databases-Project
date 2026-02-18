@@ -1,32 +1,27 @@
-import { FlightStatus, AircraftStatus } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
+import { FlightStatus } from "@/generated/prisma/client";
+import { PaginatedResponse } from "@/types/common";
 
-export interface FlightWithDetails {
-  id: number;
-  flightCode: string;
-  departureTime: Date;
-  arrivalTime: Date;
-  status: FlightStatus;
-  gate: string;
-  basePrice: number;
+export const defaultFlightInclude = {
   route: {
-    origin: { iataCode: string; city: string };
-    destination: { iataCode: string; city: string };
-    durationMins: number;
-  };
+    include: { origin: true, destination: true },
+  },
   aircraft: {
-    tailNumber: string;
-    model: string;
-  };
-}
+    include: {
+      type: {
+        select: {
+          model: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.FlightInclude;
 
-export interface FlightQueryParams {
-  origin?: string;
-  destination?: string;
-  date?: string;
-  status?: FlightStatus;
-  page?: number;
-  limit?: number;
-}
+export type FlightWithDetails = Prisma.FlightGetPayload<{
+  include: typeof defaultFlightInclude;
+}>;
+
+export type FlightPaginatedResponse = PaginatedResponse<FlightWithDetails>;
 
 export interface FlightSearchParams {
   page?: string | number;
@@ -41,15 +36,16 @@ export interface CreateFlightInput {
   flightCode: string;
   routeId: number;
   aircraftId: number;
-  captainId?: number;
-  gate?: string;
+  captainId?: number | null;
+  gate?: string | null;
   departureTime: Date;
   arrivalTime: Date;
-  basePrice: number | string;
+  basePrice: number;
   status?: FlightStatus;
 }
 
 export interface UpdateFlightInput {
+  id: number;
   flightCode?: string;
   routeId?: number;
   aircraftId?: number;
@@ -57,6 +53,6 @@ export interface UpdateFlightInput {
   gate?: string | null;
   departureTime?: Date;
   arrivalTime?: Date;
-  basePrice?: number | string;
+  basePrice?: number;
   status?: FlightStatus;
 }
