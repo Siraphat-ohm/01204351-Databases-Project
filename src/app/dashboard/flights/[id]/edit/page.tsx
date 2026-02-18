@@ -1,6 +1,6 @@
 // app/dashboard/flights/[id]/edit/page.tsx
 
-import { FlightService } from "@/lib/services/flight.service";
+import { FlightService } from "@/lib/services/backoffice/flight";
 import { FlightEditForm } from "@/components/FlightEditForm";
 import { notFound } from "next/navigation";
 
@@ -11,14 +11,10 @@ interface PageProps {
 export default async function EditFlightPage({ params }: PageProps) {
   // 1. Unwrap params (Next.js 15+)
   const resolvedParams = await params;
-  const id = Number(resolvedParams.id);
-
-  if (isNaN(id)) {
-    notFound();
-  }
+  const id = resolvedParams.id;
 
   // 2. Fetch specific flight
-  const flight = await FlightService.getFlightById(id);
+  const flight = await FlightService.getFlightByFlightCode(id);
 
   if (!flight) {
     notFound();

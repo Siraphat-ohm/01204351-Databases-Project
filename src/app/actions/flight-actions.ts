@@ -1,6 +1,6 @@
 'use server'
 
-import { FlightService } from "@/lib/services/flight.service";
+import { FlightService } from "@/lib/services/backoffice/flight";
 import { CreateFlightInput } from "@/types/flight";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -38,6 +38,7 @@ export async function updateFlightAction(id: number, formData: any) {
   
   // Prepare the payload based on UpdateFlightInput interface
   const payload: UpdateFlightInput = {
+    id: id,
     flightCode: formData.flightCode,
     // Ensure IDs are numbers if present
     routeId: formData.routeId ? Number(formData.routeId) : undefined,
@@ -54,7 +55,7 @@ export async function updateFlightAction(id: number, formData: any) {
   };
 
   try {
-    await FlightService.updateFlight(id, payload);
+    await FlightService.updateFlight(payload);
     revalidatePath('/dashboard/flights');
   } catch (error: any) {
     return { error: error.message };
