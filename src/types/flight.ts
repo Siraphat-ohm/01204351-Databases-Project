@@ -7,14 +7,10 @@ export const defaultFlightInclude = {
     include: { origin: true, destination: true },
   },
   aircraft: {
-    include: { type: true },
-  },
-  captain: {
     include: {
-      user: {
+      type: {
         select: {
-          firstName: true,
-          lastName: true,
+          model: true,
         },
       },
     },
