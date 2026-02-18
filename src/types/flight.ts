@@ -31,3 +31,28 @@ export interface FlightSearchParams {
   date?: string;
   status?: FlightStatus;
 }
+
+export interface CreateFlightInput {
+  flightCode: string;
+  routeId: number;
+  aircraftId: number;
+  captainId?: number | null;
+  gate?: string | null;
+  departureTime: Date;
+  arrivalTime: Date;
+  basePrice: number;
+  status?: FlightStatus;
+}
+
+export interface UpdateFlightInput {
+  id: number;
+  flightCode?: string;
+  routeId?: number;
+  aircraftId?: number;
+  captainId?: number | null;
+  gate?: string | null;
+  departureTime?: Date;
+  arrivalTime?: Date;
+  basePrice?: number;
+  status?: FlightStatus;
+}
