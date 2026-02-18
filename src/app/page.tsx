@@ -1,19 +1,41 @@
-"use client";
+import { Container, Grid,GridCol, Box, Title, Text } from '@mantine/core';
+import { Navbar } from '@/components/Navbar';
+import { FlightSearchBox } from '@/components/FlightSearchBox';
 
-import { Center, Button, Stack, Title, Text } from '@mantine/core';
-import Link from 'next/link';
-
-export default function Home() {
+export default function Page() {
   return (
-    <Center h="100vh" bg="gray.1">
-      <Stack align="center" gap="md">
-        <Title>Airline Backoffice</Title>
-        <Text c="dimmed">Internal System v2.0</Text>
-        
-        <Button component={Link} href="/dashboard" size="lg">
-          Enter Dashboard
-        </Button>
-      </Stack>
-    </Center>
+    <Box>
+      <Navbar />
+      
+      <Box 
+        style={{ 
+          backgroundImage: 'linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url("https://www.agoda.com/wp-content/uploads/2019/10/Bangkok-touristst-trip-Thailand.jpg")',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          minHeight: 'calc(100vh - 60px)',
+          display: 'flex',
+          alignItems: 'center'
+        }}
+      >
+        <Container size="xl" style={{ width: '100%' }}>
+          <Grid align="center">
+  {/* Change Grid.Col to GridCol */}
+  <GridCol span={{ base: 12, md: 7 }}>
+    <Title order={1} c="white" size="4rem" style={{ lineHeight: 1.1 }}>
+      Explore the World <br /> With YokAirlines
+    </Title>
+    <Text c="white" mt="md" size="lg">
+      Safe, fast, and reliable flights at your fingertips.
+    </Text>
+  </GridCol>
+
+  {/* Change Grid.Col to GridCol */}
+  <GridCol span={{ base: 12, md: 5 }}>
+    <FlightSearchBox />
+  </GridCol>
+</Grid>
+        </Container>
+      </Box>
+    </Box>
   );
 }
