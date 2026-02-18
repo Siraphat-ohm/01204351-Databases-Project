@@ -1,4 +1,4 @@
-import  AircraftManagement  from '@/components/AircraftManagement';
+import { AircraftManagement }  from '@/components/AircraftManagement';
 
 // 1. Types mirroring Prisma Result
 type AircraftStatus = 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';

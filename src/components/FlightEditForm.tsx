@@ -2,78 +2,89 @@
 
 import { 
   Button, Group, TextInput, Title, Paper, Select, Container, 
-  NumberInput, Grid, Text, ThemeIcon, Stack, Divider, Badge, rem 
+  NumberInput, Grid, Text, ThemeIcon, Stack, Divider, Badge, LoadingOverlay, Alert
 } from '@mantine/core';
-import { useState } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Plane, MapPin, Clock, DollarSign, Building } from 'lucide-react';
-
-// --- MOCK DATA FOR AIRCRAFT DROPDOWN ---
-const MOCK_AIRCRAFT_FLEET = [
-  { value: '101', label: 'HS-TBA (Boeing 777-300ER)' },
-  { value: '102', label: 'HS-TBB (Boeing 777-300ER)' },
-  { value: '103', label: 'HS-XEA (Airbus A350-900)' },
-  { value: '104', label: 'HS-BBX (Airbus A320)' },
-  { value: '105', label: 'HS-BBY (Airbus A320)' },
-  { value: '106', label: 'HS-PGA (ATR 72-600)' },
-];
+import { ArrowLeft, Save, Plane, MapPin, Clock, DollarSign, Building, AlertCircle } from 'lucide-react';
+import { FlightStatus } from '@/generated/prisma/client'; // Import Enum
+import { updateFlightAction, getAircraftOptions } from '@/app/actions/flight-actions';
 
 export function FlightEditForm({ flight }: { flight: any }) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   
-  // Logic remains unchanged
-  const currentAircraftOption = {
-    value: flight.aircraft?.id?.toString() || '0',
-    label: `${flight.aircraft?.tailNumber} (${flight.aircraft?.type?.model})`
-  };
+  // Dynamic Data State
+  const [aircraftOptions, setAircraftOptions] = useState<{value: string, label: string}[]>([]);
 
-  const aircraftOptions = [
-    ...MOCK_AIRCRAFT_FLEET.filter(a => a.value !== currentAircraftOption.value),
-    currentAircraftOption
-  ];
-
+  // Form State - Initialize with existing flight data
   const [formData, setFormData] = useState({
-    status: flight.status,
+    status: flight.status as FlightStatus,
     gate: flight.gate || '',
-    basePrice: Number(flight.basePrice),
+    basePrice: Number(flight.basePrice), // Ensure it's a number for the input
+    // Format Dates for datetime-local input (YYYY-MM-DDTHH:mm)
     departureTime: new Date(flight.departureTime).toISOString().slice(0, 16),
-    aircraftId: currentAircraftOption.value 
+    // We didn't receive arrivalTime in the initial prop in your previous code, 
+    // assuming it exists on the flight object or defaulting to departure + 2h for safety
+    arrivalTime: flight.arrivalTime 
+      ? new Date(flight.arrivalTime).toISOString().slice(0, 16)
+      : new Date(new Date(flight.departureTime).getTime() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16),
+    aircraftId: flight.aircraft?.id?.toString() || '',
+    flightCode: flight.flightCode, // Read-only for display usually, but kept in state if needed
   });
+
+  // Fetch Options on Load
+  useEffect(() => {
+    getAircraftOptions().then(setAircraftOptions);
+  }, []);
 
   const handleChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Submitting update for Flight ID:", flight.id);
-    console.log("New Aircraft ID:", formData.aircraftId);
-    console.log("Full Payload:", formData);
-    alert("Check console for payload. Save functionality will be connected later.");
+    setError(null);
+
+    // Call Server Action
+    startTransition(async () => {
+      const result = await updateFlightAction(flight.id, formData);
+      if (result?.error) {
+        setError(result.error);
+      }
+    });
   };
 
   return (
-    <Container size="lg" py="xl">
+    <Container size="lg" py="xl" pos="relative">
+      <LoadingOverlay visible={isPending} overlayProps={{ radius: "sm", blur: 2 }} />
+
       {/* --- HEADER ACTIONS --- */}
       <Group justify="space-between" mb="lg">
         <Button 
-          variant="subtle" 
-          color="gray" 
-          leftSection={<ArrowLeft size={18} />} 
-          onClick={() => router.back()}
+          variant="subtle" color="gray" leftSection={<ArrowLeft size={18} />} 
+          onClick={() => router.back()} disabled={isPending}
         >
           Back to Flights
         </Button>
         <Group>
-           <Button variant="default" onClick={() => router.back()}>Cancel</Button>
+           <Button variant="default" onClick={() => router.back()} disabled={isPending}>Cancel</Button>
            <Button 
-             onClick={handleSubmit} // Trigger form submit externally
+             onClick={handleSubmit} 
              leftSection={<Save size={18} />}
+             loading={isPending}
            >
              Save Changes
            </Button>
         </Group>
       </Group>
+
+      {error && (
+        <Alert variant="light" color="red" title="Error" icon={<AlertCircle size={16} />} mb="md">
+          {error}
+        </Alert>
+      )}
 
       <form onSubmit={handleSubmit}>
         <Grid gutter="lg">
@@ -145,7 +156,6 @@ export function FlightEditForm({ flight }: { flight: any }) {
                       data={['SCHEDULED', 'BOARDING', 'DELAYED', 'DEPARTED', 'ARRIVED', 'CANCELLED']}
                       value={formData.status}
                       onChange={(val) => handleChange('status', val)}
-                      comboboxProps={{ transitionProps: { transition: 'pop', duration: 200 } }}
                     />
                   </Grid.Col>
                   <Grid.Col span={6}>
@@ -162,7 +172,7 @@ export function FlightEditForm({ flight }: { flight: any }) {
                 <Divider label="Schedule & Pricing" labelPosition="center" my="sm" />
 
                 <Grid>
-                  <Grid.Col span={7}>
+                  <Grid.Col span={6}>
                     <TextInput
                       type="datetime-local"
                       label="Departure Time (Local)"
@@ -171,7 +181,16 @@ export function FlightEditForm({ flight }: { flight: any }) {
                       leftSection={<Clock size={16} />}
                     />
                   </Grid.Col>
-                  <Grid.Col span={5}>
+                  <Grid.Col span={6}>
+                    <TextInput
+                      type="datetime-local"
+                      label="Arrival Time (Local)"
+                      value={formData.arrivalTime}
+                      onChange={(e) => handleChange('arrivalTime', e.currentTarget.value)}
+                      leftSection={<Clock size={16} />}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={12}>
                     <NumberInput
                       label="Base Ticket Price"
                       prefix="$"

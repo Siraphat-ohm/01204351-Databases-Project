@@ -2,11 +2,12 @@
 
 import { 
   Title, Group, Button, Table, Badge, Text, ActionIcon, 
-  TextInput, Paper, Modal, Select, NumberInput, Stack 
+  TextInput, Paper, Modal, Select, Stack 
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Plus, Search, Pencil, Trash, Plane, Settings } from 'lucide-react';
+import { Plus, Search, Pencil, Trash, Plane } from 'lucide-react';
 import { useState } from 'react';
+import Link from 'next/link'; // ✅ Import Link
 
 // --- Types based on your Prisma Schema ---
 type AircraftStatus = 'ACTIVE' | 'MAINTENANCE' | 'RETIRED';
@@ -30,7 +31,7 @@ interface AircraftManagementProps {
   aircraftTypes: AircraftType[]; // For the dropdown
 }
 
-export  function AircraftManagement({ initialAircrafts, aircraftTypes }: AircraftManagementProps) {
+export function AircraftManagement({ initialAircrafts, aircraftTypes }: AircraftManagementProps) {
   const [opened, { open, close }] = useDisclosure(false);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -74,10 +75,18 @@ export  function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraf
       </Table.Td>
       <Table.Td>
         <Group gap={0} justify="flex-end">
-          <ActionIcon variant="subtle" color="gray">
+          {/* ✅ UPDATE: Link to Edit Page */}
+          <ActionIcon 
+            component={Link} 
+            href={`/dashboard/aircraft/${ac.id}/edit`}
+            variant="subtle" 
+            color="blue"
+            aria-label="Edit"
+          >
             <Pencil size={16} />
           </ActionIcon>
-          <ActionIcon variant="subtle" color="red">
+
+          <ActionIcon variant="subtle" color="red" aria-label="Delete">
             <Trash size={16} />
           </ActionIcon>
         </Group>
