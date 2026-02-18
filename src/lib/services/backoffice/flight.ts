@@ -15,6 +15,9 @@ interface BackofficeFlightSearchParams extends FlightSearchParams {
 
 const adminFlightInclude = defaultFlightInclude;
 
+const normalizeFlightCode = (flightCode: string) =>
+  flightCode.trim().toUpperCase();
+
 export class FlightService {
   static async getAllFlights(
     params: BackofficeFlightSearchParams,
@@ -91,8 +94,10 @@ export class FlightService {
       throw new Error("flightCode is required");
     }
 
+    const normalizedCode = normalizeFlightCode(flightCode);
+
     return prisma.flight.findUnique({
-      where: { flightCode },
+      where: { flightCode: normalizedCode },
       include: {
         ...adminFlightInclude,
         bookings: true,
@@ -207,6 +212,63 @@ export class FlightService {
     });
   }
 
+  static async updateFlightByFlightCode(
+    flightCode: string,
+    input: Omit<UpdateFlightInput, "id">,
+  ): Promise<FlightWithDetails> {
+    if (!flightCode.trim()) {
+      throw new Error("flightCode is required");
+    }
+
+    const data: Prisma.FlightUncheckedUpdateInput = {};
+
+    if (typeof input.flightCode === "string") {
+      data.flightCode = input.flightCode.toUpperCase();
+    }
+
+    if (typeof input.routeId === "number") {
+      data.routeId = input.routeId;
+    }
+
+    if (typeof input.aircraftId === "number") {
+      data.aircraftId = input.aircraftId;
+    }
+
+    if (input.captainId !== undefined) {
+      data.captainId = input.captainId;
+    }
+
+    if (input.gate !== undefined) {
+      data.gate = input.gate;
+    }
+
+    if (input.departureTime) {
+      data.departureTime = input.departureTime;
+    }
+
+    if (input.arrivalTime) {
+      data.arrivalTime = input.arrivalTime;
+    }
+
+    if (typeof input.basePrice === "number") {
+      data.basePrice = input.basePrice;
+    }
+
+    if (input.status) {
+      data.status = input.status;
+    }
+
+    if (Object.keys(data).length === 0) {
+      throw new Error("No fields provided to update");
+    }
+
+    return prisma.flight.update({
+      where: { flightCode: normalizeFlightCode(flightCode) },
+      data,
+      include: adminFlightInclude,
+    });
+  }
+
   static async deleteFlight(id: number): Promise<FlightWithDetails> {
     if (!Number.isInteger(id) || id <= 0) {
       throw new Error("id must be a positive integer");
@@ -214,6 +276,19 @@ export class FlightService {
 
     return prisma.flight.delete({
       where: { id },
+      include: adminFlightInclude,
+    });
+  }
+
+  static async deleteFlightByFlightCode(
+    flightCode: string,
+  ): Promise<FlightWithDetails> {
+    if (!flightCode.trim()) {
+      throw new Error("flightCode is required");
+    }
+
+    return prisma.flight.delete({
+      where: { flightCode: normalizeFlightCode(flightCode) },
       include: adminFlightInclude,
     });
   }
