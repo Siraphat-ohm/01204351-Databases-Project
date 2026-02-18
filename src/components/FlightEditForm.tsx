@@ -2,42 +2,45 @@
 
 import { 
   Button, Group, TextInput, Title, Paper, Select, Container, 
-  NumberInput, Grid, Text, ThemeIcon, Stack, Divider, Badge, LoadingOverlay, Alert
+  NumberInput, Grid, Text, ThemeIcon, Stack, Divider, LoadingOverlay, Alert
 } from '@mantine/core';
-import { useState, useTransition, useEffect } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save, Plane, MapPin, Clock, DollarSign, Building, AlertCircle } from 'lucide-react';
-import { FlightStatus } from '@/generated/prisma/client'; // Import Enum
-import { updateFlightAction, getAircraftOptions } from '@/app/actions/flight-actions';
+import { FlightStatus } from '@/generated/prisma/client'; 
+import { updateFlightAction } from '@/app/actions/flight-actions';
 
-export function FlightEditForm({ flight }: { flight: any }) {
+// Define the interface for the props
+interface AircraftOption {
+  value: string;
+  label: string;
+  disabled: boolean;
+}
+
+interface FlightEditFormProps {
+  flight: any;
+  aircraftOptions: AircraftOption[]; // ✅ Received from Server
+}
+
+export function FlightEditForm({ flight, aircraftOptions }: FlightEditFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  
-  // Dynamic Data State
-  const [aircraftOptions, setAircraftOptions] = useState<{value: string, label: string}[]>([]);
-
-  // Form State - Initialize with existing flight data
+  const [aircraftOptionsState, setAircraftOptionsState] = useState<AircraftOption[]>(aircraftOptions); // ✅ Store in state
+  // ✅ Debug Log: Check what the server passed
   const [formData, setFormData] = useState({
     status: flight.status as FlightStatus,
     gate: flight.gate || '',
-    basePrice: Number(flight.basePrice), // Ensure it's a number for the input
-    // Format Dates for datetime-local input (YYYY-MM-DDTHH:mm)
+    basePrice: Number(flight.basePrice),
     departureTime: new Date(flight.departureTime).toISOString().slice(0, 16),
-    // We didn't receive arrivalTime in the initial prop in your previous code, 
-    // assuming it exists on the flight object or defaulting to departure + 2h for safety
     arrivalTime: flight.arrivalTime 
       ? new Date(flight.arrivalTime).toISOString().slice(0, 16)
       : new Date(new Date(flight.departureTime).getTime() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16),
     aircraftId: flight.aircraft?.id?.toString() || '',
-    flightCode: flight.flightCode, // Read-only for display usually, but kept in state if needed
+    flightCode: flight.flightCode, 
   });
 
-  // Fetch Options on Load
-  useEffect(() => {
-    getAircraftOptions().then(setAircraftOptions);
-  }, []);
+  // ❌ REMOVED: useEffect fetch logic (It was conflicting and causing the undefined error)
 
   const handleChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -47,7 +50,6 @@ export function FlightEditForm({ flight }: { flight: any }) {
     e.preventDefault();
     setError(null);
 
-    // Call Server Action
     startTransition(async () => {
       const result = await updateFlightAction(flight.id, formData);
       if (result?.error) {
@@ -60,7 +62,6 @@ export function FlightEditForm({ flight }: { flight: any }) {
     <Container size="lg" py="xl" pos="relative">
       <LoadingOverlay visible={isPending} overlayProps={{ radius: "sm", blur: 2 }} />
 
-      {/* --- HEADER ACTIONS --- */}
       <Group justify="space-between" mb="lg">
         <Button 
           variant="subtle" color="gray" leftSection={<ArrowLeft size={18} />} 
@@ -135,12 +136,12 @@ export function FlightEditForm({ flight }: { flight: any }) {
               <Title order={4} mb="md">Operational Details</Title>
               
               <Stack gap="md">
-                {/* Aircraft Selection */}
+                {/* ✅ CORRECT: Use the prop directly */}
                 <Select
                   label="Assigned Aircraft"
                   description="Change the aircraft servicing this route"
                   placeholder="Search tail number or model"
-                  data={aircraftOptions}
+                  data={aircraftOptionsState} 
                   value={formData.aircraftId}
                   onChange={(val) => handleChange('aircraftId', val)}
                   searchable

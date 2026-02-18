@@ -1,6 +1,5 @@
-// app/dashboard/flights/[id]/edit/page.tsx
-
 import { FlightService } from "@/lib/services/backoffice/flight";
+import { AircraftService } from "@/lib/services/backoffice/aircraft"; 
 import { FlightEditForm } from "@/components/FlightEditForm";
 import { notFound } from "next/navigation";
 
@@ -9,50 +8,57 @@ interface PageProps {
 }
 
 export default async function EditFlightPage({ params }: PageProps) {
-  // 1. Unwrap params (Next.js 15+)
+  // 1. Unwrap params
   const resolvedParams = await params;
   const id = resolvedParams.id;
 
-  // 2. Fetch specific flight
-  const flight = await FlightService.getFlightByFlightCode(id);
+  if (!id) notFound();
+
+  // 2. Fetch Flight AND All Aircrafts in parallel
+  const [flight, aircraftResult] = await Promise.all([
+    FlightService.getFlightByFlightCode(id),
+    AircraftService.getAllAircraft({ limit: 1000 }) // Fetch all to show everything
+  ]);
 
   if (!flight) {
     notFound();
   }
 
-  // 3. ✅ FIX: Prepare Serializable Object
-  // เราต้องสร้าง Object ใหม่ที่ตัดส่วนที่ไม่จำเป็น (เช่น bookings ที่มี Decimal) ทิ้ง
-  // และแปลง basePrice จาก Decimal เป็น Number
+  // 3. Process Aircraft Options (Server Side Logic)
+  // We do the sorting and grouping here so the client receives ready-to-use data
+  const aircraftOptions = aircraftResult.data.map((ac) => ({
+    value: ac.id.toString(),
+    // Format: "HS-TBA (Boeing 777) - ACTIVE"
+    label: `${ac.tailNumber} (${ac.type.model}) - ${ac.status}`,
+    // Disable if not active (unless it's the aircraft currently assigned to this flight!)
+    disabled: ac.status !== 'ACTIVE' && ac.id !== flight.aircraftId
+  }));
+
+  // 4. Prepare Serializable Flight Object
   const serializableFlight = {
     id: flight.id,
     flightCode: flight.flightCode,
     status: flight.status,
     gate: flight.gate,
-    departureTime: flight.departureTime, // Next.js สมัยใหม่ serialize Date ได้ แต่ถ้ามีปัญหาให้ใช้ .toISOString()
-    
-    // แปลง Decimal เป็น Number
-    basePrice: flight.basePrice.toNumber(),
-    
-    // ส่งเฉพาะ Relation ที่ Form ต้องใช้
+    departureTime: flight.departureTime,
+    arrivalTime: flight.arrivalTime,
+    basePrice: flight.basePrice.toNumber(), // Convert Decimal
     aircraft: {
       id: flight.aircraft.id,
       tailNumber: flight.aircraft.tailNumber,
-      type: {
-        model: flight.aircraft.type.model
-      }
+      type: { model: flight.aircraft.type.model }
     },
     route: {
-      origin: {
-        city: flight.route.origin.city,
-        iataCode: flight.route.origin.iataCode
-      },
-      destination: {
-        city: flight.route.destination.city,
-        iataCode: flight.route.destination.iataCode
-      }
+      origin: { city: flight.route.origin.city, iataCode: flight.route.origin.iataCode },
+      destination: { city: flight.route.destination.city, iataCode: flight.route.destination.iataCode }
     }
   };
 
-  // 4. Render the Form with sanitized data
-  return <FlightEditForm flight={serializableFlight} />;
+  // 5. Pass both flight AND options to the form
+  return (
+    <FlightEditForm 
+      flight={serializableFlight} 
+      aircraftOptions={aircraftOptions} 
+    />
+  );
 }

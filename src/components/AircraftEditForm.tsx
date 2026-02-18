@@ -2,13 +2,15 @@
 
 import { 
   Button, Group, TextInput, Title, Paper, Select, Container, 
-  Stack, Grid, Text, Badge, Divider 
+  Stack, Grid, Text, Badge, Divider, LoadingOverlay 
 } from '@mantine/core';
-import { useState } from 'react';
+import { useState, useTransition } from 'react'; // Import useTransition
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save, Plane, Settings, Info } from 'lucide-react';
+// Import the Server Action
+import { updateAircraftAction } from '@/app/actions/aircraft-actions'; 
 
-// Types (reused for prop definition)
+// ... (Interfaces remain the same) ...
 interface AircraftType {
   id: number;
   model: string;
@@ -30,15 +32,14 @@ interface AircraftEditFormProps {
 
 export function AircraftEditForm({ aircraft, aircraftTypes }: AircraftEditFormProps) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition(); // Add transition state
 
-  // Form State
   const [formData, setFormData] = useState({
     tailNumber: aircraft.tailNumber,
     aircraftTypeId: aircraft.type.id.toString(),
     status: aircraft.status,
   });
 
-  // Find currently selected model to display dynamic capacity info
   const selectedModel = aircraftTypes.find(t => t.id.toString() === formData.aircraftTypeId);
 
   const handleChange = (field: string, value: string | null) => {
@@ -47,22 +48,22 @@ export function AircraftEditForm({ aircraft, aircraftTypes }: AircraftEditFormPr
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // --- MOCK SUBMIT ---
-    console.log("Updating Aircraft ID:", aircraft.id);
-    console.log("Payload:", {
-      ...formData,
-      aircraftTypeId: Number(formData.aircraftTypeId)
+    
+    // Call Server Action
+    startTransition(async () => {
+      await updateAircraftAction(aircraft.id, formData);
     });
-    alert("Aircraft update payload logged to console.");
   };
 
   return (
-    <Container size="md" py="xl">
+    <Container size="md" py="xl" pos="relative">
+      <LoadingOverlay visible={isPending} overlayProps={{ radius: "sm", blur: 2 }} />
+      
       {/* Header */}
       <Group justify="space-between" mb="lg">
         <Button 
           variant="subtle" color="gray" leftSection={<ArrowLeft size={18} />} 
-          onClick={() => router.back()}
+          onClick={() => router.back()} disabled={isPending}
         >
           Back to Fleet
         </Button>
@@ -110,7 +111,7 @@ export function AircraftEditForm({ aircraft, aircraftTypes }: AircraftEditFormPr
               </Stack>
             </Grid.Col>
 
-            {/* Right Column: Model Specs Summary (Read-only) */}
+            {/* Right Column: Specs */}
             <Grid.Col span={{ base: 12, md: 5 }}>
               <Paper bg="gray.0" p="md" radius="md">
                 <Group gap="xs" mb="sm">
@@ -148,8 +149,8 @@ export function AircraftEditForm({ aircraft, aircraftTypes }: AircraftEditFormPr
           <Divider my="xl" />
 
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => router.back()}>Cancel</Button>
-            <Button type="submit" leftSection={<Save size={18} />}>Save Changes</Button>
+            <Button variant="default" onClick={() => router.back()} disabled={isPending}>Cancel</Button>
+            <Button type="submit" leftSection={<Save size={18} />} loading={isPending}>Save Changes</Button>
           </Group>
         </form>
       </Paper>
