@@ -14,7 +14,7 @@ import { useState, useMemo, Fragment,useTransition } from 'react';
 import Link from 'next/link';
 import { FlightStatus } from '@/generated/prisma/client';
 import '@mantine/dates/styles.css';
-import { deleteFlightAction } from '@/app/actions/flight-actions';
+import { deleteFlightAction } from '@/actions/flight-actions';
 
 // --- Types ---
 export interface FlightTableRow {

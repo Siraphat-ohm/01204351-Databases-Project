@@ -8,7 +8,7 @@ import { useState, useTransition } from 'react'; // Import useTransition
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save, Plane, Settings, Info } from 'lucide-react';
 // Import the Server Action
-import { updateAircraftAction } from '@/app/actions/aircraft-actions'; 
+import { updateAircraftAction } from '@/actions/aircraft-actions'; 
 
 // ... (Interfaces remain the same) ...
 interface AircraftType {

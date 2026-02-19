@@ -8,7 +8,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save, Plane, MapPin, Clock, DollarSign, Building, AlertCircle } from 'lucide-react';
 import { FlightStatus } from '@/generated/prisma/client'; 
-import { updateFlightAction } from '@/app/actions/flight-actions';
+import { updateFlightAction } from '@/actions/flight-actions';
 
 // Define the interface for the props
 interface AircraftOption {

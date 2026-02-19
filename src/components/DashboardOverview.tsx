@@ -2,14 +2,26 @@
 
 import { 
   Grid, Paper, Text, Group, SimpleGrid, RingProgress, 
-  Center, Table, Badge, Progress, Card, ThemeIcon, Avatar ,Button
+  Center, Table, Badge, Progress, Card, ThemeIcon, Avatar, Button,Stack,
+  ActionIcon, Modal // ✅ Added ActionIcon and Modal
 } from '@mantine/core';
+import { useState, useEffect } from 'react';
+import { useDisclosure } from '@mantine/hooks'; // ✅ Added useDisclosure hook
 import { 
   Wallet, Users, Plane, Ticket, ArrowUpRight, 
-  Map as MapIcon, PlaneTakeoff, AlertCircle, Clock 
+  Map as MapIcon, PlaneTakeoff, AlertCircle, Clock, Maximize // ✅ Added Maximize icon
 } from 'lucide-react';
 
-// Define Types ที่รับมาจาก Server
+import dynamic from 'next/dynamic';
+import LiveRouteMap, { FlightRoute } from './LiveRouteMap';
+import { fetchLiveMapData } from '@/actions/map-actions';
+
+const LiveMapbox = dynamic(() => import('./LiveMapBox'), { 
+  ssr: false,
+  loading: () => <p>Loading Map...</p> 
+});
+
+
 interface DashboardData {
   stats: {
     income: number;
@@ -22,11 +34,14 @@ interface DashboardData {
   popularDestinations: { city: string; code: string; percentage: number; count: number }[];
   upcomingFlights: { id: string; code: string; route: string; time: string; status: string }[];
   flightLogs: { id: number; message: string; time: string; type: string }[];
+  liveMapRoutes?: FlightRoute[]; 
 }
 
 export function DashboardOverview({ data }: { data: DashboardData }) {
+  // ✅ Modal State for Fullscreen Map
   
-  // Helper สำหรับสี Status
+  const [isMapExpanded, { open: openMap, close: closeMap }] = useDisclosure(false);
+  
   const getStatusColor = (status: string) => {
     switch(status) {
       case 'ON TIME': return 'green';
@@ -36,12 +51,36 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
     }
   };
 
+  const [liveRoutes, setLiveRoutes] = useState<FlightRoute[]>(data.liveMapRoutes || []);
+
+  async function initializeLiveRoutes() {
+    const initialData = await fetchLiveMapData();
+    setLiveRoutes(initialData);
+  }
+
+  useEffect(() => {
+    initializeLiveRoutes();
+    const intervalId = setInterval(async () => {
+      try {
+        const freshData = await fetchLiveMapData();
+        console.log("Fetched updated map data:", freshData);
+        setLiveRoutes(freshData);
+      } catch (error) {
+        console.error("Failed to fetch updated map data:", error);
+      }
+    }, 60000); // 60,000 ms = 1 minute
+
+    // Cleanup the interval when the component unmounts
+    return () => clearInterval(intervalId);
+  }, []);
+
+
   return (
     <div style={{ paddingBottom: 20 }}>
       {/* --- 1. Top Stats Cards --- */}
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="lg">
-        {/* Overall Income */}
-        <Paper shadow="xs" p="md" radius="md" withBorder>
+         {/* ... Your existing 4 cards ... */}
+         <Paper shadow="xs" p="md" radius="md" withBorder>
           <Group justify="space-between">
             <div>
               <Text c="dimmed" tt="uppercase" fw={700} size="xs">Overall Income</Text>
@@ -51,12 +90,9 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
               <Wallet size={20} />
             </ThemeIcon>
           </Group>
-          <Text c="green" size="xs" fw={500} mt="md">
-            +12% from last month
-          </Text>
+          <Text c="green" size="xs" fw={500} mt="md">+12% from last month</Text>
         </Paper>
 
-        {/* Active Users */}
         <Paper shadow="xs" p="md" radius="md" withBorder>
           <Group justify="space-between">
             <div>
@@ -67,12 +103,9 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
               <Users size={20} />
             </ThemeIcon>
           </Group>
-          <Text c="dimmed" size="xs" mt="md">
-            Currently online
-          </Text>
+          <Text c="dimmed" size="xs" mt="md">Currently online</Text>
         </Paper>
 
-        {/* Today Reservations */}
         <Paper shadow="xs" p="md" radius="md" withBorder>
           <Group justify="space-between">
             <div>
@@ -83,12 +116,9 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
               <Ticket size={20} />
             </ThemeIcon>
           </Group>
-          <Text c="green" size="xs" fw={500} mt="md">
-            +5% target reached
-          </Text>
+          <Text c="green" size="xs" fw={500} mt="md">+5% target reached</Text>
         </Paper>
 
-        {/* Active Flights */}
         <Paper shadow="xs" p="md" radius="md" withBorder>
           <Group justify="space-between">
             <div>
@@ -99,9 +129,7 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
               <PlaneTakeoff size={20} />
             </ThemeIcon>
           </Group>
-          <Text c="dimmed" size="xs" mt="md">
-            In the air right now
-          </Text>
+          <Text c="dimmed" size="xs" mt="md">In the air right now</Text>
         </Paper>
       </SimpleGrid>
 
@@ -112,32 +140,22 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
           <Card shadow="xs" padding="lg" radius="md" withBorder h="100%">
             <Group justify="space-between" mb="md">
               <Text fw={700}>Live Route Map</Text>
-              <Badge variant="dot" color="green">System Online</Badge>
+              <Group gap="xs">
+                <Badge variant="dot" color="green">System Online</Badge>
+                {/* ✅ EXPAND BUTTON */}
+                <ActionIcon variant="default" onClick={openMap} aria-label="Expand map">
+                  <Maximize size={16} />
+                </ActionIcon>
+              </Group>
             </Group>
             
-            {/* Mock Map Container */}
-            <div style={{ 
-              backgroundColor: '#e9ecef', 
-              borderRadius: 8, 
-              height: 300, 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              position: 'relative',
-              overflow: 'hidden'
-            }}>
-               {/* World Map Background Placeholder */}
-               <MapIcon size={64} color="#adb5bd" />
-               <Text c="dimmed" mt="sm">Interactive Map Component</Text>
-               
-               {/* Mock Planes overlay */}
-               <div style={{ position: 'absolute', top: '30%', left: '40%' }}>
-                 <Plane size={16} fill="black" style={{ transform: 'rotate(45deg)' }} />
-               </div>
-               <div style={{ position: 'absolute', top: '50%', left: '60%' }}>
-                 <Plane size={16} fill="black" style={{ transform: 'rotate(-15deg)' }} />
-               </div>
-            </div>
+            <div style={{ height: 350, width: '100%', borderRadius: 8, overflow: 'hidden' }}>
+  <LiveMapbox 
+    routes={liveRoutes} 
+    defaultZoom={2.5}
+    theme="dark" // Sleek, modern look for the dashboard UI
+  />
+</div>
           </Card>
         </Grid.Col>
 
@@ -181,7 +199,7 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
       <Grid gutter="md">
         {/* Upcoming Flights Table */}
         <Grid.Col span={{ base: 12, md: 7 }}>
-          <Card shadow="xs" padding="lg" radius="md" withBorder>
+          <Card shadow="xs" padding="lg" radius="md" withBorder h="100%">
             <Group justify="space-between" mb="md">
                <Text fw={700}>Upcoming Flights</Text>
                <Button variant="subtle" size="xs" rightSection={<ArrowUpRight size={14} />}>View All</Button>
@@ -224,26 +242,43 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
           <Card shadow="xs" padding="lg" radius="md" withBorder h="100%">
             <Text fw={700} mb="md">Recent System Logs</Text>
             
-            <SimpleGrid cols={1} spacing="xs">
+            <Stack gap="xs">
               {data.flightLogs.map((log) => (
                  <Paper key={log.id} p="xs" bg="var(--mantine-color-gray-0)">
-                    <Group align="flex-start">
+                    <Group align="flex-start" wrap="nowrap">
                        {log.type === 'error' ? (
                          <ThemeIcon color="red" variant="light" size="sm"><AlertCircle size={14}/></ThemeIcon>
                        ) : (
                          <ThemeIcon color="gray" variant="light" size="sm"><Clock size={14}/></ThemeIcon>
                        )}
                        <div style={{ flex: 1 }}>
-                          <Text size="sm">{log.message}</Text>
-                          <Text size="xs" c="dimmed">{log.time}</Text>
+                          <Text size="sm" lh={1.2}>{log.message}</Text>
+                          <Text size="xs" c="dimmed" mt={4}>{log.time}</Text>
                        </div>
                     </Group>
                  </Paper>
               ))}
-            </SimpleGrid>
+            </Stack>
           </Card>
         </Grid.Col>
       </Grid>
+
+      {/* ✅ FULLSCREEN MAP MODAL */}
+     <Modal 
+    opened={isMapExpanded} 
+    onClose={closeMap} 
+    fullScreen 
+    title={<Text fw={700} size="lg">Live Global Operations</Text>}
+    >
+    <div style={{ height: 'calc(100vh - 80px)', width: '100%' }}>
+    <LiveMapbox 
+      routes={liveRoutes} 
+      defaultZoom={2} 
+      theme="satellite" // Realistic globe when expanded!
+    />
+    </div>
+  </Modal>
+
     </div>
   );
 }

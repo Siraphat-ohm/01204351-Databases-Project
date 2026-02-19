@@ -11,7 +11,7 @@ import { Plus, Search, Pencil, Trash, Plane, Filter, AlertTriangle, Check, X } f
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { AircraftStatus } from '@/generated/prisma/client'; 
-import { deleteAircraftAction } from '@/app/actions/aircraft-actions';
+import { deleteAircraftAction } from '@/actions/aircraft-actions';
 
 interface AircraftType {
   id: number;
