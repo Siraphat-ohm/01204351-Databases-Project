@@ -2,78 +2,90 @@
 
 import { 
   Button, Group, TextInput, Title, Paper, Select, Container, 
-  NumberInput, Grid, Text, ThemeIcon, Stack, Divider, Badge, rem 
+  NumberInput, Grid, Text, ThemeIcon, Stack, Divider, LoadingOverlay, Alert
 } from '@mantine/core';
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Plane, MapPin, Clock, DollarSign, Building } from 'lucide-react';
+import { ArrowLeft, Save, Plane, MapPin, Clock, DollarSign, Building, AlertCircle } from 'lucide-react';
+import { FlightStatus } from '@/generated/prisma/client'; 
+import { updateFlightAction } from '@/app/actions/flight-actions';
 
-// --- MOCK DATA FOR AIRCRAFT DROPDOWN ---
-const MOCK_AIRCRAFT_FLEET = [
-  { value: '101', label: 'HS-TBA (Boeing 777-300ER)' },
-  { value: '102', label: 'HS-TBB (Boeing 777-300ER)' },
-  { value: '103', label: 'HS-XEA (Airbus A350-900)' },
-  { value: '104', label: 'HS-BBX (Airbus A320)' },
-  { value: '105', label: 'HS-BBY (Airbus A320)' },
-  { value: '106', label: 'HS-PGA (ATR 72-600)' },
-];
+// Define the interface for the props
+interface AircraftOption {
+  value: string;
+  label: string;
+  disabled: boolean;
+}
 
-export function FlightEditForm({ flight }: { flight: any }) {
+interface FlightEditFormProps {
+  flight: any;
+  aircraftOptions: AircraftOption[]; // ✅ Received from Server
+}
+
+export function FlightEditForm({ flight, aircraftOptions }: FlightEditFormProps) {
   const router = useRouter();
-  
-  // Logic remains unchanged
-  const currentAircraftOption = {
-    value: flight.aircraft?.id?.toString() || '0',
-    label: `${flight.aircraft?.tailNumber} (${flight.aircraft?.type?.model})`
-  };
-
-  const aircraftOptions = [
-    ...MOCK_AIRCRAFT_FLEET.filter(a => a.value !== currentAircraftOption.value),
-    currentAircraftOption
-  ];
-
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [aircraftOptionsState, setAircraftOptionsState] = useState<AircraftOption[]>(aircraftOptions); // ✅ Store in state
+  // ✅ Debug Log: Check what the server passed
   const [formData, setFormData] = useState({
-    status: flight.status,
+    status: flight.status as FlightStatus,
     gate: flight.gate || '',
     basePrice: Number(flight.basePrice),
     departureTime: new Date(flight.departureTime).toISOString().slice(0, 16),
-    aircraftId: currentAircraftOption.value 
+    arrivalTime: flight.arrivalTime 
+      ? new Date(flight.arrivalTime).toISOString().slice(0, 16)
+      : new Date(new Date(flight.departureTime).getTime() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16),
+    aircraftId: flight.aircraft?.id?.toString() || '',
+    flightCode: flight.flightCode, 
   });
+
+  // ❌ REMOVED: useEffect fetch logic (It was conflicting and causing the undefined error)
 
   const handleChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Submitting update for Flight ID:", flight.id);
-    console.log("New Aircraft ID:", formData.aircraftId);
-    console.log("Full Payload:", formData);
-    alert("Check console for payload. Save functionality will be connected later.");
+    setError(null);
+
+    startTransition(async () => {
+      const result = await updateFlightAction(flight.id, formData);
+      if (result?.error) {
+        setError(result.error);
+      }
+    });
   };
 
   return (
-    <Container size="lg" py="xl">
-      {/* --- HEADER ACTIONS --- */}
+    <Container size="lg" py="xl" pos="relative">
+      <LoadingOverlay visible={isPending} overlayProps={{ radius: "sm", blur: 2 }} />
+
       <Group justify="space-between" mb="lg">
         <Button 
-          variant="subtle" 
-          color="gray" 
-          leftSection={<ArrowLeft size={18} />} 
-          onClick={() => router.back()}
+          variant="subtle" color="gray" leftSection={<ArrowLeft size={18} />} 
+          onClick={() => router.back()} disabled={isPending}
         >
           Back to Flights
         </Button>
         <Group>
-           <Button variant="default" onClick={() => router.back()}>Cancel</Button>
+           <Button variant="default" onClick={() => router.back()} disabled={isPending}>Cancel</Button>
            <Button 
-             onClick={handleSubmit} // Trigger form submit externally
+             onClick={handleSubmit} 
              leftSection={<Save size={18} />}
+             loading={isPending}
            >
              Save Changes
            </Button>
         </Group>
       </Group>
+
+      {error && (
+        <Alert variant="light" color="red" title="Error" icon={<AlertCircle size={16} />} mb="md">
+          {error}
+        </Alert>
+      )}
 
       <form onSubmit={handleSubmit}>
         <Grid gutter="lg">
@@ -124,12 +136,12 @@ export function FlightEditForm({ flight }: { flight: any }) {
               <Title order={4} mb="md">Operational Details</Title>
               
               <Stack gap="md">
-                {/* Aircraft Selection */}
+                {/* ✅ CORRECT: Use the prop directly */}
                 <Select
                   label="Assigned Aircraft"
                   description="Change the aircraft servicing this route"
                   placeholder="Search tail number or model"
-                  data={aircraftOptions}
+                  data={aircraftOptionsState} 
                   value={formData.aircraftId}
                   onChange={(val) => handleChange('aircraftId', val)}
                   searchable
@@ -145,7 +157,6 @@ export function FlightEditForm({ flight }: { flight: any }) {
                       data={['SCHEDULED', 'BOARDING', 'DELAYED', 'DEPARTED', 'ARRIVED', 'CANCELLED']}
                       value={formData.status}
                       onChange={(val) => handleChange('status', val)}
-                      comboboxProps={{ transitionProps: { transition: 'pop', duration: 200 } }}
                     />
                   </Grid.Col>
                   <Grid.Col span={6}>
@@ -162,7 +173,7 @@ export function FlightEditForm({ flight }: { flight: any }) {
                 <Divider label="Schedule & Pricing" labelPosition="center" my="sm" />
 
                 <Grid>
-                  <Grid.Col span={7}>
+                  <Grid.Col span={6}>
                     <TextInput
                       type="datetime-local"
                       label="Departure Time (Local)"
@@ -171,7 +182,16 @@ export function FlightEditForm({ flight }: { flight: any }) {
                       leftSection={<Clock size={16} />}
                     />
                   </Grid.Col>
-                  <Grid.Col span={5}>
+                  <Grid.Col span={6}>
+                    <TextInput
+                      type="datetime-local"
+                      label="Arrival Time (Local)"
+                      value={formData.arrivalTime}
+                      onChange={(e) => handleChange('arrivalTime', e.currentTarget.value)}
+                      leftSection={<Clock size={16} />}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={12}>
                     <NumberInput
                       label="Base Ticket Price"
                       prefix="$"
