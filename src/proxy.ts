@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // 1. Fast edge-safe cookie check — avoid hitting the DB if no session exists
   const sessionCookie = getSessionCookie(request);
   if (!sessionCookie) {
@@ -14,7 +14,7 @@ export async function middleware(request: NextRequest) {
     new URL("/api/auth/get-session", request.url),
     {
       headers: { cookie: request.headers.get("cookie") ?? "" },
-    }
+    },
   );
 
   const session = sessionRes.ok ? await sessionRes.json() : null;

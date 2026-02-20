@@ -1,3 +1,4 @@
+import "dotenv/config";
 import {
   PrismaClient,
   Role,
@@ -13,22 +14,19 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { faker } from "@faker-js/faker";
 import Papa from "papaparse";
 import pg from "pg";
+import { randomUUID } from "crypto";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 // ─────────────────────────────────────────────────────────────
-// CONFIG
+// CONFIG & REFERENCE DATA
 // ─────────────────────────────────────────────────────────────
 
 const OURAIRPORTS_CSV_URL =
   "https://davidmegginson.github.io/ourairports-data/airports.csv";
 
-/**
- * Asian countries to pull from OurAirports.
- * TH is home base — all others are destination markets.
- */
 const ASIAN_COUNTRIES = new Set([
   "TH",
   "SG",
@@ -51,12 +49,7 @@ const ASIAN_COUNTRIES = new Set([
 
 const ALLOWED_AIRPORT_TYPES = new Set(["large_airport", "medium_airport"]);
 
-/**
- * YokAirlines route network.
- * Routes are bidirectional — each pair seeds both directions.
- */
 const ROUTE_PAIRS: [string, string][] = [
-  // ── Thai domestic ──────────────────────────────────────────
   ["BKK", "HKT"],
   ["BKK", "CNX"],
   ["BKK", "DMK"],
@@ -67,7 +60,6 @@ const ROUTE_PAIRS: [string, string][] = [
   ["DMK", "HKT"],
   ["DMK", "CNX"],
   ["CNX", "HKT"],
-  // ── Bangkok → SE Asia ──────────────────────────────────────
   ["BKK", "SIN"],
   ["BKK", "KUL"],
   ["BKK", "CGK"],
@@ -78,7 +70,6 @@ const ROUTE_PAIRS: [string, string][] = [
   ["BKK", "VTE"],
   ["BKK", "RGN"],
   ["BKK", "DAD"],
-  // ── Bangkok → NE Asia ──────────────────────────────────────
   ["BKK", "NRT"],
   ["BKK", "ICN"],
   ["BKK", "PVG"],
@@ -86,18 +77,15 @@ const ROUTE_PAIRS: [string, string][] = [
   ["BKK", "TPE"],
   ["BKK", "CAN"],
   ["BKK", "PEK"],
-  // ── Bangkok → South Asia & Middle East hubs ────────────────
   ["BKK", "BOM"],
   ["BKK", "DEL"],
   ["BKK", "DXB"],
   ["BKK", "DOH"],
-  // ── Phuket & Chiang Mai international ──────────────────────
   ["HKT", "SIN"],
   ["HKT", "KUL"],
   ["HKT", "HKG"],
   ["CNX", "SIN"],
   ["CNX", "KUL"],
-  // ── SE Asia cross-routes ───────────────────────────────────
   ["SIN", "KUL"],
   ["SIN", "CGK"],
   ["SIN", "MNL"],
@@ -107,10 +95,6 @@ const ROUTE_PAIRS: [string, string][] = [
   ["HKG", "ICN"],
   ["HKG", "NRT"],
 ];
-
-// ─────────────────────────────────────────────────────────────
-// REFERENCE DATA — AIRCRAFT TYPES
-// ─────────────────────────────────────────────────────────────
 
 const AIRCRAFT_TYPE_DEFS = [
   {
@@ -151,27 +135,26 @@ const AIRCRAFT_TYPE_DEFS = [
   {
     iataCode: "789",
     model: "Boeing 787-9",
-    capacityEco: 246,
+    capacityEco: 252,
     capacityBiz: 28,
     capacityFirst: 0,
   },
   {
     iataCode: "77W",
     model: "Boeing 777-300ER",
-    capacityEco: 304,
+    capacityEco: 300,
     capacityBiz: 42,
     capacityFirst: 8,
   },
   {
     iataCode: "AT7",
     model: "ATR 72-600",
-    capacityEco: 70,
+    capacityEco: 72,
     capacityBiz: 0,
     capacityFirst: 0,
   },
 ];
 
-/** How many aircraft of each type to put in the fleet */
 const AIRCRAFT_COUNTS: Record<string, number> = {
   "320": 6,
   "321": 4,
@@ -183,13 +166,244 @@ const AIRCRAFT_COUNTS: Record<string, number> = {
   AT7: 4,
 };
 
-/** Thai Civil Aviation Registration prefix for YokAirlines */
+// ─────────────────────────────────────────────────────────────
+// REFERENCE DATA — SEAT LAYOUTS (seeded into Postgres)
+// Modeled after Thai Airways / Bangkok Airways real configs
+// Column naming follows IATA standard:
+//   Narrow-body (3-3): A B C | D E F
+//   Wide-body (2-4-2): A _ | C D E F | _ H J K
+// ─────────────────────────────────────────────────────────────
+
+type CabinName = "FIRST" | "BUSINESS" | "ECONOMY";
+interface SeatLayoutCabinDef {
+  cabin: CabinName;
+  rowStart: number;
+  rowEnd: number;
+  columns: string[];
+  aisleAfter: string[];
+  exitRows: number[];
+  blockedSeats: string[];
+}
+
+const SEAT_LAYOUT_DEFS: {
+  iataCode: string;
+  reference: string;
+  cabins: SeatLayoutCabinDef[];
+}[] = [
+  {
+    iataCode: "320",
+    reference: "Thai Airways / Bangkok Airways domestic narrow-body",
+    cabins: [
+      {
+        cabin: "BUSINESS",
+        rowStart: 1,
+        rowEnd: 3,
+        columns: ["A", "C", "D", "F"],
+        aisleAfter: ["C"],
+        exitRows: [],
+        blockedSeats: [],
+      },
+      {
+        cabin: "ECONOMY",
+        rowStart: 5,
+        rowEnd: 29,
+        columns: ["A", "B", "C", "D", "E", "F"],
+        aisleAfter: ["C"],
+        exitRows: [12, 13],
+        blockedSeats: [],
+      },
+    ],
+  },
+  {
+    iataCode: "321",
+    reference: "Thai Airways regional narrow-body",
+    cabins: [
+      {
+        cabin: "BUSINESS",
+        rowStart: 1,
+        rowEnd: 4,
+        columns: ["A", "C", "D", "F"],
+        aisleAfter: ["C"],
+        exitRows: [],
+        blockedSeats: [],
+      },
+      {
+        cabin: "ECONOMY",
+        rowStart: 6,
+        rowEnd: 35,
+        columns: ["A", "B", "C", "D", "E", "F"],
+        aisleAfter: ["C"],
+        exitRows: [16, 17],
+        blockedSeats: [],
+      },
+    ],
+  },
+  {
+    iataCode: "333",
+    reference: "Thai Airways Royal First / Royal Silk wide-body",
+    cabins: [
+      {
+        cabin: "FIRST",
+        rowStart: 1,
+        rowEnd: 2,
+        columns: ["A", "D", "G", "K"],
+        aisleAfter: ["A", "G"],
+        exitRows: [],
+        blockedSeats: [],
+      },
+      {
+        cabin: "BUSINESS",
+        rowStart: 5,
+        rowEnd: 10,
+        columns: ["A", "C", "D", "F", "H", "K"],
+        aisleAfter: ["C", "F"],
+        exitRows: [],
+        blockedSeats: [],
+      },
+      {
+        cabin: "ECONOMY",
+        rowStart: 13,
+        rowEnd: 40,
+        columns: ["A", "B", "C", "D", "E", "F", "G", "H", "K"],
+        aisleAfter: ["B", "F"],
+        exitRows: [30, 31],
+        blockedSeats: [],
+      },
+    ],
+  },
+  {
+    iataCode: "359",
+    reference: "Thai Airways flagship — Royal First Suite / Royal Silk",
+    cabins: [
+      {
+        cabin: "FIRST",
+        rowStart: 1,
+        rowEnd: 2,
+        columns: ["A", "C", "D", "G", "K"],
+        aisleAfter: ["C", "G"],
+        exitRows: [],
+        blockedSeats: [],
+      },
+      {
+        cabin: "BUSINESS",
+        rowStart: 5,
+        rowEnd: 11,
+        columns: ["A", "C", "D", "F", "H", "K"],
+        aisleAfter: ["C", "F"],
+        exitRows: [],
+        blockedSeats: [],
+      },
+      {
+        cabin: "ECONOMY",
+        rowStart: 14,
+        rowEnd: 43,
+        columns: ["A", "B", "C", "D", "E", "F", "H", "J", "K"],
+        aisleAfter: ["C", "F"],
+        exitRows: [30, 31],
+        blockedSeats: [],
+      },
+    ],
+  },
+  {
+    iataCode: "738",
+    reference: "Nok Air / Bangkok Airways short-haul",
+    cabins: [
+      {
+        cabin: "BUSINESS",
+        rowStart: 1,
+        rowEnd: 3,
+        columns: ["A", "C", "D", "F"],
+        aisleAfter: ["C"],
+        exitRows: [],
+        blockedSeats: [],
+      },
+      {
+        cabin: "ECONOMY",
+        rowStart: 5,
+        rowEnd: 31,
+        columns: ["A", "B", "C", "D", "E", "F"],
+        aisleAfter: ["C"],
+        exitRows: [15, 16],
+        blockedSeats: [],
+      },
+    ],
+  },
+  {
+    iataCode: "789",
+    reference: "Thai Airways Royal Silk long-haul (no first class)",
+    cabins: [
+      {
+        cabin: "BUSINESS",
+        rowStart: 1,
+        rowEnd: 7,
+        columns: ["A", "D", "G", "K"],
+        aisleAfter: ["A", "G"],
+        exitRows: [],
+        blockedSeats: [],
+      },
+      {
+        cabin: "ECONOMY",
+        rowStart: 11,
+        rowEnd: 38,
+        columns: ["A", "B", "C", "D", "E", "F", "H", "J", "K"],
+        aisleAfter: ["C", "F"],
+        exitRows: [25, 26],
+        blockedSeats: [],
+      },
+    ],
+  },
+  {
+    iataCode: "77W",
+    reference: "Thai Airways flagship long-haul — Royal First / Royal Silk",
+    cabins: [
+      {
+        cabin: "FIRST",
+        rowStart: 1,
+        rowEnd: 2,
+        columns: ["A", "D", "G", "K"],
+        aisleAfter: ["A", "G"],
+        exitRows: [],
+        blockedSeats: [],
+      },
+      {
+        cabin: "BUSINESS",
+        rowStart: 5,
+        rowEnd: 11,
+        columns: ["A", "C", "D", "F", "H", "K"],
+        aisleAfter: ["C", "F"],
+        exitRows: [],
+        blockedSeats: [],
+      },
+      {
+        cabin: "ECONOMY",
+        rowStart: 14,
+        rowEnd: 43,
+        columns: ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K"],
+        aisleAfter: ["C", "G"],
+        exitRows: [30, 31],
+        blockedSeats: [],
+      },
+    ],
+  },
+  {
+    iataCode: "AT7",
+    reference: "Bangkok Airways / Nok Air domestic turboprop",
+    cabins: [
+      {
+        cabin: "ECONOMY",
+        rowStart: 1,
+        rowEnd: 18,
+        columns: ["A", "B", "C", "D"],
+        aisleAfter: ["B"],
+        exitRows: [1, 12],
+        blockedSeats: [],
+      },
+    ],
+  },
+];
+
 const TAIL_PREFIX = "HS-YK";
 const TAIL_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ".split("");
-
-// ─────────────────────────────────────────────────────────────
-// REFERENCE DATA — STAFF
-// ─────────────────────────────────────────────────────────────
 
 const STAFF_DEFS: { role: Role; rank: Rank; count: number }[] = [
   { role: Role.PILOT, rank: Rank.CAPTAIN, count: 10 },
@@ -204,21 +418,7 @@ const STAFF_DEFS: { role: Role; rank: Rank; count: number }[] = [
   { role: Role.ADMIN, rank: Rank.MANAGER, count: 3 },
 ];
 
-// ─────────────────────────────────────────────────────────────
-// FALLBACK AIRPORT DATA
-// Used when OurAirports CSV doesn't contain a needed IATA code
-// ─────────────────────────────────────────────────────────────
-
-interface AirportCoords {
-  iataCode: string;
-  name: string;
-  city: string;
-  country: string;
-  lat: number;
-  lon: number;
-}
-
-const FALLBACK_AIRPORTS: AirportCoords[] = [
+const FALLBACK_AIRPORTS = [
   {
     iataCode: "BKK",
     name: "Suvarnabhumi Airport",
@@ -475,7 +675,6 @@ function haversineKm(
 }
 
 function durationMins(distanceKm: number): number {
-  // 850 km/h cruise + 35 min ground time
   return Math.round((distanceKm / 850) * 60 + 35);
 }
 
@@ -508,28 +707,19 @@ function uniqueCode(prefix: string, used: Set<string>, length = 5): string {
   throw new Error(`Could not generate unique code with prefix ${prefix}`);
 }
 
-// ─────────────────────────────────────────────────────────────
-// STEP 1 — FETCH AIRPORTS FROM OURAIRPORTS
-// ─────────────────────────────────────────────────────────────
-
-interface OurAirportRow {
-  id: string;
-  ident: string;
-  type: string;
-  name: string;
-  latitude_deg: string;
-  longitude_deg: string;
-  elevation_ft: string;
-  continent: string;
-  iso_country: string;
-  iso_region: string;
-  municipality: string;
-  scheduled_service: string;
-  icao_code: string;
-  iata_code: string;
+function chunkArray<T>(array: T[], size: number): T[][] {
+  const chunks = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
 }
 
-async function fetchOurAirports(): Promise<Map<string, AirportCoords>> {
+// ─────────────────────────────────────────────────────────────
+// SEEDING FUNCTIONS (Optimized for Bulk Inserts)
+// ─────────────────────────────────────────────────────────────
+
+async function fetchOurAirports() {
   console.log("📡 Fetching airports from OurAirports...");
   let csv = "";
   try {
@@ -540,160 +730,185 @@ async function fetchOurAirports(): Promise<Map<string, AirportCoords>> {
     console.warn(
       "  ⚠️  Could not fetch OurAirports — using fallback data only",
     );
-    const map = new Map<string, AirportCoords>();
-    FALLBACK_AIRPORTS.forEach((a) => map.set(a.iataCode, a));
-    return map;
   }
 
-  const { data } = Papa.parse<OurAirportRow>(csv, {
-    header: true,
-    skipEmptyLines: true,
-  });
-
-  const map = new Map<string, AirportCoords>();
-  for (const row of data) {
-    const iata = row.iata_code?.trim();
-    if (!iata || iata.length !== 3) continue;
-    if (!ALLOWED_AIRPORT_TYPES.has(row.type)) continue;
-    if (!ASIAN_COUNTRIES.has(row.iso_country)) continue;
-    if (row.scheduled_service !== "yes") continue;
-    if (map.has(iata)) continue;
-
-    map.set(iata, {
-      iataCode: iata,
-      name: row.name.trim(),
-      city: row.municipality?.trim() || row.name.trim(),
-      country: row.iso_country.trim(),
-      lat: parseFloat(row.latitude_deg),
-      lon: parseFloat(row.longitude_deg),
+  const map = new Map<string, any>();
+  if (csv) {
+    const { data } = Papa.parse<any>(csv, {
+      header: true,
+      skipEmptyLines: true,
     });
+    for (const row of data) {
+      const iata = row.iata_code?.trim();
+      if (
+        !iata ||
+        iata.length !== 3 ||
+        !ALLOWED_AIRPORT_TYPES.has(row.type) ||
+        !ASIAN_COUNTRIES.has(row.iso_country) ||
+        row.scheduled_service !== "yes" ||
+        map.has(iata)
+      )
+        continue;
+      map.set(iata, {
+        id: randomUUID(),
+        iataCode: iata,
+        name: row.name.trim(),
+        city: row.municipality?.trim() || row.name.trim(),
+        country: row.iso_country.trim(),
+        lat: parseFloat(row.latitude_deg),
+        lon: parseFloat(row.longitude_deg),
+      });
+    }
   }
 
-  // Fill any gaps with fallbacks
   for (const fb of FALLBACK_AIRPORTS) {
-    if (!map.has(fb.iataCode)) map.set(fb.iataCode, fb);
+    if (!map.has(fb.iataCode))
+      map.set(fb.iataCode, { id: randomUUID(), ...fb });
   }
 
-  // Filter to only airports we actually need for routes
   const neededIatas = new Set(ROUTE_PAIRS.flat());
-  const filtered = new Map<string, AirportCoords>();
-  for (const iata of neededIatas) {
-    const entry = map.get(iata);
-    if (entry) filtered.set(iata, entry);
-    else console.warn(`  ⚠️  No data for airport: ${iata}`);
-  }
-
-  console.log(
-    `✅ ${filtered.size} airports loaded (${map.size} available in region)`,
+  const filtered = Array.from(map.values()).filter((a) =>
+    neededIatas.has(a.iataCode),
   );
+
+  console.log(`✅ ${filtered.length} airports loaded in memory`);
   return filtered;
 }
 
-// ─────────────────────────────────────────────────────────────
-// STEP 2 — SEED AIRCRAFT TYPES
-// ─────────────────────────────────────────────────────────────
-
 async function seedAircraftTypes() {
   console.log("🛩️  Seeding aircraft types...");
-  const results = [];
-  for (const def of AIRCRAFT_TYPE_DEFS) {
-    const t = await prisma.aircraftType.upsert({
-      where: { iataCode: def.iataCode },
-      update: {},
-      create: def,
-    });
-    results.push(t);
-  }
-  console.log(`   ✅ ${results.length} aircraft types`);
-  return results;
+  const typesData = AIRCRAFT_TYPE_DEFS.map((def) => ({
+    id: randomUUID(),
+    ...def,
+  }));
+  await prisma.aircraftType.createMany({ data: typesData });
+  return typesData;
 }
 
 // ─────────────────────────────────────────────────────────────
-// STEP 3 — SEED AIRCRAFT FLEET
+// STEP 2b — SEED SEAT LAYOUTS INTO POSTGRES
 // ─────────────────────────────────────────────────────────────
 
-async function seedAircraft(types: { id: string; iataCode: string }[]) {
+async function seedSeatLayouts(
+  aircraftTypes: { id: string; iataCode: string }[],
+) {
+  console.log("💺 Seeding seat layouts into Postgres...");
+
+  const iataToId = new Map(aircraftTypes.map((t) => [t.iataCode, t.id]));
+
+  for (const def of SEAT_LAYOUT_DEFS) {
+    const aircraftTypeId = iataToId.get(def.iataCode);
+    if (!aircraftTypeId) continue;
+
+    const template = await prisma.seatLayoutTemplate.create({
+      data: {
+        aircraftTypeId,
+        reference: def.reference,
+        cabins: {
+          create: def.cabins.map((c, i) => ({
+            cabin: c.cabin as any,
+            rowStart: c.rowStart,
+            rowEnd: c.rowEnd,
+            columns: c.columns,
+            aisleAfter: c.aisleAfter,
+            exitRows: c.exitRows,
+            blockedSeats: c.blockedSeats,
+            sortOrder: i,
+          })),
+        },
+      },
+    });
+  }
+  console.log(`   ✅ ${SEAT_LAYOUT_DEFS.length} seat layouts`);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Load seat layouts from Postgres for booking generation
+// ─────────────────────────────────────────────────────────────
+
+interface LoadedCabin {
+  cabin: string;
+  rowStart: number;
+  rowEnd: number;
+  columns: string[];
+  blockedSeats: string[];
+}
+
+interface LoadedLayout {
+  aircraftTypeIataCode: string;
+  cabins: LoadedCabin[];
+}
+
+async function loadSeatLayouts(): Promise<Map<string, LoadedLayout>> {
+  const templates = await prisma.seatLayoutTemplate.findMany({
+    include: {
+      cabins: { orderBy: { sortOrder: "asc" } },
+      aircraftType: { select: { iataCode: true } },
+    },
+  });
+
+  const map = new Map<string, LoadedLayout>();
+  for (const t of templates) {
+    map.set(t.aircraftType.iataCode, {
+      aircraftTypeIataCode: t.aircraftType.iataCode,
+      cabins: t.cabins.map((c) => ({
+        cabin: c.cabin,
+        rowStart: c.rowStart,
+        rowEnd: c.rowEnd,
+        columns: c.columns,
+        blockedSeats: c.blockedSeats,
+      })),
+    });
+  }
+  return map;
+}
+
+async function seedAircraft(types: any[]) {
   console.log("✈️  Seeding aircraft fleet...");
-  const fleet = [];
+  const fleetData = [];
   let tailIdx = 0;
 
   for (const type of types) {
     const count = AIRCRAFT_COUNTS[type.iataCode] ?? 2;
     for (let i = 0; i < count; i++) {
-      // Build tail number: HS-YKA1, HS-YKA2, HS-YKB1 ...
       const letter =
         TAIL_LETTERS[Math.floor(tailIdx / 9) % TAIL_LETTERS.length];
       const num = (tailIdx % 9) + 1;
       const tailNumber = `${TAIL_PREFIX}${letter}${num}`;
       tailIdx++;
 
-      // Last aircraft of each type is in maintenance (realistic fleet ops)
       const status =
         i === count - 1 && count >= 3
           ? AircraftStatus.MAINTENANCE
           : AircraftStatus.ACTIVE;
-
-      const a = await prisma.aircraft.upsert({
-        where: { tailNumber },
-        update: {},
-        create: { tailNumber, status, aircraftTypeId: type.id },
+      fleetData.push({
+        id: randomUUID(),
+        tailNumber,
+        status,
+        aircraftTypeId: type.id,
       });
-      fleet.push(a);
     }
   }
-
-  console.log(`   ✅ ${fleet.length} aircraft`);
-  return fleet;
+  await prisma.aircraft.createMany({ data: fleetData });
+  return fleetData;
 }
 
-// ─────────────────────────────────────────────────────────────
-// STEP 4 — SEED AIRPORTS
-// ─────────────────────────────────────────────────────────────
-
-async function seedAirports(airports: Map<string, AirportCoords>) {
+async function seedAirports(airportsData: any[]) {
   console.log("🏙️  Seeding airports...");
-  const results = [];
-  for (const a of airports.values()) {
-    const record = await prisma.airport.upsert({
-      where: { iataCode: a.iataCode },
-      update: {},
-      create: {
-        iataCode: a.iataCode,
-        name: a.name,
-        city: a.city,
-        country: a.country,
-      },
-    });
-    results.push(record);
-  }
-  console.log(`   ✅ ${results.length} airports`);
-  return results;
+  await prisma.airport.createMany({ data: airportsData });
+  return airportsData;
 }
 
-// ─────────────────────────────────────────────────────────────
-// STEP 5 — SEED ROUTES
-// ─────────────────────────────────────────────────────────────
-
-async function seedRoutes(
-  airportCoords: Map<string, AirportCoords>,
-  dbAirports: { id: string; iataCode: string }[],
-) {
+async function seedRoutes(airportCoords: any[]) {
   console.log("🗺️  Seeding routes...");
-
-  const iataToId = new Map(dbAirports.map((a) => [a.iataCode, a.id]));
-  const results = [];
+  const routesData = [];
+  const iataToNode = new Map(airportCoords.map((a) => [a.iataCode, a]));
   const seenPairs = new Set<string>();
 
   for (const [oa, da] of ROUTE_PAIRS) {
-    const oCoords = airportCoords.get(oa);
-    const dCoords = airportCoords.get(da);
-    const oId = iataToId.get(oa);
-    const dId = iataToId.get(da);
-
-    if (!oCoords || !dCoords || !oId || !dId) {
-      console.warn(`   ⚠️  Skipping route ${oa}↔${da} — airport not found`);
-      continue;
-    }
+    const oCoords = iataToNode.get(oa);
+    const dCoords = iataToNode.get(da);
+    if (!oCoords || !dCoords) continue;
 
     const distKm = haversineKm(
       oCoords.lat,
@@ -703,48 +918,94 @@ async function seedRoutes(
     );
     const mins = durationMins(distKm);
 
-    // Seed both directions
-    for (const [fromId, toId, fromIata, toIata] of [
-      [oId, dId, oa, da],
-      [dId, oId, da, oa],
-    ] as [string, string, string, string][]) {
-      const key = `${fromIata}-${toIata}`;
+    for (const [from, to] of [
+      [oCoords, dCoords],
+      [dCoords, oCoords],
+    ]) {
+      const key = `${from.iataCode}-${to.iataCode}`;
       if (seenPairs.has(key)) continue;
       seenPairs.add(key);
 
-      try {
-        const r = await prisma.route.upsert({
-          where: {
-            originAirportId_destAirportId: {
-              originAirportId: fromId,
-              destAirportId: toId,
-            },
-          },
-          update: {},
-          create: {
-            originAirportId: fromId,
-            destAirportId: toId,
-            distanceKm: distKm,
-            durationMins: mins,
-          },
-        });
-        results.push(r);
-      } catch {
-        // upsert guard
-      }
+      routesData.push({
+        id: randomUUID(),
+        originAirportId: from.id,
+        destAirportId: to.id,
+        distanceKm: distKm,
+        durationMins: mins,
+      });
+    }
+  }
+  await prisma.route.createMany({ data: routesData });
+  return routesData;
+}
+
+async function seedUsers(dbAirports: any[], passengerCount = 200) {
+  console.log("👤 Seeding passengers and staff...");
+  const usersData = [];
+  const staffProfilesData = [];
+  const bkkAirport =
+    dbAirports.find((a) => a.iataCode === "BKK") ?? dbAirports[0];
+  const thaiAirports = dbAirports.filter((a) =>
+    ["BKK", "DMK", "HKT", "CNX"].includes(a.iataCode),
+  );
+
+  // Passengers
+  for (let i = 0; i < passengerCount; i++) {
+    const firstName = faker.person.firstName();
+    const lastName = faker.person.lastName();
+    usersData.push({
+      id: randomUUID(),
+      email: faker.internet.email({ firstName, lastName }).toLowerCase(),
+      name: `${firstName} ${lastName}`,
+      phone: faker.phone.number(),
+      role: Role.PASSENGER,
+      emailVerified: Math.random() > 0.1,
+      image: Math.random() > 0.6 ? faker.image.avatar() : null,
+    });
+  }
+
+  // Staff
+  let empNum = 1000;
+  for (const def of STAFF_DEFS) {
+    for (let i = 0; i < def.count; i++) {
+      empNum++;
+      const employeeId = `YK${empNum}`;
+      const userId = randomUUID();
+      const firstName = faker.person.firstName();
+      const lastName = faker.person.lastName();
+
+      usersData.push({
+        id: userId,
+        email: `${employeeId.toLowerCase()}@yokairlines.com`,
+        name: `${firstName} ${lastName}`,
+        phone: faker.phone.number(),
+        role: def.role,
+        emailVerified: true,
+      });
+      staffProfilesData.push({
+        id: randomUUID(),
+        userId: userId,
+        employeeId,
+        role: def.role,
+        rank: def.rank,
+        baseAirportId: bkkAirport.id,
+        stationId: pick(thaiAirports.length ? thaiAirports : dbAirports).id,
+      });
     }
   }
 
-  console.log(`   ✅ ${results.length} routes`);
-  return results;
+  const chunks = chunkArray(usersData, 5000);
+  for (const chunk of chunks) await prisma.user.createMany({ data: chunk });
+  await prisma.staffProfile.createMany({ data: staffProfilesData });
+
+  return {
+    passengers: usersData.filter((u) => u.role === Role.PASSENGER),
+    staff: usersData.filter((u) => u.role !== Role.PASSENGER),
+    staffProfiles: staffProfilesData,
+  };
 }
 
-// ─────────────────────────────────────────────────────────────
-// STEP 6 — SEED FLIGHTS
-// ─────────────────────────────────────────────────────────────
-
 function calcPrices(distanceKm: number) {
-  // Base economy price scales with distance; business/first are multiples
   const eco = Math.round(500 + distanceKm * 0.07);
   return {
     basePriceEconomy: eco,
@@ -754,19 +1015,25 @@ function calcPrices(distanceKm: number) {
 }
 
 async function seedFlights(
-  routes: { id: string; durationMins: number | null; distanceKm: number }[],
-  aircraft: { id: string }[],
+  routes: any[],
+  aircraft: any[],
+  aircraftTypes: any[],
+  staffProfiles: any[],
 ) {
   console.log("🛫 Seeding flights (30-day schedule)...");
-
-  const activeAircraft = aircraft.filter((_, i) => i % 3 !== 2); // exclude maintenance
-  const DEPARTURE_HOURS = [6, 9, 13, 17, 21]; // realistic slot times
+  const activeAircraft = aircraft.filter((_, i) => i % 3 !== 2);
+  const DEPARTURE_HOURS = [6, 9, 13, 17, 21];
   const usedCodes = new Set<string>();
+  const typeIdToIata = new Map(aircraftTypes.map((t) => [t.id, t.iataCode]));
+
+  const captains = staffProfiles.filter(
+    (p) => p.role === Role.PILOT && p.rank === Rank.CAPTAIN,
+  );
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const flights = [];
+  const flightsData = [];
 
   for (const route of routes) {
     const mins = route.durationMins ?? durationMins(route.distanceKm);
@@ -774,11 +1041,9 @@ async function seedFlights(
 
     for (let day = -7; day < 30; day++) {
       for (const hour of DEPARTURE_HOURS) {
-        // ~60% slot fill rate (not every flight runs every day/slot)
         if (Math.random() > 0.6) continue;
 
-        const code = uniqueCode("YK", usedCodes, 5);
-
+        const ac = pick(activeAircraft);
         const departure = addDays(today, day);
         departure.setHours(
           hour,
@@ -788,11 +1053,9 @@ async function seedFlights(
         );
         const arrival = addMinutes(departure, mins);
 
-        // Determine flight status based on date
-        let status: FlightStatus = FlightStatus.SCHEDULED;
-        if (day < -1) {
-          status = FlightStatus.ARRIVED;
-        } else if (day === -1 || (day === 0 && hour < new Date().getHours())) {
+        let status = FlightStatus.SCHEDULED;
+        if (day < -1) status = FlightStatus.ARRIVED;
+        else if (day === -1 || (day === 0 && hour < new Date().getHours())) {
           const roll = Math.random();
           status =
             roll > 0.92
@@ -805,161 +1068,90 @@ async function seedFlights(
             Math.random() > 0.3 ? FlightStatus.BOARDING : FlightStatus.DELAYED;
         }
 
-        const f = await prisma.flight.create({
-          data: {
-            flightCode: code,
-            routeId: route.id,
-            aircraftId: pick(activeAircraft).id,
-            gate: `${pick(["A", "B", "C", "D", "E"])}${randInt(1, 30)}`,
-            departureTime: departure,
-            arrivalTime: arrival,
-            status,
-            basePriceEconomy: prices.basePriceEconomy,
-            basePriceBusiness: prices.basePriceBusiness,
-            basePriceFirst: prices.basePriceFirst,
-          },
+        // Assign captain during creation!
+
+        const captainId =
+          captains.length && Math.random() > 0.1 ? pick(captains).id : null;
+
+        flightsData.push({
+          id: randomUUID(),
+          flightCode: uniqueCode("YK", usedCodes, 5),
+          routeId: route.id,
+          aircraftId: ac.id,
+          captainId: captainId,
+          gate: `${pick(["A", "B", "C", "D", "E"])}${randInt(1, 30)}`,
+          departureTime: departure,
+          arrivalTime: arrival,
+          status,
+          basePriceEconomy: prices.basePriceEconomy,
+          basePriceBusiness: prices.basePriceBusiness,
+          basePriceFirst: prices.basePriceFirst,
+          aircraftTypeIataCode: typeIdToIata.get(ac.aircraftTypeId) ?? "320", // Keep for bookings logic
         });
-        flights.push(f);
       }
     }
   }
 
-  console.log(`   ✅ ${flights.length} flights`);
-  return flights;
+  const chunks = chunkArray(flightsData, 5000);
+  for (const chunk of chunks) {
+    // Strip out the helper property before saving to DB
+    const dbData = chunk.map(({ aircraftTypeIataCode, ...rest }) => rest);
+    await prisma.flight.createMany({ data: dbData });
+  }
+
+  return flightsData;
 }
 
-// ─────────────────────────────────────────────────────────────
-// STEP 7 — SEED USERS (passengers + staff)
-// ─────────────────────────────────────────────────────────────
+// Seat layout helpers — use layouts loaded from Postgres
+let seatLayouts = new Map<string, LoadedLayout>();
 
-async function seedUsers(
-  dbAirports: { id: string; iataCode: string }[],
-  passengerCount = 200,
-) {
-  console.log("👤 Seeding passengers...");
+function ticketClassToCabin(
+  cls: TicketClass,
+): "FIRST" | "BUSINESS" | "ECONOMY" {
+  if (cls === TicketClass.FIRST_CLASS) return "FIRST";
+  if (cls === TicketClass.BUSINESS) return "BUSINESS";
+  return "ECONOMY";
+}
 
-  const bkkAirport =
-    dbAirports.find((a) => a.iataCode === "BKK") ?? dbAirports[0];
-  const thaiAirports = dbAirports.filter((a) =>
-    ["BKK", "DMK", "HKT", "CNX"].includes(a.iataCode),
+function generateSeatForAircraft(
+  aircraftTypeIataCode: string,
+  cls: TicketClass,
+): string | null {
+  const layout = seatLayouts.get(aircraftTypeIataCode);
+  if (!layout) return null;
+  const cabin = layout.cabins.find((c) => c.cabin === ticketClassToCabin(cls));
+  if (!cabin) return null;
+  const label = `${randInt(cabin.rowStart, cabin.rowEnd)}${pick(cabin.columns)}`;
+  return cabin.blockedSeats.includes(label) ? null : label;
+}
+
+function allSeatsForCabin(
+  aircraftTypeIataCode: string,
+  cls: TicketClass,
+): string[] {
+  const layout = seatLayouts.get(aircraftTypeIataCode);
+  if (!layout) return [];
+  const cabin = layout.cabins.find((c) => c.cabin === ticketClassToCabin(cls));
+  if (!cabin) return [];
+  const seats: string[] = [];
+  for (let row = cabin.rowStart; row <= cabin.rowEnd; row++) {
+    for (const col of cabin.columns) {
+      const label = `${row}${col}`;
+      if (!cabin.blockedSeats.includes(label)) seats.push(label);
+    }
+  }
+  return seats;
+}
+
+function aircraftHasClass(
+  aircraftTypeIataCode: string,
+  cls: TicketClass,
+): boolean {
+  return (
+    seatLayouts
+      .get(aircraftTypeIataCode)
+      ?.cabins.some((c) => c.cabin === ticketClassToCabin(cls)) ?? false
   );
-
-  // ── Passengers ───────────────────────────────────────────
-  const passengers = [];
-  for (let i = 0; i < passengerCount; i++) {
-    const firstName = faker.person.firstName();
-    const lastName = faker.person.lastName();
-    const u = await prisma.user.create({
-      data: {
-        email: faker.internet.email({ firstName, lastName }).toLowerCase(),
-        name: `${firstName} ${lastName}`,
-        phone: faker.phone.number(),
-        role: Role.PASSENGER,
-        emailVerified: Math.random() > 0.1,
-        image: Math.random() > 0.6 ? faker.image.avatar() : null,
-      },
-    });
-    passengers.push(u);
-  }
-  console.log(`   ✅ ${passengers.length} passengers`);
-
-  // ── Staff ─────────────────────────────────────────────────
-  console.log("👷 Seeding staff...");
-  const staff = [];
-  let empNum = 1000;
-
-  for (const def of STAFF_DEFS) {
-    for (let i = 0; i < def.count; i++) {
-      empNum++;
-      const employeeId = `YK${empNum}`;
-      const firstName = faker.person.firstName();
-      const lastName = faker.person.lastName();
-
-      const u = await prisma.user.create({
-        data: {
-          email: `${employeeId.toLowerCase()}@yokairlines.com`,
-          name: `${firstName} ${lastName}`,
-          phone: faker.phone.number(),
-          role: def.role,
-          emailVerified: true,
-          staffProfile: {
-            create: {
-              employeeId,
-              role: def.role,
-              rank: def.rank,
-              baseAirportId: bkkAirport.id,
-              stationId: pick(thaiAirports.length ? thaiAirports : dbAirports)
-                .id,
-            },
-          },
-        },
-        include: { staffProfile: true },
-      });
-      staff.push(u);
-    }
-  }
-  console.log(`   ✅ ${staff.length} staff members`);
-
-  return { passengers, staff };
-}
-
-// ─────────────────────────────────────────────────────────────
-// STEP 8 — ASSIGN CAPTAINS TO FLIGHTS
-// ─────────────────────────────────────────────────────────────
-
-async function assignCaptains(
-  flights: { id: string }[],
-  staff: {
-    staffProfile: { id: string; role: Role; rank: Rank | null } | null;
-  }[],
-) {
-  console.log("👨‍✈️  Assigning captains to flights...");
-
-  const captains = staff
-    .map((s) => s.staffProfile)
-    .filter(
-      (p): p is NonNullable<typeof p> =>
-        p !== null && p.role === Role.PILOT && p.rank === Rank.CAPTAIN,
-    );
-
-  if (!captains.length) {
-    console.warn("   ⚠️  No captains found");
-    return;
-  }
-
-  let count = 0;
-  for (const f of flights) {
-    if (Math.random() > 0.1) {
-      // 90% of flights have a named captain
-      await prisma.flight.update({
-        where: { id: f.id },
-        data: { captainId: pick(captains).id },
-      });
-      count++;
-    }
-  }
-  console.log(`   ✅ Assigned captains to ${count} flights`);
-}
-
-// ─────────────────────────────────────────────────────────────
-// STEP 9 — SEED BOOKINGS, TICKETS & TRANSACTIONS
-// ─────────────────────────────────────────────────────────────
-
-const SEAT_CONFIG = {
-  [TicketClass.FIRST_CLASS]: { rows: [1, 5], letters: ["A", "B", "C", "D"] },
-  [TicketClass.BUSINESS]: {
-    rows: [6, 15],
-    letters: ["A", "B", "C", "D", "E", "F"],
-  },
-  [TicketClass.ECONOMY]: {
-    rows: [16, 45],
-    letters: ["A", "B", "C", "D", "E", "F"],
-  },
-};
-
-function generateSeat(cls: TicketClass): string {
-  const cfg = SEAT_CONFIG[cls];
-  return `${randInt(cfg.rows[0], cfg.rows[1])}${pick(cfg.letters)}`;
 }
 
 const PAYMENT_METHODS = [
@@ -989,35 +1181,37 @@ const REFUND_REASONS = [
 ];
 
 async function seedBookings(
-  passengers: { id: string }[],
-  flights: {
-    id: string;
-    basePriceEconomy: any;
-    basePriceBusiness: any;
-    basePriceFirst: any;
-  }[],
+  passengers: any[],
+  flights: any[],
   bookingCount = 400,
 ) {
   console.log("🎫 Seeding bookings, tickets & transactions...");
 
-  const usedPNRs = new Set<string>();
-  let created = 0;
+  const bookingsData = [];
+  const ticketsData = [];
+  const transactionsData = [];
 
-  // Use only future/recent flights for bookings (more realistic)
+  const usedPNRs = new Set<string>();
+  const usedSeatsPerFlight = new Map<string, Set<string>>();
   const bookableFlights = flights.slice(0, Math.ceil(flights.length * 0.8));
 
   for (let i = 0; i < bookingCount; i++) {
     const user = pick(passengers);
     const flight = pick(bookableFlights);
 
-    // Class distribution: 70% economy, 22% business, 8% first
     const classRoll = Math.random();
-    const cls: TicketClass =
-      classRoll > 0.92
-        ? TicketClass.FIRST_CLASS
-        : classRoll > 0.7
-          ? TicketClass.BUSINESS
-          : TicketClass.ECONOMY;
+    const hasFirst = aircraftHasClass(
+      flight.aircraftTypeIataCode,
+      TicketClass.FIRST_CLASS,
+    );
+    const hasBiz = aircraftHasClass(
+      flight.aircraftTypeIataCode,
+      TicketClass.BUSINESS,
+    );
+
+    let cls = TicketClass.ECONOMY;
+    if (hasFirst && classRoll > 0.92) cls = TicketClass.FIRST_CLASS;
+    else if (hasBiz && classRoll > 0.7) cls = TicketClass.BUSINESS;
 
     const pricePerTicket =
       cls === TicketClass.FIRST_CLASS
@@ -1025,65 +1219,79 @@ async function seedBookings(
         : cls === TicketClass.BUSINESS
           ? Number(flight.basePriceBusiness)
           : Number(flight.basePriceEconomy);
-
     const paxCount = randInt(1, 4);
     const totalPrice = pricePerTicket * paxCount;
 
-    // PNR
     let pnr = faker.string.alphanumeric({ length: 6, casing: "upper" });
-    for (let t = 0; t < 20 && usedPNRs.has(pnr); t++) {
+    while (usedPNRs.has(pnr))
       pnr = faker.string.alphanumeric({ length: 6, casing: "upper" });
-    }
-    if (usedPNRs.has(pnr)) continue;
     usedPNRs.add(pnr);
 
-    // Booking status distribution
     const statusRoll = Math.random();
-    const bookingStatus: BookingStatus =
+    const bookingStatus =
       statusRoll > 0.92
         ? BookingStatus.CANCELLED
         : statusRoll > 0.05
           ? BookingStatus.CONFIRMED
           : BookingStatus.PENDING;
-
-    // Transaction status follows booking status
-    const txStatus: TransactionStatus =
+    const txStatus =
       bookingStatus === BookingStatus.CANCELLED
         ? TransactionStatus.REFUNDED
         : bookingStatus === BookingStatus.CONFIRMED
           ? TransactionStatus.SUCCESS
           : TransactionStatus.PENDING;
-
-    const txType: TransactionType =
+    const txType =
       txStatus === TransactionStatus.REFUNDED
         ? TransactionType.REFUND
         : TransactionType.PAYMENT;
 
-    // Payment method snapshot (denormalized — safe for accounting)
     const pmType = pick(PAYMENT_METHODS);
     const pmRef =
       pmType === "CARD"
         ? `**** **** **** ${randInt(1000, 9999)}`
         : `***-***-${randInt(1000, 9999)}`;
-
-    // Stripe mock IDs (only for completed payments)
     const stripeIntentId =
       txStatus !== TransactionStatus.PENDING
         ? `pi_${faker.string.alphanumeric(24)}`
         : null;
 
-    // Tickets
-    const usedSeats = new Set<string>();
-    const tickets = Array.from({ length: paxCount }, () => {
-      let seat = generateSeat(cls);
-      for (let s = 0; s < 10 && usedSeats.has(seat); s++)
-        seat = generateSeat(cls);
-      usedSeats.add(seat);
+    if (!usedSeatsPerFlight.has(flight.id))
+      usedSeatsPerFlight.set(flight.id, new Set());
+    const flightSeats = usedSeatsPerFlight.get(flight.id)!;
 
+    const allValid = allSeatsForCabin(flight.aircraftTypeIataCode, cls);
+    const remaining = allValid.filter((s) => !flightSeats.has(s));
+    if (remaining.length < paxCount) continue;
+
+    const bookingId = randomUUID();
+    let ticketsAssigned = 0;
+
+    for (let p = 0; p < paxCount; p++) {
+      let seat = null;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const candidate = generateSeatForAircraft(
+          flight.aircraftTypeIataCode,
+          cls,
+        );
+        if (candidate && !flightSeats.has(candidate)) {
+          seat = candidate;
+          break;
+        }
+      }
+      if (!seat) {
+        const stillFree = allValid.filter((s) => !flightSeats.has(s));
+        if (stillFree.length === 0) break;
+        seat = pick(stillFree);
+      }
+
+      flightSeats.add(seat);
       const checkedIn =
         bookingStatus === BookingStatus.CONFIRMED && Math.random() > 0.45;
 
-      return {
+      ticketsData.push({
+        id: randomUUID(),
+        bookingId,
+        flightId: flight.id,
         firstName: faker.person.firstName(),
         lastName: faker.person.lastName(),
         dateOfBirth: faker.date.birthdate({ min: 18, max: 75, mode: "age" }),
@@ -1101,47 +1309,55 @@ async function seedBookings(
         boardingPass: checkedIn
           ? `BP-${faker.string.alphanumeric({ length: 12, casing: "upper" })}`
           : null,
-      };
+      });
+      ticketsAssigned++;
+    }
+
+    if (ticketsAssigned === 0) continue;
+
+    bookingsData.push({
+      id: bookingId,
+      bookingRef: pnr,
+      userId: user.id,
+      flightId: flight.id,
+      status: bookingStatus,
+      totalPrice: pricePerTicket * ticketsAssigned,
+      currency: "THB",
+      contactEmail: faker.internet.email().toLowerCase(),
+      contactPhone: faker.phone.number(),
     });
 
-    await prisma.booking.create({
-      data: {
-        bookingRef: pnr,
-        userId: user.id,
-        flightId: flight.id,
-        status: bookingStatus,
-        totalPrice,
-        currency: "THB",
-        contactEmail: faker.internet.email().toLowerCase(),
-        contactPhone: faker.phone.number(),
-        tickets: { create: tickets },
-        transactions: {
-          create: {
-            amount: totalPrice,
-            currency: "THB",
-            status: txStatus,
-            type: txType,
-            paymentMethodType: pmType,
-            paymentMethodRef: pmRef,
-            stripePaymentIntentId: stripeIntentId,
-            stripeChargeId: stripeIntentId
-              ? `ch_${faker.string.alphanumeric(24)}`
-              : null,
-            refundedAt:
-              txType === TransactionType.REFUND
-                ? faker.date.recent({ days: 10 })
-                : null,
-            refundReason:
-              txType === TransactionType.REFUND ? pick(REFUND_REASONS) : null,
-          },
-        },
-      },
+    transactionsData.push({
+      id: randomUUID(),
+      bookingId,
+      amount: pricePerTicket * ticketsAssigned,
+      currency: "THB",
+      status: txStatus,
+      type: txType,
+      paymentMethodType: pmType,
+      paymentMethodRef: pmRef,
+      stripePaymentIntentId: stripeIntentId,
+      stripeChargeId: stripeIntentId
+        ? `ch_${faker.string.alphanumeric(24)}`
+        : null,
+      refundedAt:
+        txType === TransactionType.REFUND
+          ? faker.date.recent({ days: 10 })
+          : null,
+      refundReason:
+        txType === TransactionType.REFUND ? pick(REFUND_REASONS) : null,
     });
-
-    created++;
   }
 
-  console.log(`   ✅ ${created} bookings created`);
+  // Bulk inserts using chunks to avoid Postgres param limits
+  for (const chunk of chunkArray(bookingsData, 5000))
+    await prisma.booking.createMany({ data: chunk });
+  for (const chunk of chunkArray(ticketsData, 5000))
+    await prisma.ticket.createMany({ data: chunk });
+  for (const chunk of chunkArray(transactionsData, 5000))
+    await prisma.transaction.createMany({ data: chunk });
+
+  console.log(`  ✅ ${bookingsData.length} bookings created`);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1149,29 +1365,26 @@ async function seedBookings(
 // ─────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log("\n🌏  YokAirlines — Database Seed\n" + "─".repeat(50));
+  console.log(
+    "\n🌏  YokAirlines — Database Seed (Optimized)\n" + "─".repeat(50),
+  );
 
-  // Clear existing data — order must respect FK constraints
-  // Emergency tables may still exist from old migrations — delete them first
   console.log("🧹 Clearing existing data...");
-
-  // Emergency system (old schema — may or may not exist)
   try {
     await (prisma as any).activeEmergencyTask.deleteMany();
     await (prisma as any).emergencyIncident.deleteMany();
     await (prisma as any).emergencyTaskTemplate.deleteMany();
     await (prisma as any).emergencyType.deleteMany();
-  } catch {
-    // Tables don't exist in current schema — safe to ignore
-  }
+  } catch {}
 
-  // Core tables in FK-safe order
   await prisma.transaction.deleteMany();
   await prisma.ticket.deleteMany();
   await prisma.booking.deleteMany();
   await prisma.flight.deleteMany();
   await prisma.route.deleteMany();
   await prisma.aircraft.deleteMany();
+  await prisma.seatLayoutCabin.deleteMany();
+  await prisma.seatLayoutTemplate.deleteMany();
   await prisma.aircraftType.deleteMany();
   await prisma.staffProfile.deleteMany();
   await prisma.session.deleteMany();
@@ -1180,30 +1393,30 @@ async function main() {
   await prisma.airport.deleteMany();
   console.log("   ✅ Database cleared\n");
 
-  // Seed
   const airportCoords = await fetchOurAirports();
   const aircraftTypes = await seedAircraftTypes();
+  await seedSeatLayouts(aircraftTypes);
   const aircraft = await seedAircraft(aircraftTypes);
   const dbAirports = await seedAirports(airportCoords);
-  const routes = await seedRoutes(airportCoords, dbAirports);
-  const flights = await seedFlights(routes, aircraft);
-  const { passengers, staff } = await seedUsers(dbAirports);
-  await assignCaptains(flights, staff as any);
-  await seedBookings(passengers, flights as any);
+  const routes = await seedRoutes(airportCoords);
 
-  // Summary
+  // Notice the swapped order: Users go BEFORE Flights so we can pass Captain IDs down
+  const { passengers, staffProfiles } = await seedUsers(dbAirports);
+  const flights = await seedFlights(
+    routes,
+    aircraft,
+    aircraftTypes,
+    staffProfiles,
+  );
+
+  // Load seat layouts from Postgres for booking seat generation
+  seatLayouts = await loadSeatLayouts();
+  console.log(`💺 Loaded ${seatLayouts.size} seat layouts from Postgres`);
+
+  await seedBookings(passengers, flights);
+
   console.log("\n" + "─".repeat(50));
   console.log("✅  Seed complete!\n");
-  console.log(`  Airports       : ${dbAirports.length}`);
-  console.log(`  Aircraft Types : ${aircraftTypes.length}`);
-  console.log(`  Aircraft       : ${aircraft.length}`);
-  console.log(`  Routes         : ${routes.length}`);
-  console.log(`  Flights        : ${flights.length}`);
-  console.log(`  Passengers     : ${passengers.length}`);
-  console.log(`  Staff          : ${staff.length}`);
-  console.log(
-    "\n  ℹ️  MongoDB data (profiles, emergency types) → run mongo-seed.ts",
-  );
   console.log("─".repeat(50) + "\n");
 }
 
