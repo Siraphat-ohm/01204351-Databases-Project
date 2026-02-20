@@ -4,29 +4,31 @@ services:
     container_name: airline_mysql
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DATABASE}
+      POSTGRES_USER: ${POSTGRES_USER}
     ports:
-      - "${MYSQL_PORT}:3306"
+      - "${POSTGRES_PORT}:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - airline_network
 
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin
-    container_name: airline_phpmyadmin
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: airline_pgadmin
     restart: always
     environment:
-      PMA_HOST: mysql
-      PMA_PORT: 3306
-      UPLOAD_LIMIT: 64M
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     ports:
-      - "${PHPMYADMIN_PORT}:80"
+      - "${PGADMIN_PORT}:80"
     depends_on:
-      - mysql
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
     networks:
       - airline_network
 
@@ -44,24 +46,9 @@ services:
     networks:
       - airline_network
 
-  mongo-express:
-    image: mongo-express
-    container_name: airline_mongo_express
-    restart: always
-    ports:
-      - "${MONGO_EXPRESS_PORT}:8081"
-    environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/
-      ME_CONFIG_BASICAUTH: "false"
-    depends_on:
-      - mongo
-    networks:
-      - airline_network
-
 volumes:
-  mysql_data:
+  postgres_data:
+  pgadmin_data:
   mongo_data:
 
 networks:
