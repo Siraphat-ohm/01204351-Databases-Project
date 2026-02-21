@@ -46,6 +46,12 @@ function checkPermission(
   );
 }
 
+const PUBLIC_SESSION: Session = {
+  user: {
+    id: 'public',
+    role: 'PASSENGER',
+  },
+};
 
 export const flightService = {
 
@@ -88,6 +94,20 @@ export const flightService = {
     checkPermission(session, 'read');
     const flight = await flightRepository.findDetailByCode(params);
     if (!flight) throw new FlightNotFoundError(params.flightCode);
+
+    const seatAvailability = await getSeatAvailability(
+      flight.id,
+      flight.aircraft.type.iataCode,
+    );
+
+    return { ...flight, seatAvailability };
+  },
+
+  async findPublicDetailWithAvailability(params: FlightCodeSearchParams) {
+    checkPermission(PUBLIC_SESSION, 'read');
+
+    const flight = await flightRepository.findDetailByCode(params);
+    if (!flight || flight.status !== 'SCHEDULED') return null;
 
     const seatAvailability = await getSeatAvailability(
       flight.id,

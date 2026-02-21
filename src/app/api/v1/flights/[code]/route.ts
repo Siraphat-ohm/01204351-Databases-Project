@@ -1,10 +1,11 @@
 import { NextRequest } from "next/server";
-import { getFlightDetailWithAvailability } from "@/services/flight.services";
+import { flightService } from "@/services/flight.services";
 import {
   successResponse,
   errorResponse,
   notFoundResponse,
   validationErrorResponse,
+  zodFieldErrors,
 } from "@/lib/utils/api-response";
 import { ZodError } from "zod";
 
@@ -15,7 +16,9 @@ export async function GET(
   try {
     const { code } = await params;
 
-    const flight = await getFlightDetailWithAvailability({ flightCode: code });
+    const flight = await flightService.findPublicDetailWithAvailability({
+      flightCode: code,
+    });
 
     if (!flight) {
       return notFoundResponse("Flight");
@@ -24,7 +27,7 @@ export async function GET(
     return successResponse(flight);
   } catch (err) {
     if (err instanceof ZodError) {
-      return validationErrorResponse(err.flatten().fieldErrors);
+      return validationErrorResponse(zodFieldErrors(err));
     }
     console.error("[GET /api/v1/flights/[code]]", err);
     return errorResponse("Internal server error");

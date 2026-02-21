@@ -5,6 +5,7 @@ import {
   updateBookingStatusSchema,
   type CreateBookingInput,
 } from '@/types/booking.type';
+import type { PaginatedResponse } from '@/types/common';
 import { canAccessBooking } from '@/auth/permissions';
 import { BookingStatus } from '@/generated/prisma/client';
 import type { ServiceSession as Session } from '@/services/_shared/session';
@@ -12,6 +13,12 @@ import {
   assertPermission,
   hasPermission,
 } from '@/services/_shared/authorization';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '@/services/_shared/pagination';
+
+type BookingListItem = Awaited<ReturnType<typeof bookingRepository.findAll>>[number];
 
 export class BookingNotFoundError extends Error {
   constructor(identifier: string) {
@@ -107,6 +114,27 @@ export const bookingService = {
   async findAll(session: Session) {
     checkPermission(session, 'read-all');
     return bookingRepository.findAll();
+  },
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<BookingListItem>> {
+    checkPermission(session, 'read-all');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const rows = await bookingRepository.findAll();
+    const total = rows.length;
+
+    return {
+      data: rows.slice(skip, skip + limit),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   },
 
   async createBooking(input: CreateBookingInput, session: Session) {
