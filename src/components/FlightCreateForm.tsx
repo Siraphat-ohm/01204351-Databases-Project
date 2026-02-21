@@ -8,7 +8,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Plane, MapPin, Clock, DollarSign, Building, Calendar, AlertCircle } from 'lucide-react';
 import { FlightStatus } from '@/generated/prisma/client';
-import { createFlightAction } from '@/app/actions/flight-actions'; // Import the action
+import { createFlightAction } from '@/actions/flight-actions'; // Import the action
 
 // --- MOCK DATA (Ideally this should come from props) ---
 const MOCK_AIRCRAFT_FLEET = [

@@ -2,40 +2,40 @@
 
 import { 
   Title, Group, Button, Table, Badge, Text, ActionIcon, 
-  TextInput, Paper, Modal, Select, Stack, Alert, LoadingOverlay,
-  Notification 
+  TextInput, Paper, Modal, Select, Stack, Alert, LoadingOverlay
 } from '@mantine/core';
 import { useDisclosure, useSetState } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Plus, Search, Pencil, Trash, Plane, Filter, AlertTriangle, Check, X } from 'lucide-react';
-import { useState, useTransition } from 'react';
+import { useState, useMemo } from 'react'; // Added useMemo
 import Link from 'next/link';
 import { AircraftStatus } from '@/generated/prisma/client'; 
-import { deleteAircraftAction } from '@/app/actions/aircraft-actions';
+import { deleteAircraftAction } from '@/actions/aircraft-actions';
 
 interface AircraftType {
-  id: number;
+  id: string; 
   model: string;
-  capacityEco: number;
-  capacityBiz: number;
+  iataCode: string; 
+  capacityEco?: number; 
+  capacityBiz?: number;
 }
 
 interface Aircraft {
-  id: number;
+  id: string; 
   tailNumber: string;
   status: AircraftStatus;
   type: AircraftType;
 }
 
 interface AircraftManagementProps {
-  initialAircrafts: Aircraft[];
+  initialAircrafts: any[]; 
   aircraftTypes: AircraftType[];
 }
 
 export function AircraftManagement({ initialAircrafts, aircraftTypes }: AircraftManagementProps) {
-  const [aircrafts, setAircrafts] = useState(initialAircrafts);
+  const [aircrafts, setAircrafts] = useState<Aircraft[]>(initialAircrafts as Aircraft[]);
 
-  const [addOpened, { open: openAdd, close: closeAdd }] = useDisclosure(false);
+  // Removed addOpened since we will navigate to a new page instead
   const [deleteOpened, { open: openDelete, close: closeDelete }] = useDisclosure(false);
 
   const [aircraftToDelete, setAircraftToDelete] = useState<Aircraft | null>(null);
@@ -73,9 +73,8 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
     try {
       const result = await deleteAircraftAction(aircraftToDelete.id);
 
-      // Assuming server action returns { success: boolean, error?: string }
-      if (!result?.success) {
-        throw new Error(result?.error ?? "Failed to delete aircraft");
+      if (result?.error) {
+        throw new Error(result.error);
       }
 
       // Remove from local state (optimistic update)
@@ -116,17 +115,20 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
   };
 
   // ────────────────────────────────────────────────
-  // Filtering
+  // Filtering (OPTIMIZED WITH useMemo)
   // ────────────────────────────────────────────────
-  const filteredAircrafts = aircrafts.filter(ac => {
-    const matchesSearch = 
-      ac.tailNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ac.type.model.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter ? ac.status === statusFilter : true;
+  const filteredAircrafts = useMemo(() => {
+    return aircrafts.filter(ac => {
+      // Added Optional Chaining (?) to prevent crashes if type is ever null
+      const matchesSearch = 
+        ac.tailNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (ac.type?.model?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+      
+      const matchesStatus = statusFilter ? ac.status === statusFilter : true;
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    });
+  }, [aircrafts, searchTerm, statusFilter]);
 
   const rows = filteredAircrafts.map((ac) => (
     <Table.Tr key={ac.id}>
@@ -136,11 +138,11 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
           <Text fw={500}>{ac.tailNumber}</Text>
         </Group>
       </Table.Td>
-      <Table.Td><Text size="sm">{ac.type.model}</Text></Table.Td>
+      <Table.Td><Text size="sm">{ac.type?.model || 'Unknown'}</Text></Table.Td>
       <Table.Td>
         <Group gap={4}>
-          <Badge variant="dot" color="gray">Eco: {ac.type.capacityEco}</Badge>
-          <Badge variant="dot" color="blue">Biz: {ac.type.capacityBiz}</Badge>
+          <Badge variant="dot" color="gray">Eco: {ac.type?.capacityEco ?? 'N/A'}</Badge>
+          <Badge variant="dot" color="blue">Biz: {ac.type?.capacityBiz ?? 'N/A'}</Badge>
         </Group>
       </Table.Td>
       <Table.Td>
@@ -152,7 +154,7 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
         <Group gap={0} justify="flex-end">
           <ActionIcon
             component={Link}
-            href={`/dashboard/aircraft/${ac.id}/edit`}
+            href={`/admin/dashboard/aircraft/${ac.id}/edit`}
             variant="subtle"
             color="blue"
             aria-label="Edit"
@@ -181,7 +183,12 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
           <Title order={2}>Fleet Management</Title>
           <Text c="dimmed" size="sm">Manage aircraft status and fleet additions</Text>
         </div>
-        <Button leftSection={<Plus size={16} />} onClick={openAdd}>
+        {/* Changed from onClick={openAdd} to a Link for better UX */}
+        <Button 
+          component={Link} 
+          href="/admin/dashboard/aircraft/new" 
+          leftSection={<Plus size={16} />}
+        >
           Add Aircraft
         </Button>
       </Group>
@@ -209,7 +216,7 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
       </Paper>
 
       <Paper shadow="xs" withBorder pos="relative">
-        <LoadingOverlay visible={false} /> {/* you can enable when doing bulk actions later */}
+        <LoadingOverlay visible={false} /> 
         <Table.ScrollContainer minWidth={700}>
           <Table verticalSpacing="sm" striped highlightOnHover layout="fixed">
             <Table.Thead bg="gray.0">
