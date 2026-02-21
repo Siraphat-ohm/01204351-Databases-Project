@@ -51,4 +51,69 @@ export const bookingRepository = {
       data: { status },
       include: bookingAdminInclude,
     }),
+
+  changeFlight: async (params: {
+    bookingId: string;
+    newFlightId: string;
+    newBookingRef: string;
+    totalPrice?: number;
+    currency?: string;
+    keepSeatAssignments?: boolean;
+  }) => {
+    const oldBooking = await prisma.booking.findUnique({
+      where: { id: params.bookingId },
+      include: {
+        tickets: true,
+      },
+    });
+
+    if (!oldBooking) return null;
+
+    return prisma.$transaction(async (tx) => {
+      await tx.booking.update({
+        where: { id: params.bookingId },
+        data: { status: BookingStatus.CANCELLED },
+      });
+
+      const created = await tx.booking.create({
+        data: {
+          bookingRef: params.newBookingRef,
+          userId: oldBooking.userId,
+          flightId: params.newFlightId,
+          status: BookingStatus.CONFIRMED,
+          totalPrice: params.totalPrice ?? oldBooking.totalPrice,
+          currency: params.currency ?? oldBooking.currency,
+          contactEmail: oldBooking.contactEmail,
+          contactPhone: oldBooking.contactPhone,
+        },
+      });
+
+      if (oldBooking.tickets.length > 0) {
+        await tx.ticket.createMany({
+          data: oldBooking.tickets.map((t) => ({
+            bookingId: created.id,
+            flightId: params.newFlightId,
+            class: t.class,
+            seatNumber: params.keepSeatAssignments ? t.seatNumber : null,
+            price: t.price,
+            firstName: t.firstName,
+            lastName: t.lastName,
+            dateOfBirth: t.dateOfBirth,
+            passportNumber: t.passportNumber,
+            nationality: t.nationality,
+            gender: t.gender,
+            checkedIn: false,
+            checkedInAt: null,
+            boardingPass: null,
+            seatSurcharge: t.seatSurcharge,
+          })),
+        });
+      }
+
+      return tx.booking.findUnique({
+        where: { id: created.id },
+        include: bookingAdminInclude,
+      });
+    });
+  },
 };
