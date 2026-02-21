@@ -234,4 +234,35 @@ export const paymentService = {
 
     return refund;
   },
+
+  async refundBookingForReaccommodation(bookingId: string, reason?: string) {
+    const booking = await bookingRepository.findById(bookingId);
+    if (!booking) throw new BookingNotFoundError(bookingId);
+
+    const payments = await paymentRepository.findByBookingId(bookingId);
+    const refundablePayments = payments.filter(
+      (p) => p.type === TransactionType.PAYMENT && p.status === TransactionStatus.SUCCESS,
+    );
+
+    for (const payment of refundablePayments) {
+      await paymentRepository.createRefund({
+        bookingId: payment.bookingId,
+        amount: Number(payment.amount),
+        currency: payment.currency,
+        reason: reason ?? 'Passenger cancelled during reaccommodation',
+        originalTransactionId: payment.id,
+      });
+
+      await paymentRepository.updateStatus(payment.id, {
+        status: TransactionStatus.REFUNDED,
+        refundedAt: new Date(),
+        refundReason: reason ?? 'Passenger cancelled during reaccommodation',
+      });
+    }
+
+    return {
+      bookingId,
+      refundedCount: refundablePayments.length,
+    };
+  },
 };

@@ -233,6 +233,7 @@ Methods:
 - `createFlight(input, session)`
 - `updateFlight(id, input, session)`
 - `updateStatus(id, status, session)`
+- `changeAircraftAndReassignSeats(id, input, session)`
 - `deleteFlight(id, session)`
 
 Errors:
@@ -240,6 +241,8 @@ Errors:
 - `FlightNotFoundError`
 - `FlightConflictError`
 - `FlightInUseError`
+- `AircraftNotFoundError`
+- `FlightSeatReassignmentError`
 - `UnauthorizedError`
 
 Public behavior:
@@ -275,6 +278,8 @@ Methods:
 - `createBooking(input, session)`
 - `cancelBooking(id, session)`
 - `changeFlight(id, input, session)`
+- `acceptReaccommodation(id, input, session)`
+- `cancelForReaccommodation(id, input, session)`
 
 Errors:
 
@@ -282,6 +287,7 @@ Errors:
 - `BookingConflictError`
 - `BookingAlreadyCancelledError`
 - `BookingChangeNotAllowedError`
+- `BookingReaccommodationError`
 - `UnauthorizedError`
 
 Notes:
@@ -327,6 +333,7 @@ Methods:
 - `markPaymentSuccess(id, input, session)`
 - `markPaymentFailed(id, input, session)`
 - `refundPayment(id, input, session)`
+- `refundBookingForReaccommodation(bookingId, reason?)`
 
 Errors:
 
