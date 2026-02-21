@@ -248,6 +248,36 @@ API routes:
 - `GET /api/v1/issues/[id]`
 - `PATCH /api/v1/issues/[id]`
 
+### 4.3.3 `paymentLogService` (Mongo)
+
+Files:
+
+- `src/services/payment-log.services.ts`
+- `src/repositories/payment-log.repository.ts`
+- `src/types/payment-log.type.ts`
+- `src/models/PaymentLog.ts`
+
+Methods:
+
+- `findById(id, session)`
+- `findByBookingId(bookingId, session)`
+- `findAll(session)` (admin)
+- `create(input, session)` (admin)
+- `updateById(id, input, session)` (admin)
+
+Errors:
+
+- `PaymentLogNotFoundError`
+- `BookingNotFoundError`
+- `UnauthorizedError`
+
+API routes:
+
+- `GET /api/v1/payment-logs`
+- `POST /api/v1/payment-logs`
+- `GET /api/v1/payment-logs/[id]`
+- `PATCH /api/v1/payment-logs/[id]`
+
 ### 4.4 `routeService`
 
 File: `src/services/route.services.ts`
