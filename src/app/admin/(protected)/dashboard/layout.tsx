@@ -32,7 +32,7 @@ const navData = [
   { label: 'Flight Schedule', icon: PlaneTakeoff, link: '/admin/dashboard/flights' }, // Add/Mod/Del Flight
   { label: 'Fleet / Aircraft', icon: Plane, link: '/admin/dashboard/aircraft' },      // Add/Mod/Del Aircraft
   { label: 'Airports', icon: MapPin, link: '/admin/dashboard/airports' },             // Add/Mod/Del Airport
-
+  
   { category: 'Commercial' },
   { label: 'Tickets & Booking', icon: Ticket, link: '/admin/dashboard/bookings' },    // Add/Mod/Cancel/Book for customer
 

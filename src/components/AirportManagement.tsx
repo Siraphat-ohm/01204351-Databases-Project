@@ -2,19 +2,29 @@
 
 import { 
   Title, Group, Button, Table, Badge, Text, ActionIcon, 
-  TextInput, Paper, Modal, Stack, Pagination, Center
+  TextInput, Paper, Modal, Stack, Pagination, Center, 
+  NumberInput, Grid, Alert, LoadingOverlay,Box
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Plus, Search, Pencil, Trash, MapPin, Building } from 'lucide-react';
-import { useState } from 'react';
+import { notifications } from '@mantine/notifications';
+import { Plus, Search, Pencil, Trash, MapPin, Building, Globe, Check, X, AlertTriangle,Save } from 'lucide-react';
+import { useState, useTransition, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
-// Define Type based on Prisma Schema
+
+// Import our new Server Actions
+import { createAirportAction, deleteAirportAction } from '@/actions/airport-actions';
+
+// Update Type based on your new Prisma Schema (UUIDs + Lat/Lon)
 export interface Airport {
-  id: number;
+  id: string; 
   iataCode: string;
   name: string;
   city: string;
   country: string;
+  lat: number;
+  lon: number;
 }
 
 interface AirportManagementProps {
@@ -22,28 +32,75 @@ interface AirportManagementProps {
 }
 
 export function AirportManagement({ initialAirports }: AirportManagementProps) {
-  const [opened, { open, close }] = useDisclosure(false);
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // Filter Logic
-  const filteredAirports = initialAirports.filter(airport => 
-    airport.iataCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    airport.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    airport.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    airport.country.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const [isPending, startTransition] = useTransition();
+
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  const [formData, setFormData] = useState({
+    iataCode: '',
+    name: '',
+    city: '',
+    country: '',
+    lat: 0,
+    lon: 0,
+  });
+
+  // --- Delete Modal State ---
+  const [deleteOpened, { open: openDelete, close: closeDelete }] = useDisclosure(false);
+  const [airportToDelete, setAirportToDelete] = useState<Airport | null>(null);
+
+  // ────────────────────────────────────────────────
+  // Handlers
+  // ────────────────────────────────────────────────
+  const handleFormChange = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (fieldErrors[field]) {
+      setFieldErrors(prev => ({ ...prev, [field]: [] }));
+    }
+  };
+
+
+  const confirmDelete = async () => {
+    if (!airportToDelete) return;
+    
+    startTransition(async () => {
+      const result = await deleteAirportAction(airportToDelete.id);
+      if (result?.error) {
+        notifications.show({ title: "Delete Failed", message: result.error, color: "red", icon: <X size={18} /> });
+      } else {
+        notifications.show({ title: "Deleted", message: `${airportToDelete.iataCode} has been removed.`, color: "green", icon: <Check size={18} /> });
+        closeDelete();
+        setAirportToDelete(null);
+      }
+    });
+  };
+
+  // ────────────────────────────────────────────────
+  // Filtering (Optimized)
+  // ────────────────────────────────────────────────
+  const filteredAirports = useMemo(() => {
+    return initialAirports.filter(airport => {
+      const term = searchTerm.toLowerCase();
+      return (
+        airport.iataCode.toLowerCase().includes(term) ||
+        airport.name.toLowerCase().includes(term) ||
+        airport.city.toLowerCase().includes(term) ||
+        airport.country.toLowerCase().includes(term)
+      );
+    });
+  }, [initialAirports, searchTerm]);
 
   const rows = filteredAirports.map((airport) => (
     <Table.Tr key={airport.id}>
       <Table.Td>
-        <Group gap="xs">
-          <Badge variant="filled" color="blue" size="lg" radius="sm">
-            {airport.iataCode}
-          </Badge>
-        </Group>
+        <Badge variant="filled" color="blue" size="lg" radius="sm">
+          {airport.iataCode}
+        </Badge>
       </Table.Td>
       <Table.Td>
         <Text fw={500}>{airport.name}</Text>
+        <Text size="xs" c="dimmed">{airport.lat.toFixed(4)}, {airport.lon.toFixed(4)}</Text>
       </Table.Td>
       <Table.Td>
         <Group gap="xs">
@@ -52,14 +109,14 @@ export function AirportManagement({ initialAirports }: AirportManagementProps) {
         </Group>
       </Table.Td>
       <Table.Td>
-        <Text size="sm">{airport.country}</Text>
+        <Group gap="xs">
+          <Globe size={14} color="gray" />
+          <Text size="sm">{airport.country}</Text>
+        </Group>
       </Table.Td>
       <Table.Td>
         <Group gap={4} justify="flex-end">
-          <ActionIcon variant="subtle" color="blue" aria-label="Edit">
-            <Pencil size={16} />
-          </ActionIcon>
-          <ActionIcon variant="subtle" color="red" aria-label="Delete">
+          <ActionIcon variant="subtle" color="red" onClick={() => { setAirportToDelete(airport); openDelete(); }}>
             <Trash size={16} />
           </ActionIcon>
         </Group>
@@ -68,18 +125,21 @@ export function AirportManagement({ initialAirports }: AirportManagementProps) {
   ));
 
   return (
-    <>
+    <Box pos="relative">
+      <LoadingOverlay visible={isPending} overlayProps={{ radius: "sm", blur: 2 }} />
+
       <Group justify="space-between" mb="lg">
         <div>
           <Title order={2}>Airport Management</Title>
           <Text c="dimmed" size="sm">Manage global destinations and base stations</Text>
         </div>
-        <Button leftSection={<Plus size={16} />} onClick={open}>
+        <Button component={Link} 
+  href="/admin/dashboard/airports/create" 
+  leftSection={<Plus size={16} />}>
           Add Airport
         </Button>
       </Group>
 
-      {/* Search Filter */}
       <Paper shadow="xs" p="md" mb="lg" withBorder>
         <TextInput 
           placeholder="Search by IATA, Name, City or Country..." 
@@ -89,7 +149,6 @@ export function AirportManagement({ initialAirports }: AirportManagementProps) {
         />
       </Paper>
 
-      {/* Table */}
       <Paper shadow="xs" withBorder>
         <Table.ScrollContainer minWidth={700}>
           <Table verticalSpacing="sm" striped highlightOnHover>
@@ -116,46 +175,26 @@ export function AirportManagement({ initialAirports }: AirportManagementProps) {
       </Paper>
       
       <Center mt="md">
-         <Pagination total={Math.ceil(initialAirports.length / 10)} color="blue" />
+         <Pagination total={Math.ceil(initialAirports.length / 10) || 1} color="blue" />
       </Center>
 
-      {/* --- ADD MODAL --- */}
-      <Modal opened={opened} onClose={close} title="Add New Airport" centered>
+      {/* --- DELETE CONFIRMATION MODAL --- */}
+      <Modal opened={deleteOpened} onClose={closeDelete} title={<Group gap="xs" c="red"><AlertTriangle size={20} /> Confirm Deletion</Group>} centered>
         <Stack>
-          <TextInput 
-            label="IATA Code" 
-            placeholder="e.g. BKK" 
-            required 
-            description="3-letter International Air Transport Association code"
-            maxLength={3}
-            data-autofocus
-          />
-          
-          <TextInput 
-            label="Airport Name" 
-            placeholder="e.g. Suvarnabhumi Airport" 
-            required 
-            leftSection={<Building size={16} />}
-          />
-
-          <TextInput 
-            label="City" 
-            placeholder="e.g. Bangkok" 
-            required 
-          />
-
-          <TextInput 
-            label="Country" 
-            placeholder="e.g. Thailand" 
-            required 
-          />
-
+          <Text size="sm">
+            Are you sure you want to delete <strong>{airportToDelete?.name} ({airportToDelete?.iataCode})</strong>?
+          </Text>
+          <Alert variant="light" color="red" title="Cannot be undone" icon={<AlertTriangle size={16}/>}>
+            If this airport is currently used in active flight routes, the deletion will be rejected by the server.
+          </Alert>
           <Group justify="flex-end" mt="md">
-            <Button variant="default" onClick={close}>Cancel</Button>
-            <Button onClick={close}>Save Airport</Button>
+            <Button variant="default" onClick={closeDelete} disabled={isPending}>Cancel</Button>
+            <Button color="red" onClick={confirmDelete} loading={isPending} leftSection={!isPending && <Trash size={16} />}>
+              Delete Airport
+            </Button>
           </Group>
         </Stack>
       </Modal>
-    </>
+    </Box>
   );
 }
