@@ -2,33 +2,32 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 
-import { flightService } from "@/services/flight.services"; // Adjust path if needed
-import { aircraftService } from "@/services/aircraft.services"; // Adjust path if needed
+import { flightService } from "@/services/flight.services"; 
+import { aircraftService } from "@/services/aircraft.services"; 
 import { createFlightSchema, updateFlightSchema } from "@/types/flight.type";
-import { auth } from "@/lib/auth";
+
+// Import your new auth utility
+import { requireServerSession, getServerSession } from "@/services/auth.services"; 
 
 // --- 1. Dynamic Aircraft Options Helper ---
 export async function getAircraftOptions() {
-  const sessionResponse = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!sessionResponse) {
-    return []; // Return empty options if unauthorized
-  }
-
   try {
-    // 1. Fetch ALL aircraft using the new service (requires session)
-    const data = await aircraftService.findAll(sessionResponse.user as any);
+    // Use getServerSession here instead of requireServerSession so we can fail 
+    // silently and return an empty array if the user isn't logged in, rather than throwing.
+    const session = await getServerSession();
+
+    if (!session) {
+      return []; 
+    }
+
+    // Fetch ALL aircraft using the new service
+    const data = await aircraftService.findAll(session.user as any);
     
-    // 2. Process data for Mantine Select (Grouping + Disabling)
+    // Process data for Mantine Select (Grouping + Disabling)
     const options = data.map((ac: any) => ({
-      value: ac.id, // Now a string (cuid) instead of toString()
-      // Label format: "HS-TBA (Boeing 777) - ACTIVE"
+      value: ac.id, 
       label: `${ac.tailNumber} (${ac.type?.model || 'Unknown'}) - ${ac.status}`,
-      // Make unselectable if not active
       disabled: ac.status !== 'ACTIVE'
     }));
 
@@ -41,15 +40,7 @@ export async function getAircraftOptions() {
 
 // --- 2. Create Flight Action ---
 export async function createFlightAction(formData: unknown) {
-  const sessionResponse = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!sessionResponse) {
-    return { error: "Unauthorized: Please log in." };
-  }
-
-  // Validate the incoming payload with Zod
+  // 1. Validate the incoming payload with Zod (Fail fast)
   const validation = createFlightSchema.safeParse(formData);
 
   if (!validation.success) {
@@ -60,26 +51,23 @@ export async function createFlightAction(formData: unknown) {
   }
 
   try {
-    await flightService.createFlight(validation.data, sessionResponse.user as any);
+    // 2. Require session (throws AuthenticationRequiredError if not logged in)
+    const session = await requireServerSession();
+
+    // 3. Pass data to the service
+    await flightService.createFlight(validation.data, session.user as any);
   } catch (error: any) {
-    return { error: error.message }; // Catches FlightConflictError, etc.
+    return { error: error.message }; 
   }
   
+  // 4. Redirect outside the try/catch (important for Next.js!)
   revalidatePath('/dashboard/flights');
   redirect('/dashboard/flights');
 }
 
 // --- 3. Update Flight Action ---
 export async function updateFlightAction(id: string, formData: unknown) {
-  const sessionResponse = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!sessionResponse) {
-    return { error: "Unauthorized: Please log in." };
-  }
-
-  // Validate the incoming payload with Zod
+  // 1. Validate the incoming payload with Zod
   const validation = updateFlightSchema.safeParse(formData);
 
   if (!validation.success) {
@@ -90,31 +78,33 @@ export async function updateFlightAction(id: string, formData: unknown) {
   }
 
   try {
-    await flightService.updateFlight(id, validation.data, sessionResponse.user as any);
+    // 2. Require session
+    const session = await requireServerSession();
+
+    // 3. Update via service
+    await flightService.updateFlight(id, validation.data, session.user as any);
   } catch (error: any) {
     return { error: error.message };
   }
   
+  // 4. Redirect outside the try/catch
   revalidatePath('/dashboard/flights');
   redirect('/dashboard/flights');
 }
 
 // --- 4. Delete Flight Action ---
 export async function deleteFlightAction(id: string) {
-  const sessionResponse = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!sessionResponse) {
-    return { error: "Unauthorized: Please log in." };
-  }
-
   try {
-    await flightService.deleteFlight(id, sessionResponse.user as any);
+    // 1. Require session
+    const session = await requireServerSession();
+
+    // 2. Delete via service
+    await flightService.deleteFlight(id, session.user as any);
+    
     revalidatePath('/dashboard/flights');
     return { success: true };
   } catch (error: any) {
-    // Catches FlightInUseError, UnauthorizedError, etc.
+    // Catches FlightInUseError, UnauthorizedError, AuthenticationRequiredError
     return { error: error.message };
   }
 }

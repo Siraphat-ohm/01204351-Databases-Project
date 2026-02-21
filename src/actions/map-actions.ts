@@ -1,11 +1,9 @@
 "use server";
 
-import { headers } from "next/headers";
 import { FlightRoute } from '@/components/LiveRouteMap'; 
 import { flightService } from '@/services/flight.services'; 
-import { auth } from '@/lib/auth';
-
-// 1. You no longer need the AIRPORT_COORDS dictionary! 🎉
+// Import your new auth utility
+import { getServerSession } from '@/services/auth.services'; 
 
 // Define flights that will ALWAYS display (for presentation/showcase)
 const SHOWCASE_FLIGHTS: FlightRoute[] = [
@@ -16,16 +14,17 @@ const SHOWCASE_FLIGHTS: FlightRoute[] = [
 ];
 
 export async function fetchLiveMapData(): Promise<FlightRoute[]> {
-  const sessionResponse = await auth.api.getSession({
-    headers: await headers(),
-  });
+  // 1. Fetch the session cleanly using your new utility
+  const session = await getServerSession();
 
-  if (!sessionResponse) {
+  // If there's no session, gracefully fallback to showcase flights
+  if (!session) {
     return SHOWCASE_FLIGHTS;
   }
 
   try {
-    const rawFlights = await flightService.findAll(sessionResponse.user as any); 
+    // 2. Pass the validated session user to the service
+    const rawFlights = await flightService.findAll(session.user as any); 
 
     const now = new Date();
     const dbMapRoutes: FlightRoute[] = [];
@@ -48,7 +47,6 @@ export async function fetchLiveMapData(): Promise<FlightRoute[]> {
           id: flight.id,
           fromCode: origin.iataCode,
           // Use DB coordinates! 
-          // Note: Ensure your map component expects [longitude, latitude] as most do
           fromCoords: [origin.lon, origin.lat], 
           toCode: destination.iataCode,
           toCoords: [destination.lon, destination.lat],
@@ -61,6 +59,7 @@ export async function fetchLiveMapData(): Promise<FlightRoute[]> {
 
   } catch (error) {
     console.error("Error fetching live map data:", error);
+    // If the service throws an UnauthorizedError or database error, fallback to showcase
     return SHOWCASE_FLIGHTS;
   }
 }

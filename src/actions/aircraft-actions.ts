@@ -2,28 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 
 import { aircraftService } from "@/services/aircraft.services";
 import { updateAircraftSchema } from "@/types/aircraft.type";
-import { auth } from "@/lib/auth"; 
+// Note: Adjust this import path to point to your new auth utility file
+import { requireServerSession } from "@/services/auth.services"; 
 
-// Using 'unknown' instead of 'any' forces us to validate the data
 export async function updateAircraftAction(id: string, formData: unknown) {
-  // 1. Validate the user session securely on the server
-  const sessionResponse = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!sessionResponse) {
-    return { error: "Unauthorized: Please log in." };
-  }
-
-  // 2. Validate the incoming payload with Zod
+  // 1. Validate the incoming payload with Zod (Fail fast before checking DB/Auth)
   const validation = updateAircraftSchema.safeParse(formData);
 
   if (!validation.success) {
-    // Return specific field errors so your Mantine form can highlight them
     return { 
       error: "Validation failed", 
       fieldErrors: validation.error.flatten().fieldErrors 
@@ -31,34 +20,36 @@ export async function updateAircraftAction(id: string, formData: unknown) {
   }
 
   try {
-    // 3. Pass the validated, strictly-typed data to your service
-    // Ensure the third argument matches your custom ServiceSession type
+    // 2. Validate the user session using your new auth wrapper.
+    // If unauthorized, this throws AuthenticationRequiredError which is caught below.
+    const session = await requireServerSession();
+
+    // 3. Pass the validated, strictly-typed data and user to your service
     await aircraftService.updateAircraft(
       id, 
       validation.data, 
-      sessionResponse.user as any 
+      session.user as any // Keep as any until your ServiceSession type matches perfectly
     );
   } catch (error: any) {
-    // Catch service-level errors (e.g., AircraftNotFoundError, AircraftConflictError)
+    // Catches AuthenticationRequiredError, AircraftNotFoundError, AircraftConflictError, etc.
     return { error: error.message };
   }
   
   // 4. Revalidate and redirect on success
+  // (Always keep redirect() outside of try/catch blocks in Next.js!)
   revalidatePath('/dashboard/aircraft');
   redirect('/dashboard/aircraft');
 }
 
 export async function deleteAircraftAction(id: string) {
-  const sessionResponse = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!sessionResponse) {
-    return { error: "Unauthorized: Please log in." };
-  }
-
   try {
-    await aircraftService.deleteAircraft(id, sessionResponse.user as any);
+    // 1. Require session (throws if not logged in)
+    const session = await requireServerSession();
+
+    // 2. Attempt deletion
+    await aircraftService.deleteAircraft(id, session.user as any);
+    
+    // 3. Revalidate cache
     revalidatePath('/dashboard/aircraft');
     return { success: true };
   } catch (error: any) {
