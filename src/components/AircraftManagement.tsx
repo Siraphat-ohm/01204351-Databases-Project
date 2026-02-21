@@ -2,38 +2,43 @@
 
 import { 
   Title, Group, Button, Table, Badge, Text, ActionIcon, 
-  TextInput, Paper, Modal, Select, Stack, Alert, LoadingOverlay,
-  Notification 
+  TextInput, Paper, Modal, Select, Stack, Alert, LoadingOverlay
 } from '@mantine/core';
 import { useDisclosure, useSetState } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Plus, Search, Pencil, Trash, Plane, Filter, AlertTriangle, Check, X } from 'lucide-react';
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { AircraftStatus } from '@/generated/prisma/client'; 
 import { deleteAircraftAction } from '@/actions/aircraft-actions';
 
+// UPDATE: IDs are now strings (CUIDs)
 interface AircraftType {
-  id: number;
+  id: string; 
   model: string;
-  capacityEco: number;
-  capacityBiz: number;
+  iataCode: string; // From your Prisma include
+  // NOTE: Your Prisma include only fetched model & iataCode. 
+  // If you need capacityEco/Biz, you must update aircraftAdminInclude in your types!
+  capacityEco?: number; 
+  capacityBiz?: number;
 }
 
+// UPDATE: IDs are now strings (CUIDs)
 interface Aircraft {
-  id: number;
+  id: string; 
   tailNumber: string;
   status: AircraftStatus;
   type: AircraftType;
 }
 
 interface AircraftManagementProps {
-  initialAircrafts: Aircraft[];
+  initialAircrafts: any[]; // Changed to any[] temporarily if Prisma types don't exactly match the interface yet
   aircraftTypes: AircraftType[];
 }
 
 export function AircraftManagement({ initialAircrafts, aircraftTypes }: AircraftManagementProps) {
-  const [aircrafts, setAircrafts] = useState(initialAircrafts);
+  // We cast it here just in case the raw Prisma payload has extra fields
+  const [aircrafts, setAircrafts] = useState<Aircraft[]>(initialAircrafts as Aircraft[]);
 
   const [addOpened, { open: openAdd, close: closeAdd }] = useDisclosure(false);
   const [deleteOpened, { open: openDelete, close: closeDelete }] = useDisclosure(false);
@@ -73,9 +78,8 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
     try {
       const result = await deleteAircraftAction(aircraftToDelete.id);
 
-      // Assuming server action returns { success: boolean, error?: string }
-      if (!result?.success) {
-        throw new Error(result?.error ?? "Failed to delete aircraft");
+      if (result?.error) {
+        throw new Error(result.error);
       }
 
       // Remove from local state (optimistic update)
@@ -139,8 +143,8 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
       <Table.Td><Text size="sm">{ac.type.model}</Text></Table.Td>
       <Table.Td>
         <Group gap={4}>
-          <Badge variant="dot" color="gray">Eco: {ac.type.capacityEco}</Badge>
-          <Badge variant="dot" color="blue">Biz: {ac.type.capacityBiz}</Badge>
+          <Badge variant="dot" color="gray">Eco: {ac.type.capacityEco ?? 'N/A'}</Badge>
+          <Badge variant="dot" color="blue">Biz: {ac.type.capacityBiz ?? 'N/A'}</Badge>
         </Group>
       </Table.Td>
       <Table.Td>
