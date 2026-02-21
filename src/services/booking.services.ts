@@ -8,6 +8,10 @@ import {
 import { canAccessBooking } from '@/auth/permissions';
 import { BookingStatus } from '@/generated/prisma/client';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import {
+  assertPermission,
+  hasPermission,
+} from '@/services/_shared/authorization';
 
 export class BookingNotFoundError extends Error {
   constructor(identifier: string) {
@@ -41,12 +45,17 @@ function checkPermission(
   session: Session,
   action: 'create' | 'read' | 'cancel' | 'read-all',
 ) {
-  const allowed = canAccessBooking(session.user.role, action);
-  if (!allowed) throw new UnauthorizedError(action);
+  assertPermission(
+    session,
+    action,
+    canAccessBooking,
+    'booking',
+    (a) => new UnauthorizedError(a),
+  );
 }
 
 function canReadAll(session: Session) {
-  return canAccessBooking(session.user.role, 'read-all');
+  return hasPermission(session, 'read-all', canAccessBooking);
 }
 
 function makeBookingRef() {

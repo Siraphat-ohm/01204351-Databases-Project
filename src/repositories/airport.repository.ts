@@ -26,6 +26,9 @@ export const airportRepository = {
       orderBy: { iataCode: 'asc' },
     }),
 
+  count: (where?: Prisma.AirportWhereInput) =>
+    prisma.airport.count({ where }),
+
   create: (data: CreateAirportInput) =>
     prisma.airport.create({
       data,

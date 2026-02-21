@@ -13,6 +13,10 @@ import {
 } from '@/generated/prisma/client';
 import { canAccessPayment } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import {
+  assertPermission,
+  hasPermission,
+} from '@/services/_shared/authorization';
 
 export class PaymentNotFoundError extends Error {
   constructor(identifier: string) {
@@ -46,12 +50,17 @@ function checkPermission(
   session: Session,
   action: 'create' | 'read' | 'refund' | 'read-all',
 ) {
-  const allowed = canAccessPayment(session.user.role, action);
-  if (!allowed) throw new UnauthorizedError(action);
+  assertPermission(
+    session,
+    action,
+    canAccessPayment,
+    'payment',
+    (a) => new UnauthorizedError(a),
+  );
 }
 
 function canReadAll(session: Session) {
-  return canAccessPayment(session.user.role, 'read-all');
+  return hasPermission(session, 'read-all', canAccessPayment);
 }
 
 export const paymentService = {

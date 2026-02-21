@@ -5,6 +5,10 @@ import {
 } from '@/types/ticket.type';
 import { canAccessTicket } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import {
+  assertPermission,
+  hasPermission,
+} from '@/services/_shared/authorization';
 
 export class TicketNotFoundError extends Error {
   constructor(identifier: string) {
@@ -38,12 +42,17 @@ function checkPermission(
   session: Session,
   action: 'read' | 'check-in' | 'read-all',
 ) {
-  const allowed = canAccessTicket(session.user.role, action);
-  if (!allowed) throw new UnauthorizedError(action);
+  assertPermission(
+    session,
+    action,
+    canAccessTicket,
+    'ticket',
+    (a) => new UnauthorizedError(a),
+  );
 }
 
 function canReadAll(session: Session) {
-  return canAccessTicket(session.user.role, 'read-all');
+  return hasPermission(session, 'read-all', canAccessTicket);
 }
 
 export const ticketService = {
