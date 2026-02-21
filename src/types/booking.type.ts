@@ -21,8 +21,19 @@ export const updateBookingStatusSchema = z.object({
   status: z.nativeEnum(BookingStatus),
 });
 
+export const changeFlightSchema = z.object({
+  newFlightId: z.cuid({ message: 'Invalid new flight ID' }),
+  reason: z
+    .enum(['FLIGHT_CANCELLED', 'MAJOR_DELAY', 'ROUTE_DISRUPTION', 'AIRCRAFT_DOWNSIZE'])
+    .default('MAJOR_DELAY'),
+  keepSeatAssignments: z.boolean().default(false),
+  totalPrice: z.number().positive().optional(),
+  currency: z.string().trim().min(3).max(3).optional(),
+});
+
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 export type UpdateBookingStatusInput = z.infer<typeof updateBookingStatusSchema>;
+export type ChangeFlightInput = z.infer<typeof changeFlightSchema>;
 
 export const bookingAdminInclude = {
   user: true,

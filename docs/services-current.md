@@ -274,12 +274,14 @@ Methods:
 - `findAllPaginated(session, params)`
 - `createBooking(input, session)`
 - `cancelBooking(id, session)`
+- `changeFlight(id, input, session)`
 
 Errors:
 
 - `BookingNotFoundError`
 - `BookingConflictError`
 - `BookingAlreadyCancelledError`
+- `BookingChangeNotAllowedError`
 - `UnauthorizedError`
 
 Notes:
