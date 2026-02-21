@@ -23,6 +23,7 @@ import {
 import { Navbar } from "@/components/Navbar";
 import { SearchHeader } from "@/components/SearchHeader";
 import { PriceStrip } from "@/components/PriceStrip";
+import { FlightCard } from "@/components/FlightCard";
 import { IconPlaneDeparture } from "@tabler/icons-react";
 
 function SearchResults() {
@@ -146,6 +147,25 @@ useEffect(() => {
 
   // 1. Fetch Price History (PriceStrip Trend)
 // 1. Fetch Price History (PriceStrip Trend)
+
+
+const handleFinalSearch = () => {
+  // Sync Draft -> Live
+  setFrom(localSearch.from);
+  setTo(localSearch.to);
+  setDeparture(ensureDate(localSearch.departure));
+  setReturnDate(ensureDate(localSearch.return));
+  setTripType(localSearch.type);
+  setCabin(localSearch.cabin);
+  setAdults(localSearch.adults);
+  setChildren(localSearch.children);
+
+  // If they were in the middle of a selection and changed parameters, reset them
+  setSelectedDeparture(null);
+  setIsSelectingReturn(false);
+  
+  // The useEffect with [from, to, departure...] will now automatically fire
+};
 useEffect(() => {
   if (!from || !to) return;
 
@@ -336,6 +356,7 @@ const handleSelect = (flight: any) => {
 };
 
 // Extract the navigation logic to a helper to keep it DRY
+// Inside FlightSearch.tsx
 const proceedToSeats = (currentFlight: any, departureFlight: any) => {
   if (isSelectingReturn) {
     localStorage.setItem('selectedReturnFlight', JSON.stringify(currentFlight));
@@ -344,10 +365,14 @@ const proceedToSeats = (currentFlight: any, departureFlight: any) => {
   }
 
   const params = new URLSearchParams();
-  params.append('departId', departureFlight?.id || currentFlight.id);
+  
+  // ---> CHANGE IS HERE: Grab .flightCode instead of .id <---
+  params.append('departFlightCode', departureFlight?.flightCode || currentFlight.flightCode);
+  
   if (tripType === 'round-trip') {
-    params.append('returnId', currentFlight.id);
+    params.append('returnFlightCode', currentFlight.flightCode);
   }
+  
   params.append('adults', adults.toString());
   params.append('children', children.toString());
   
@@ -355,51 +380,58 @@ const proceedToSeats = (currentFlight: any, departureFlight: any) => {
 };
 
 
+const availableFlights = useMemo(() => {
+  return sortedFlights.filter((flight) => {
+    const cabinKey = cabin?.toLowerCase();
+    let seatCategory = "ECONOMY";
+    if (cabinKey === 'business') seatCategory = "BUSINESS";
+    if (cabinKey === 'first class' || cabinKey === 'first') seatCategory = "FIRST";
 
+    const availability = flight.seatAvailability?.[seatCategory];
+    // Only show flights that have this cabin class configuration on the plane
+    return availability && availability.total > 0;
+  });
+}, [sortedFlights, cabin]);
   
 
   return (
     <>
-      <SearchHeader
- searchData={localSearch}
+     <SearchHeader
+  searchData={localSearch}
   onFromChange={(val) => setLocalSearch((prev) => ({ ...prev, from: val }))}
   onToChange={(val) => setLocalSearch((prev) => ({ ...prev, to: val }))}
   onDepartureChange={(val) => setLocalSearch((prev) => ({ ...prev, departure: val }))}
   onReturnChange={(val) => setLocalSearch((prev) => ({ ...prev, return: val }))}
   onTypeChange={(val) => setLocalSearch((prev) => ({ ...prev, type: val }))}
   onCabinChange={(val) => setLocalSearch((prev) => ({ ...prev, cabin: val }))}
-  onAdultsChange={(val) => setLocalSearch((prev) => ({ ...prev, adults: val }))} // Add this
-  onChildrenChange={(val) => setLocalSearch((prev) => ({ ...prev, children: val }))} // Add this
-        onSearch={() => {
-          // 1. Properly convert strings to Date objects before updating "Live" state
-          const newDeparture = ensureDate(localSearch.departure);
-          const newReturn = ensureDate(localSearch.return);
+  onAdultsChange={(val) => setLocalSearch((prev) => ({ ...prev, adults: val }))}
+  onChildrenChange={(val) => setLocalSearch((prev) => ({ ...prev, children: val }))}
+  onSearch={() => {
+    // 1. Properly convert strings to Date objects before updating "Live" state
+    const newDeparture = ensureDate(localSearch.departure);
+    const newReturn = ensureDate(localSearch.return);
 
-          // 2. Detect if the destination/origin changed
-          const routeChanged =
-            from !== localSearch.from || to !== localSearch.to;
-
-          // 3. Update Live States
-          setAdults(localSearch.adults);
+    // 2. Update Live States
+    setAdults(localSearch.adults);
     setChildren(localSearch.children);
-          setFrom(localSearch.from);
-          setTo(localSearch.to);
-          setDeparture(newDeparture);
-          setReturnDate(newReturn);
-          setTripType(localSearch.type);
-          setCabin(localSearch.cabin);
+    setFrom(localSearch.from);
+    setTo(localSearch.to);
+    setDeparture(newDeparture);
+    setReturnDate(newReturn);
+    setTripType(localSearch.type);
+    setCabin(localSearch.cabin);
 
-          // 4. SMART SELECTION LOGIC
-          if (routeChanged) {
-            // If they changed the city, we HAVE to start over from departure
-            setSelectedDeparture(null);
-            setIsSelectingReturn(false);
-          } else if (selectedDeparture) {
-            // If they only changed the date, STAY on the return leg
-            setIsSelectingReturn(true);
-          }
-        }}
-      />
+    // 3. THE FIX: Treat every search click as a brand new search
+    // Reset the selection UI so it doesn't stay stuck on the return leg
+    setSelectedDeparture(null);
+    setIsSelectingReturn(false);
+
+    // 4. Wipe the old "ghost" selections from the browser memory
+    localStorage.removeItem('selectedDepartureFlight');
+    localStorage.removeItem('selectedReturnFlight');
+    localStorage.removeItem('pendingSelection');
+  }}
+/>
 
       <Container size="xl" py="xl">
         <Grid gutter="xl">
@@ -518,173 +550,28 @@ const proceedToSeats = (currentFlight: any, departureFlight: any) => {
                   : `Select departure flight to ${to}`}
             </Title>
 
-            <Stack gap="md">
-{loading ? (
-  <Center py="xl">
-    <Loader size="md" />
-  </Center>
-) : (() => {
-  // 1. FILTER: Create a list of flights that actually have the selected cabin
-  const availableFlights = sortedFlights.filter((flight) => {
-    const cabinKey = cabin?.toLowerCase();
-    let seatCategory = "ECONOMY";
-    if (cabinKey === 'business') seatCategory = "BUSINESS";
-    if (cabinKey === 'first class' || cabinKey === 'first') seatCategory = "FIRST";
-
-    const availability = flight.seatAvailability?.[seatCategory];
-    // Return true only if the cabin exists on this aircraft
-    return availability && availability.total > 0;
-  });
-
-  // 2. CHECK: If no flights exist after filtering, show the "Not Found" UI
-  if (availableFlights.length === 0) {
-    return (
-      <Card withBorder p="xl" radius="md">
-        <Stack align="center" gap="sm">
-          <IconPlaneDeparture size={48} color="var(--mantine-color-gray-4)" />
-          <Text fw={700} size="lg">No Flights Found</Text>
-          <Text c="dimmed" ta="center" style={{ maxWidth: 400 }}>
-            There are no <b>{cabin}</b> seats available for this route on the selected date. 
-            Please try another date or switch to a different cabin class.
-          </Text>
-        </Stack>
-      </Card>
-    );
-  }
-
-  // 3. RENDER: Map only the flights that passed the filter
-  return availableFlights.map((flight) => {
-    const cabinKey = cabin?.toLowerCase();
-    let seatCategory = "ECONOMY";
-    let rawPrice = flight.basePriceEconomy;
-
-    if (cabinKey === 'business') {
-      seatCategory = "BUSINESS";
-      rawPrice = flight.basePriceBusiness;
-    } else if (cabinKey === 'first class' || cabinKey === 'first') {
-      seatCategory = "FIRST";
-      rawPrice = flight.basePriceFirst;
-    }
-
-    const availability = flight.seatAvailability?.[seatCategory];
-    const isSoldOut = availability.available === 0;
-
-    return (
-      <Card 
-  key={flight.id} 
-  withBorder 
-  radius="md" 
-  p="lg" 
-  shadow="sm" 
-  mb="md"
-  style={{ opacity: isSoldOut ? 0.6 : 1 }}
->
-  <Grid align="center">
-    {/* Left Icon Column */}
-    <GridCol span={{ base: 12, sm: 1 }}>
-      <Center>
-        <IconPlaneDeparture size={30} stroke={1.5} color={isSoldOut ? "gray" : "blue"} />
-      </Center>
-    </GridCol>
-
-    {/* Center Flight Info Column */}
-    <GridCol span={{ base: 12, sm: 7 }}>
-      <Group justify="center" wrap="nowrap" px="md" gap="xl">
-        
-        {/* Departure Time */}
-        <Stack gap={2} align="center" style={{ minWidth: 100 }}>
-    <Text fz="xl" fw={800} style={{ whiteSpace: 'nowrap' }}>
-    {/* Change this line */}
-    {formatLocalTime(flight.departureTime)}
-  </Text>
-          <Badge variant="light" color="gray" size="sm">{flight.route?.origin?.iataCode}</Badge>
-        </Stack>
-
-        {/* Duration & Visual Line */}
-        <Stack gap={0} style={{ flex: 1, minWidth: 120 }} align="center">
-          <Text size="xs" c="dimmed">{formatDuration(flight.route?.durationMins || 0)}</Text>
-          <Box w="100%" style={{ borderBottom: "1px solid #e9ecef", position: 'relative', margin: '8px 0' }}>
-             {/* Fixed icon positioning to avoid overlap */}
-             <IconPlaneDeparture 
-              size={16} 
-              style={{ 
-                position: 'absolute', 
-                left: '50%', 
-                top: -8, 
-                transform: 'translateX(-50%)', // Center it on the line
-                color: '#adb5bd',
-                backgroundColor: 'white', // Masks the line behind the icon
-                padding: '0 4px'
-              }} 
-             />
-          </Box>
-          <Text size="xs" fw={700} c={isSoldOut ? "red.6" : "green.7"}>
-            {isSoldOut ? "Sold Out" : "Direct"}
-          </Text>
-        </Stack>
-
-        {/* Arrival Time */}
-        <Stack gap={2} align="center" style={{ minWidth: 100 }}>
-        <Text fz="xl" fw={800} style={{ whiteSpace: 'nowrap' }}>
-  {/* Change this line */}
-  {formatLocalTime(flight.arrivalTime)}
-</Text>
-          <Badge variant="light" color="gray" size="sm">{flight.route?.destination?.iataCode}</Badge>
-        </Stack>
-      </Group>
-    </GridCol>
-
-    {/* Right Price Column */}
-    <GridCol span={{ base: 12, sm: 4 }} style={{ borderLeft: '1px solid #f1f3f5' }}>
-      <Stack gap={4} align="flex-end">
-        {(() => {
-          const adultPrice = parseFloat(rawPrice) || 0;
-          const childPrice = Math.round(adultPrice * 0.8);
-          const total = (adultPrice * adults) + (childPrice * children);
-
-          return (
-            <>
-              <Group gap={8} justify="flex-end">
-                <Text size="xs" c="dimmed"> Adults x{adults}</Text>
-                <Text fw={700} c="blue.9" fz="xl">
-                  THB {adultPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </Text>
-              </Group>
-              {children > 0 && (
-                <Group gap={8} justify="flex-end" mt={-4}>
-                  <Text size="xs" c="dimmed">Child x{children}</Text>
-                  <Text size="xs" fw={600}>THB {childPrice.toLocaleString()}</Text>
-                </Group>
-              )}
-              <Divider w="100%" my={4} />
-              <Text size="xs" c="dimmed" tt="uppercase">Total for {adults + children} Pax</Text>
-              <Text fz="xl" fw={900} c="dark">THB {total.toLocaleString()}</Text>
-              {!isSoldOut && availability.available < 10 && (
-                <Text size="xs" c="orange.7" fw={700}>Only {availability.available} seats left!</Text>
-              )}
-            </>
-          );
-        })()}
-        
-        <Button 
-          fullWidth 
-          mt="sm"
-          size="md"
-          color={isSoldOut ? "gray" : isSelectingReturn ? "orange" : "blue"}
-          radius="md"
-          disabled={isSoldOut}
-          onClick={() => handleSelect(flight)}
-        >
-          {isSoldOut ? "Flight Full" : (tripType === 'round-trip' && !isSelectingReturn ? 'Select Departure' : 'Book Flight')}
-        </Button>
-      </Stack>
-    </GridCol>
-  </Grid>
-</Card>
-    );
-  });
-})()}
-            </Stack>
+          <Stack gap="md">
+  {loading ? (
+    <Center py="xl">
+      <Loader size="md" />
+    </Center>
+  ) : (
+    availableFlights.map((flight) => (
+      <FlightCard
+        key={flight.id}
+        flight={flight}
+        cabin={cabin}
+        adults={adults}
+        children={children}
+        isSelectingReturn={isSelectingReturn}
+        tripType={tripType}
+        onSelect={handleSelect}
+        formatLocalTime={formatLocalTime}
+        formatDuration={formatDuration}
+      />
+    ))
+  )}
+</Stack>
           </GridCol>
         </Grid>
       </Container>
