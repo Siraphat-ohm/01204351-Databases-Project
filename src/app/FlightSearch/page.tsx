@@ -1,5 +1,5 @@
 "use client";
-
+import { useAuthSession } from "@/services/auth-client.service";
 import { useState, useEffect, Suspense, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -26,6 +26,7 @@ import { PriceStrip } from "@/components/PriceStrip";
 import { IconPlaneDeparture } from "@tabler/icons-react";
 
 function SearchResults() {
+  const { data: session, isPending } = useAuthSession();
   const searchParams = useSearchParams();
   const router = useRouter();
 const [adults, setAdults] = useState(() => parseInt(searchParams.get('adults') || '1'));
@@ -208,6 +209,26 @@ useEffect(() => {
 
   fetchPriceTrend();
 }, [from, to, departure, returnDate, isSelectingReturn, cabin]); // Added cabin as dependency
+useEffect(() => {
+  // If user just logged in and we have a pending flight
+  const pendingRaw = localStorage.getItem('pendingSelection');
+  
+  if (session && pendingRaw) {
+    const pending = JSON.parse(pendingRaw);
+    
+    // Clear it so it doesn't trigger again
+    localStorage.removeItem('pendingSelection');
+
+    // Restore the state for the UI (optional, but good for consistency)
+    if (pending.selectedDeparture) {
+        setSelectedDeparture(pending.selectedDeparture);
+        setIsSelectingReturn(pending.isSelectingReturn);
+    }
+
+    // Automatically trigger the navigation
+    proceedToSeats(pending.flight, pending.selectedDeparture);
+  }
+}, [session]); // Triggers as soon as session is truthy
 
   // 2. Fetch Main Flight Results & Sync URL
   useEffect(() => {
@@ -286,32 +307,53 @@ useEffect(() => {
 
 // Inside your FlightSearch.tsx handleSelect or Button onClick
 const handleSelect = (flight: any) => {
+  // 1. Handle the first leg of a round trip (No auth check needed yet)
   if (tripType === 'round-trip' && !isSelectingReturn) {
-    // 1. Save departure locally
     localStorage.setItem('selectedDepartureFlight', JSON.stringify(flight));
     setSelectedDeparture(flight);
     setIsSelectingReturn(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  } else {
-    // 2. Save return locally if applicable
-    if (isSelectingReturn) {
-      localStorage.setItem('selectedReturnFlight', JSON.stringify(flight));
-    } else {
-      // If one-way, save as departure
-      localStorage.setItem('selectedDepartureFlight', JSON.stringify(flight));
-    }
-
-    const params = new URLSearchParams();
-    params.append('departId', selectedDeparture?.id || flight.id);
-    if (tripType === 'round-trip') {
-      params.append('returnId', flight.id);
-    }
-    params.append('adults', adults.toString());
-    params.append('children', children.toString());
-    
-    router.push(`/FlightSearch/SeatSelection?${params.toString()}`);
+    return;
   }
+
+  // 2. AUTH CHECK: Before finalized selection
+  if (!session) {
+    const currentPath = window.location.pathname + window.location.search;
+    
+    // Save everything needed to reconstruct the final URL
+    localStorage.setItem('pendingSelection', JSON.stringify({
+      flight, // This is either the One-Way flight or the Return flight
+      selectedDeparture, // This is the already selected departure (if round-trip)
+      isSelectingReturn
+    }));
+
+    router.push(`/login?callbackURL=${encodeURIComponent(currentPath)}`);
+    return;
+  }
+
+  // 3. Logic for authenticated users (Proceed to Seat Selection)
+  proceedToSeats(flight, selectedDeparture);
 };
+
+// Extract the navigation logic to a helper to keep it DRY
+const proceedToSeats = (currentFlight: any, departureFlight: any) => {
+  if (isSelectingReturn) {
+    localStorage.setItem('selectedReturnFlight', JSON.stringify(currentFlight));
+  } else {
+    localStorage.setItem('selectedDepartureFlight', JSON.stringify(currentFlight));
+  }
+
+  const params = new URLSearchParams();
+  params.append('departId', departureFlight?.id || currentFlight.id);
+  if (tripType === 'round-trip') {
+    params.append('returnId', currentFlight.id);
+  }
+  params.append('adults', adults.toString());
+  params.append('children', children.toString());
+  
+  router.push(`/FlightSearch/SeatSelection?${params.toString()}`);
+};
+
 
 
   
