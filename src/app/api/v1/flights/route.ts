@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getFlightsWithAvailability } from "@/lib/services/flight/flight.service";
+import { searchFlightsWithAvailability } from "@/services/flight.services";
 import {
   successResponse,
   errorResponse,
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       limit: searchParams.get("limit") ?? undefined,
     };
 
-    const result = await getFlightsWithAvailability(params);
+    const result = await searchFlightsWithAvailability(params);
 
     return successResponse(result);
   } catch (err) {
