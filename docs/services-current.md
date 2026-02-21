@@ -82,6 +82,28 @@ Errors:
 - `AuthenticationRequiredError`
 - `AuthorizationError`
 
+### 4.0.1 `userService`
+
+Files:
+
+- `src/services/user.services.ts`
+- `src/repositories/user.repository.ts`
+- `src/types/user.type.ts`
+
+Methods:
+
+- `findMe(session)`
+- `findById(id, session)` (admin)
+- `findAll(session)` (admin)
+- `findAllPaginated(session, params)` (admin)
+- `updateMyProfile(input, session)`
+- `updateRole(id, input, session)` (admin)
+
+Errors:
+
+- `UserNotFoundError`
+- `UnauthorizedError`
+
 ### 4.1 `aircraftService`
 
 File: `src/services/aircraft.services.ts`
@@ -252,12 +274,14 @@ Methods:
 - `findAllPaginated(session, params)`
 - `createBooking(input, session)`
 - `cancelBooking(id, session)`
+- `changeFlight(id, input, session)`
 
 Errors:
 
 - `BookingNotFoundError`
 - `BookingConflictError`
 - `BookingAlreadyCancelledError`
+- `BookingChangeNotAllowedError`
 - `UnauthorizedError`
 
 Notes:
