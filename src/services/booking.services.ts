@@ -75,11 +75,13 @@ function canReadAll(session: Session) {
 }
 
 function canForceChangeFromStatus(status: FlightStatus) {
-  return [
+  const disruptedStatuses: FlightStatus[] = [
     FlightStatus.CANCELLED,
     FlightStatus.DELAYED,
     FlightStatus.DIVERTED,
-  ].includes(status);
+  ];
+
+  return disruptedStatuses.includes(status);
 }
 
 function makeBookingRef() {
