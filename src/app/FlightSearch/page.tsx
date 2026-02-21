@@ -29,9 +29,21 @@ function SearchResults() {
   const searchParams = useSearchParams();
   const router = useRouter();
 const [adults, setAdults] = useState(() => parseInt(searchParams.get('adults') || '1'));
-const [children, setChildren] = useState(() => parseInt(searchParams.get('children') || '0'));
+const [children, setChildren] = useState(() => parseInt(searchParams.get('children') || '0'));  
+const formatLocalTime = (dateString: string) => {
+  const date = new Date(dateString);
+  // Returns time in HH:MM AM/PM format ignoring local timezone shift
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'UTC', // Forces calculation based on the string's literal value
+  });
+};
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);
+
+
   
   // Only push an update if the URL is MISSING the passenger info
   if (!params.has('adults') || !params.has('children')) {
@@ -251,23 +263,26 @@ useEffect(() => {
   },[from, to, departure, returnDate, isSelectingReturn, adults, children])
 
   const sortedFlights = useMemo(() => {
-    return [...flights].sort((a, b) => {
-      if (sortBy === "price") {
-        const priceA = Number(a.basePrice);
-        const priceB = Number(b.basePrice);
-        if (priceA !== priceB) return priceA - priceB;
-        return (
-          new Date(a.departureTime).getTime() -
-          new Date(b.departureTime).getTime()
-        );
-      } else {
-        return (
-          new Date(a.departureTime).getTime() -
-          new Date(b.departureTime).getTime()
-        );
-      }
-    });
-  }, [flights, sortBy]);
+  return [...flights].sort((a, b) => {
+    // 1. Get numeric timestamps for comparison
+    const timeA = new Date(a.departureTime).getTime();
+    const timeB = new Date(b.departureTime).getTime();
+
+    if (sortBy === "price") {
+      const priceA = Number(a.basePrice);
+      const priceB = Number(b.basePrice);
+      
+      // If prices are different, sort by price
+      if (priceA !== priceB) return priceA - priceB;
+      
+      // If prices are identical, tie-break with earliest time
+      return timeA - timeB;
+    } else {
+      // "Earliest" logic: Pure chronological order
+      return timeA - timeB;
+    }
+  });
+}, [flights, sortBy]);
 
 // Inside your FlightSearch.tsx handleSelect or Button onClick
 const handleSelect = (flight: any) => {
@@ -536,9 +551,10 @@ const handleSelect = (flight: any) => {
         
         {/* Departure Time */}
         <Stack gap={2} align="center" style={{ minWidth: 100 }}>
-          <Text fz="xl" fw={800} style={{ whiteSpace: 'nowrap' }}>
-            {new Date(flight.departureTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}
-          </Text>
+    <Text fz="xl" fw={800} style={{ whiteSpace: 'nowrap' }}>
+    {/* Change this line */}
+    {formatLocalTime(flight.departureTime)}
+  </Text>
           <Badge variant="light" color="gray" size="sm">{flight.route?.origin?.iataCode}</Badge>
         </Stack>
 
@@ -567,9 +583,10 @@ const handleSelect = (flight: any) => {
 
         {/* Arrival Time */}
         <Stack gap={2} align="center" style={{ minWidth: 100 }}>
-          <Text fz="xl" fw={800} style={{ whiteSpace: 'nowrap' }}>
-            {new Date(flight.arrivalTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}
-          </Text>
+        <Text fz="xl" fw={800} style={{ whiteSpace: 'nowrap' }}>
+  {/* Change this line */}
+  {formatLocalTime(flight.arrivalTime)}
+</Text>
           <Badge variant="light" color="gray" size="sm">{flight.route?.destination?.iataCode}</Badge>
         </Stack>
       </Group>

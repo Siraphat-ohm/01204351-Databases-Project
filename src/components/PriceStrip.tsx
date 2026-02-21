@@ -64,8 +64,8 @@ const displayPrice = (priceValue !== null && !isNaN(Number(priceValue)))
                         {date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
                       </Text>
                   <Text fw={700} size="sm" c={price ? (isSelected ? 'teal.9' : 'black') : 'gray.4'}>
-{displayPrice ? `THB ${displayPrice.toLocaleString()}` : '—'}
-</Text>
+                        {displayPrice ? `THB ${displayPrice.toLocaleString()}` : '—'}
+                        </Text>
                     </Stack>
                   </UnstyledButton>
                 );
