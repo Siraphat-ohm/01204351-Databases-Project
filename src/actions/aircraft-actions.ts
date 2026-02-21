@@ -28,7 +28,7 @@ export async function updateAircraftAction(id: string, formData: unknown) {
     await aircraftService.updateAircraft(
       id, 
       validation.data, 
-      session.user as any // Keep as any until your ServiceSession type matches perfectly
+      session as any // Keep as any until your ServiceSession type matches perfectly
     );
   } catch (error: any) {
     // Catches AuthenticationRequiredError, AircraftNotFoundError, AircraftConflictError, etc.
@@ -37,8 +37,8 @@ export async function updateAircraftAction(id: string, formData: unknown) {
   
   // 4. Revalidate and redirect on success
   // (Always keep redirect() outside of try/catch blocks in Next.js!)
-  revalidatePath('/dashboard/aircraft');
-  redirect('/dashboard/aircraft');
+  revalidatePath('/admin/dashboard/aircraft');
+  redirect('/admin/dashboard/aircraft');
 }
 
 export async function deleteAircraftAction(id: string) {
@@ -47,10 +47,10 @@ export async function deleteAircraftAction(id: string) {
     const session = await requireServerSession();
 
     // 2. Attempt deletion
-    await aircraftService.deleteAircraft(id, session.user as any);
+    await aircraftService.deleteAircraft(id, session as any);
     
     // 3. Revalidate cache
-    revalidatePath('/dashboard/aircraft');
+    revalidatePath('/admin/dashboard/aircraft');
     return { success: true };
   } catch (error: any) {
     return { error: error.message };

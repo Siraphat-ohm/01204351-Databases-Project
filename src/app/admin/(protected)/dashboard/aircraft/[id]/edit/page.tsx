@@ -1,8 +1,10 @@
+// app/dashboard/aircraft/[id]/edit/page.tsx
+
 import { AircraftEditForm } from "@/components/AircraftEditForm";
-import { notFound, redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import { aircraftService, AircraftNotFoundError } from "@/services/aircraft.services"; 
-import { auth } from "@/lib/auth";
+import { aircraftTypeService } from "@/services/aircraft-type.services"; // Import your new service!
+import { requireServerSession } from "@/services/auth.services"; // Use your clean auth utility
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -11,39 +13,35 @@ interface PageProps {
 export default async function EditAircraftPage({ params }: PageProps) {
   // 1. Unwrap params (Next.js 15+)
   const resolvedParams = await params;
-  const id = resolvedParams.id; // Leave as string since your DB uses CUIDs now
-
-  // 2. Securely fetch the Better Auth session
-  const sessionResponse = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!sessionResponse) {
-    redirect("/admin/login");
-  }
+  const id = resolvedParams.id; // Using string CUIDs
 
   try {
-    // 3. Fetch Aircraft Data using the new service (requires session)
-    const aircraft = await aircraftService.findById(id, sessionResponse.user as any);
+    // 2. Enforce authentication and get the session 
+    // (Throws AuthenticationRequiredError if not logged in)
+    const session = await requireServerSession();
 
-    // 4. Fetch Aircraft Types 
-    // NOTE: Your new aircraftService does not include getAircraftTypes().
-    // You will need to replace this array with a call to your aircraft type repository.
-    const aircraftTypes: any[] = []; 
+    // 3. Fetch Aircraft Data & Aircraft Types in Parallel!
+    // Both of these methods require the user session for your RBAC checks.
+    const [aircraft, aircraftTypes] = await Promise.all([
+      aircraftService.findById(id, session as any),
+      aircraftTypeService.findAll(session as any),
+    ]);
 
-    // 5. Render Form
+    // 4. Render Form with the real, fully-typed data
     return (
       <AircraftEditForm 
         aircraft={aircraft as any} 
-        aircraftTypes={aircraftTypes} 
+        aircraftTypes={aircraftTypes as any} 
       />
     );
   } catch (error) {
-    // 6. Gracefully handle 404s using your custom error class
+    // 5. Gracefully handle 404s using your custom error class
     if (error instanceof AircraftNotFoundError) {
       notFound();
     }
-    // Re-throw other unexpected errors
+    
+    // Note: If AuthenticationRequiredError or UnauthorizedError is thrown, 
+    // Next.js will naturally catch it and render your nearest error.tsx boundary.
     throw error;
   }
 }

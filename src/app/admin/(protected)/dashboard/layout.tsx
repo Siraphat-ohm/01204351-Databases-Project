@@ -26,23 +26,23 @@ import { useState } from 'react';
 // ปรับ Nav Data ตาม Requirement ใหม่
 const navData = [
   { category: 'Overview' },
-  { label: 'Dashboard', icon: LayoutDashboard, link: '/dashboard' },
+  { label: 'Dashboard', icon: LayoutDashboard, link: '/admin/dashboard' },
 
   { category: 'Operations' },
-  { label: 'Flight Schedule', icon: PlaneTakeoff, link: '/dashboard/flights' }, // Add/Mod/Del Flight
-  { label: 'Fleet / Aircraft', icon: Plane, link: '/dashboard/aircraft' },      // Add/Mod/Del Aircraft
-  { label: 'Airports', icon: MapPin, link: '/dashboard/airports' },             // Add/Mod/Del Airport
+  { label: 'Flight Schedule', icon: PlaneTakeoff, link: '/admin/dashboard/flights' }, // Add/Mod/Del Flight
+  { label: 'Fleet / Aircraft', icon: Plane, link: '/admin/dashboard/aircraft' },      // Add/Mod/Del Aircraft
+  { label: 'Airports', icon: MapPin, link: '/admin/dashboard/airports' },             // Add/Mod/Del Airport
 
   { category: 'Commercial' },
-  { label: 'Tickets & Booking', icon: Ticket, link: '/dashboard/bookings' },    // Add/Mod/Cancel/Book for customer
+  { label: 'Tickets & Booking', icon: Ticket, link: '/admin/dashboard/bookings' },    // Add/Mod/Cancel/Book for customer
 
   { category: 'Management' },
-  { label: 'Users & Crew', icon: Users, link: '/dashboard/users' },             // View/Mod/Del/Role Change
-  { label: 'Customer Issues', icon: MessageSquareWarning, link: '/dashboard/issues', alert: true }, // Answer Issues
+  { label: 'Users & Crew', icon: Users, link: '/admin/dashboard/users' },             // View/Mod/Del/Role Change
+  { label: 'Customer Issues', icon: MessageSquareWarning, link: '/admin/dashboard/issues', alert: true }, // Answer Issues
 
   { category: 'System' },
-  { label: 'Audit Logs', icon: FileClock, link: '/dashboard/logs' },            // Login/Ticket/Trans/Flight Logs
-  { label: 'Settings', icon: Settings, link: '/dashboard/settings' },
+  { label: 'Audit Logs', icon: FileClock, link: '/admin/dashboard/logs' },            // Login/Ticket/Trans/Flight Logs
+  { label: 'Settings', icon: Settings, link: '/admin/dashboard/settings' },
 ];
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {

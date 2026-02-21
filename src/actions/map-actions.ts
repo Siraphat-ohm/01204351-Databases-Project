@@ -24,7 +24,7 @@ export async function fetchLiveMapData(): Promise<FlightRoute[]> {
 
   try {
     // 2. Pass the validated session user to the service
-    const rawFlights = await flightService.findAll(session.user as any); 
+    const rawFlights = await flightService.findAll(session as any); 
 
     const now = new Date();
     const dbMapRoutes: FlightRoute[] = [];

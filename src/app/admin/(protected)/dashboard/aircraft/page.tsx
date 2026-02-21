@@ -1,36 +1,37 @@
+// app/dashboard/aircraft/page.tsx
+
 import { AircraftManagement } from '@/components/AircraftManagement';
-import { aircraftService } from '@/services/aircraft.services'; // Use the newly created service
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-export default async function AircraftPage() {
-  // 1. Get the session securely
-  const sessionResponse = await auth.api.getSession({
-    headers: await headers(),
-  });
+// Import your services
+import { aircraftService } from '@/services/aircraft.services'; 
+import { aircraftTypeService } from '@/services/aircraft-type.services'; 
 
-  if (!sessionResponse) {
-    redirect('/admin/login'); // Or wherever your login is
+// Import your clean auth utility
+import { getServerSession } from '@/services/auth.services';
+
+export default async function AircraftPage() {
+  // 1. Get the session securely (No headers() boilerplate needed!)
+  const session = await getServerSession();
+
+  // 2. Cleanly redirect if unauthenticated
+  if (!session) {
+    redirect('/admin/login'); 
   }
 
-  // 2. Fetch data
-  // Using findAllPaginated to handle the limit, passing the session
-  const aircraftResult = await aircraftService.findAllPaginated(
-    sessionResponse.user as any, 
-    { limit: 100 } 
-  );
+  // 3. Fetch Aircrafts and Aircraft Types in parallel!
+  const [aircraftResult, aircraftTypes] = await Promise.all([
+    // Fetch paginated aircraft
+    aircraftService.findAllPaginated(session as any, { limit: 100 }),
+    // Fetch the types for the dropdowns
+    aircraftTypeService.findAll(session as any)
+  ]);
 
-  // NOTE: Your new aircraftService does not have a getAircraftTypes method.
-  // Assuming you have an aircraftTypeService or repository for this:
-  // const aircraftTypes = await aircraftTypeService.findAll(); 
-  const aircraftTypes: any[] = []; // Placeholder until you implement the type service
-
-  // 3. Pass data to Client Component
+  // 4. Pass fully typed data to Client Component
   return (
     <AircraftManagement 
-      initialAircrafts={aircraftResult.data} 
-      aircraftTypes={aircraftTypes} 
+      initialAircrafts={aircraftResult.data as any} 
+      aircraftTypes={aircraftTypes as any} 
     />
   );
 }

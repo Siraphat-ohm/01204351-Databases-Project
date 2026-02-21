@@ -22,7 +22,7 @@ export async function getAircraftOptions() {
     }
 
     // Fetch ALL aircraft using the new service
-    const data = await aircraftService.findAll(session.user as any);
+    const data = await aircraftService.findAll(session as any);
     
     // Process data for Mantine Select (Grouping + Disabling)
     const options = data.map((ac: any) => ({
@@ -55,14 +55,14 @@ export async function createFlightAction(formData: unknown) {
     const session = await requireServerSession();
 
     // 3. Pass data to the service
-    await flightService.createFlight(validation.data, session.user as any);
+    await flightService.createFlight(validation.data, session as any);
   } catch (error: any) {
     return { error: error.message }; 
   }
   
   // 4. Redirect outside the try/catch (important for Next.js!)
-  revalidatePath('/dashboard/flights');
-  redirect('/dashboard/flights');
+  revalidatePath('/admin/dashboard/flights');
+  redirect('/admin/dashboard/flights');
 }
 
 // --- 3. Update Flight Action ---
@@ -82,14 +82,14 @@ export async function updateFlightAction(id: string, formData: unknown) {
     const session = await requireServerSession();
 
     // 3. Update via service
-    await flightService.updateFlight(id, validation.data, session.user as any);
+    await flightService.updateFlight(id, validation.data, session as any);
   } catch (error: any) {
     return { error: error.message };
   }
   
   // 4. Redirect outside the try/catch
-  revalidatePath('/dashboard/flights');
-  redirect('/dashboard/flights');
+  revalidatePath('/admin/dashboard/flights');
+  redirect('/admin/dashboard/flights');
 }
 
 // --- 4. Delete Flight Action ---
@@ -99,9 +99,9 @@ export async function deleteFlightAction(id: string) {
     const session = await requireServerSession();
 
     // 2. Delete via service
-    await flightService.deleteFlight(id, session.user as any);
+    await flightService.deleteFlight(id, session as any);
     
-    revalidatePath('/dashboard/flights');
+    revalidatePath('/admin/dashboard/flights');
     return { success: true };
   } catch (error: any) {
     // Catches FlightInUseError, UnauthorizedError, AuthenticationRequiredError

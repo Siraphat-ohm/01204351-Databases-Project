@@ -5,13 +5,12 @@ import {
   Stack, Grid, Text, Badge, Divider, LoadingOverlay 
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useMemo } from 'react'; // <-- Imported useMemo
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save, Plane, Settings, Info, Check, X } from 'lucide-react';
 import { updateAircraftAction } from '@/actions/aircraft-actions'; 
 import { AircraftStatus } from '@/generated/prisma/client';
 
-// UPDATE: Changed IDs to string
 interface AircraftType {
   id: string; 
   model: string;
@@ -19,7 +18,6 @@ interface AircraftType {
   capacityBiz: number;
 }
 
-// UPDATE: Changed IDs to string and added proper Status type
 interface Aircraft {
   id: string; 
   tailNumber: string;
@@ -36,7 +34,6 @@ export function AircraftEditForm({ aircraft, aircraftTypes }: AircraftEditFormPr
   const router = useRouter();
   const [isPending, startTransition] = useTransition(); 
 
-  // State for Zod inline field errors
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
   const [formData, setFormData] = useState({
@@ -45,11 +42,18 @@ export function AircraftEditForm({ aircraft, aircraftTypes }: AircraftEditFormPr
     status: aircraft.status,
   });
 
-  const selectedModel = aircraftTypes.find(t => t.id === formData.aircraftTypeId);
+  // OPTIMIZATION 1: Only recalculate the selected model if the dropdown changes
+  const selectedModel = useMemo(() => {
+    return aircraftTypes.find(t => t.id === formData.aircraftTypeId) || null;
+  }, [formData.aircraftTypeId, aircraftTypes]);
+
+  // OPTIMIZATION 2: Only map the dropdown options once, not on every keystroke
+  const aircraftModelOptions = useMemo(() => {
+    return aircraftTypes.map(t => ({ value: t.id, label: t.model }));
+  }, [aircraftTypes]);
 
   const handleChange = (field: string, value: string | null) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear the error for this specific field when the user starts typing again
     if (fieldErrors[field]) {
       setFieldErrors(prev => ({ ...prev, [field]: [] }));
     }
@@ -57,14 +61,12 @@ export function AircraftEditForm({ aircraft, aircraftTypes }: AircraftEditFormPr
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setFieldErrors({}); // Reset errors on new submission
+    setFieldErrors({}); 
     
     startTransition(async () => {
-      // Pass the string ID and the form data
       const result = await updateAircraftAction(aircraft.id, formData);
       
       if (result?.error) {
-        // If Zod returned specific field errors, map them to the inputs
         if (result.fieldErrors) {
           setFieldErrors(result.fieldErrors);
         }
@@ -93,7 +95,6 @@ export function AircraftEditForm({ aircraft, aircraftTypes }: AircraftEditFormPr
     <Container size="md" py="xl" pos="relative">
       <LoadingOverlay visible={isPending} overlayProps={{ radius: "sm", blur: 2 }} />
       
-      {/* Header */}
       <Group justify="space-between" mb="lg">
         <Button 
           variant="subtle" color="gray" leftSection={<ArrowLeft size={18} />} 
@@ -111,7 +112,6 @@ export function AircraftEditForm({ aircraft, aircraftTypes }: AircraftEditFormPr
         
         <form onSubmit={handleSubmit}>
           <Grid gutter="xl">
-            {/* Left Column: Core Info */}
             <Grid.Col span={{ base: 12, md: 7 }}>
               <Stack gap="md">
                 <TextInput 
@@ -121,18 +121,18 @@ export function AircraftEditForm({ aircraft, aircraftTypes }: AircraftEditFormPr
                   value={formData.tailNumber}
                   onChange={(e) => handleChange('tailNumber', e.currentTarget.value)}
                   leftSection={<Plane size={16} />}
-                  error={fieldErrors.tailNumber?.join(', ')} // Map Zod error
+                  error={fieldErrors.tailNumber?.join(', ')} 
                   required
                 />
 
                 <Select
                   label="Aircraft Model"
                   description="Changing model will update capacity configuration"
-                  data={aircraftTypes.map(t => ({ value: t.id, label: t.model }))}
+                  data={aircraftModelOptions} // <-- Use the memoized array here
                   value={formData.aircraftTypeId}
                   onChange={(val) => handleChange('aircraftTypeId', val)}
                   searchable
-                  error={fieldErrors.aircraftTypeId?.join(', ')} // Map Zod error
+                  error={fieldErrors.aircraftTypeId?.join(', ')} 
                   required
                 />
 
@@ -142,13 +142,12 @@ export function AircraftEditForm({ aircraft, aircraftTypes }: AircraftEditFormPr
                   value={formData.status}
                   onChange={(val) => handleChange('status', val)}
                   leftSection={<Settings size={16} />}
-                  error={fieldErrors.status?.join(', ')} // Map Zod error
+                  error={fieldErrors.status?.join(', ')} 
                   required
                 />
               </Stack>
             </Grid.Col>
 
-            {/* Right Column: Specs */}
             <Grid.Col span={{ base: 12, md: 5 }}>
               <Paper bg="gray.0" p="md" radius="md">
                 <Group gap="xs" mb="sm">
