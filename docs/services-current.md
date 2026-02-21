@@ -333,6 +333,7 @@ Methods:
 - `markPaymentSuccess(id, input, session)`
 - `markPaymentFailed(id, input, session)`
 - `refundPayment(id, input, session)`
+- `refundBookingForReaccommodation(bookingId, reason?)`
 
 Errors:
 

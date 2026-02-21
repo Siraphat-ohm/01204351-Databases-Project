@@ -1,6 +1,6 @@
 import { bookingRepository } from '@/repositories/booking.repository';
 import { flightRepository } from '@/repositories/flight.repository';
-import { paymentRepository } from '@/repositories/payment.repository';
+import { paymentService } from '@/services/payment.services';
 import {
   acceptReaccommodationSchema,
   cancelReaccommodationSchema,
@@ -17,8 +17,6 @@ import { canAccessBooking } from '@/auth/permissions';
 import {
   BookingStatus,
   FlightStatus,
-  TransactionStatus,
-  TransactionType,
 } from '@/generated/prisma/client';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import {
@@ -328,27 +326,10 @@ export const bookingService = {
     }
 
     const { reason } = cancelReaccommodationSchema.parse(input ?? {});
-    const payments = await paymentRepository.findByBookingId(id);
-
-    const refundablePayments = payments.filter(
-      (p) => p.type === TransactionType.PAYMENT && p.status === TransactionStatus.SUCCESS,
+    await paymentService.refundBookingForReaccommodation(
+      id,
+      reason ?? 'Passenger cancelled during reaccommodation',
     );
-
-    for (const payment of refundablePayments) {
-      await paymentRepository.createRefund({
-        bookingId: payment.bookingId,
-        amount: Number(payment.amount),
-        currency: payment.currency,
-        reason: reason ?? 'Passenger cancelled during reaccommodation',
-        originalTransactionId: payment.id,
-      });
-
-      await paymentRepository.updateStatus(payment.id, {
-        status: TransactionStatus.REFUNDED,
-        refundedAt: new Date(),
-        refundReason: reason ?? 'Passenger cancelled during reaccommodation',
-      });
-    }
 
     const { status } = updateBookingStatusSchema.parse({ status: BookingStatus.CANCELLED });
     return bookingRepository.updateStatus(id, status);
