@@ -2,12 +2,14 @@ import { bookingRepository } from '@/repositories/booking.repository';
 import { flightRepository } from '@/repositories/flight.repository';
 import {
   createBookingSchema,
+  changeFlightSchema,
   updateBookingStatusSchema,
   type CreateBookingInput,
+  type ChangeFlightInput,
 } from '@/types/booking.type';
 import type { PaginatedResponse } from '@/types/common';
 import { canAccessBooking } from '@/auth/permissions';
-import { BookingStatus } from '@/generated/prisma/client';
+import { BookingStatus, FlightStatus } from '@/generated/prisma/client';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import {
   assertPermission,
@@ -41,6 +43,13 @@ export class BookingAlreadyCancelledError extends Error {
   }
 }
 
+export class BookingChangeNotAllowedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BookingChangeNotAllowedError';
+  }
+}
+
 export class UnauthorizedError extends Error {
   constructor(action: string) {
     super(`Unauthorized: cannot perform "${action}" on booking`);
@@ -63,6 +72,16 @@ function checkPermission(
 
 function canReadAll(session: Session) {
   return hasPermission(session, 'read-all', canAccessBooking);
+}
+
+function canForceChangeFromStatus(status: FlightStatus) {
+  const disruptedStatuses: FlightStatus[] = [
+    FlightStatus.CANCELLED,
+    FlightStatus.DELAYED,
+    FlightStatus.DIVERTED,
+  ];
+
+  return disruptedStatuses.includes(status);
 }
 
 function makeBookingRef() {
@@ -173,5 +192,55 @@ export const bookingService = {
 
     const { status } = updateBookingStatusSchema.parse({ status: BookingStatus.CANCELLED });
     return bookingRepository.updateStatus(id, status);
+  },
+
+  async changeFlight(id: string, input: ChangeFlightInput, session: Session) {
+    checkPermission(session, 'read');
+    checkPermission(session, 'cancel');
+    checkPermission(session, 'create');
+
+    const booking = await bookingRepository.findById(id);
+    if (!booking) throw new BookingNotFoundError(id);
+
+    if (!canReadAll(session) && booking.userId !== session.user.id) {
+      throw new UnauthorizedError('change-flight');
+    }
+
+    if (booking.status === BookingStatus.CANCELLED) {
+      throw new BookingAlreadyCancelledError(id);
+    }
+
+    if (!canForceChangeFromStatus(booking.flight.status)) {
+      throw new BookingChangeNotAllowedError(
+        `Flight change is only allowed for disrupted flights. Current status: ${booking.flight.status}`,
+      );
+    }
+
+    const data = changeFlightSchema.parse(input);
+
+    if (data.newFlightId === booking.flightId) {
+      throw new BookingConflictError('New flight must be different from current flight');
+    }
+
+    const newFlight = await flightRepository.findById(data.newFlightId);
+    if (!newFlight) throw new BookingNotFoundError(`flight:${data.newFlightId}`);
+
+    if (newFlight.status !== FlightStatus.SCHEDULED) {
+      throw new BookingChangeNotAllowedError('New flight must be SCHEDULED');
+    }
+
+    const newBookingRef = await generateUniqueBookingRef();
+
+    const changedBooking = await bookingRepository.changeFlight({
+      bookingId: id,
+      newFlightId: data.newFlightId,
+      newBookingRef,
+      totalPrice: data.totalPrice,
+      currency: data.currency,
+      keepSeatAssignments: data.keepSeatAssignments,
+    });
+
+    if (!changedBooking) throw new BookingNotFoundError(id);
+    return changedBooking;
   },
 };

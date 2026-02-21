@@ -1,8 +1,11 @@
-import { Container, Grid,GridCol, Box, Title, Text } from '@mantine/core';
+import { Container, Grid, GridCol, Box, Title, Text, Code, ScrollArea } from '@mantine/core';
 import { Navbar } from '@/components/Navbar';
 import { FlightSearchBox } from '@/components/FlightSearchBox';
 
-export default function Page() {
+
+
+export default async function Page() {
+
   return (
     <Box>
       <Navbar />
@@ -27,6 +30,7 @@ export default function Page() {
     <Text c="white" mt="md" size="lg">
       Safe, fast, and reliable flights at your fingertips.
     </Text>
+
   </GridCol>
 
   {/* Change Grid.Col to GridCol */}

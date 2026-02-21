@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState,useEffect } from 'react';
 import { 
-  Paper, Radio, Group, Select, Button, Stack, NumberInput, Popover, Text 
+  Paper, Radio, Group, Select, Button, Stack, NumberInput, Popover, Text, Loader 
 } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import { DateInput } from '@mantine/dates';
 import { IconPlaneDeparture, IconPlaneArrival, IconUsers } from '@tabler/icons-react';
-import { airportOptions, airportFilter } from '@/utils/airports'; // 1. Use your real data
+
 import '@mantine/dates/styles.css';
 
 export function FlightSearchBox() {
@@ -21,6 +21,41 @@ export function FlightSearchBox() {
   const [adults, setAdults] = useState<number | string>(1);
   const [children, setChildren] = useState<number | string>(0);
   const [errors, setErrors] = useState<{ [key: string]: boolean }>({});
+  const [airportOptions, setAirportOptions] = useState<{ value: string; label: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchValue, setSearchValue] = useState('');
+
+  useEffect(() => {
+    const fetchAirports = async () => {
+      if (searchValue.length < 2) {
+        setAirportOptions([]);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/v1/airports?search=${encodeURIComponent(searchValue)}`);
+        const data = await res.json();
+        
+        // Map Prisma data to Mantine Select format
+        const formatted = data.map((ap: any) => ({
+          value: ap.iataCode,
+          label: `${ap.city} (${ap.iataCode}) - ${ap.name}`
+        }));
+        
+        setAirportOptions(formatted);
+      } catch (error) {
+        console.error("Failed to fetch airports", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Simple debounce to avoid spamming the API
+    const timeoutId = setTimeout(fetchAirports, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchValue]);
+  
 
   const getMinReturnDate = () => {
     if (!departureDate) return new Date();
@@ -66,6 +101,8 @@ export function FlightSearchBox() {
     type: tripType,
     departure: safeISO(departureDate), 
     return: safeISO(returnDate),
+    adults: adults.toString(),   // Added
+    children: children.toString(), // Added
     cabin: 'economy'
   });
 
@@ -82,44 +119,52 @@ export function FlightSearchBox() {
           </Group>
         </Radio.Group>
 
-        <Group grow>
+       <Group grow>
           <Select
             label="From"
-            placeholder="Origin"
-            data={airportOptions} // 2. Real Airport Data
-            filter={airportFilter} // 3. Smart Filter (IATA/City)
-            leftSection={<IconPlaneDeparture size={16} />}
+            placeholder="Search city or IATA"
+            data={airportOptions}
             searchable
+            onSearchChange={setSearchValue}
+            rightSection={loading ? <Loader size="xs" /> : null}
+            leftSection={<IconPlaneDeparture size={16} />}
             value={from}
             onChange={setFrom}
             error={errors.from}
+            // Ensure the value stays in the list even if it's not in the current search results
+            nothingFoundMessage="No airports found"
           />
+          
           <Select
             label="To"
-            placeholder="Destination"
+            placeholder="Search city or IATA"
             data={airportOptions}
-            filter={airportFilter}
-            leftSection={<IconPlaneArrival size={16} />}
             searchable
+            onSearchChange={setSearchValue}
+            rightSection={loading ? <Loader size="xs" /> : null}
+            leftSection={<IconPlaneArrival size={16} />}
             value={to}
             onChange={setTo}
             error={errors.to}
+            nothingFoundMessage="No airports found"
           />
         </Group>
 
         <Group grow>
-          <DateInput 
-            label="Departure Date" 
-            placeholder="Pick date" 
-            value={departureDate}
-            minDate={new Date()} 
-            onChange={(val) => {
-              console.log("Selected Date:", val);
-              setDepartureDate(val);
-              if (returnDate && val && returnDate <= val) setReturnDate(null);
-            }}
-            error={errors.departureDate}
-          />
+     <DateInput 
+  label="Departure Date" 
+  placeholder="Pick date" 
+  value={departureDate}
+  minDate={new Date()} 
+  onChange={(val: Date | null) => { // Added explicit type here
+    setDepartureDate(val);
+    // Safety check: if the new departure is after the existing return, reset return
+    if (val && returnDate && returnDate <= val) {
+      setReturnDate(null);
+    }
+  }}
+  error={errors.departureDate}
+/>
           {tripType === 'round-trip' && (
             <DateInput 
               label="Return Date" 
@@ -127,7 +172,7 @@ export function FlightSearchBox() {
               value={returnDate}
               minDate={getMinReturnDate()} 
               disabled={!departureDate}
-              onChange={setReturnDate}
+              onChange={(e) => setReturnDate(e? new Date(e) : null)}
               error={errors.returnDate}
             />
           )}
@@ -143,10 +188,14 @@ export function FlightSearchBox() {
             <Stack gap="sm">
               <Group justify="space-between">
                 <Text size="sm" fw={500}>Adults</Text>
-                <NumberInput value={adults} onChange={setAdults} min={1} max={9} size="xs" />
+                  <NumberInput value={adults} onChange={setAdults} min={1} max={9} size="xs" />
+
               </Group>
+
               <Group justify="space-between">
+
                 <Text size="sm" fw={500}>Children</Text>
+
                 <NumberInput value={children} onChange={setChildren} min={0} max={9} size="xs" />
               </Group>
             </Stack>
