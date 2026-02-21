@@ -7,8 +7,15 @@ import {
   type CreateRouteInput,
   type UpdateRouteInput,
 } from '@/types/route.type';
+import type { PaginatedResponse } from '@/types/common';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import { assertPermission } from '@/services/_shared/authorization';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '@/services/_shared/pagination';
+
+type RouteListItem = Awaited<ReturnType<typeof routeRepository.findAll>>[number];
 
 
 export class RouteNotFoundError extends Error {
@@ -97,6 +104,27 @@ export const routeService = {
   async findAll(session: Session) {
     checkPermission(session, 'read');
     return routeRepository.findAll();
+  },
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<RouteListItem>> {
+    checkPermission(session, 'read');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const rows = await routeRepository.findAll();
+    const total = rows.length;
+
+    return {
+      data: rows.slice(skip, skip + limit),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   },
 
   async createRoute(input: CreateRouteInput, session: Session) {
