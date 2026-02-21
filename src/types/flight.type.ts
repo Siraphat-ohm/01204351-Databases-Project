@@ -40,8 +40,13 @@ export const updateFlightSchema = z
     { message: 'At least one field must be provided for update' },
   );
 
+export const changeFlightAircraftSchema = z.object({
+  aircraftId: z.cuid({ message: 'Invalid aircraft ID' }),
+});
+
 export type CreateFlightInput = z.infer<typeof createFlightSchema>;
 export type UpdateFlightInput = z.infer<typeof updateFlightSchema>;
+export type ChangeFlightAircraftInput = z.infer<typeof changeFlightAircraftSchema>;
 
 export const flightAdminInclude = {
   route: {
