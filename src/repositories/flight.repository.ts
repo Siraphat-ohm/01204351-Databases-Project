@@ -4,7 +4,7 @@ import {
   type CreateFlightInput,
   type UpdateFlightInput,
 } from '@/types/flight.type';
-import { Prisma } from '@/generated/prisma/client';
+import { Prisma, TicketClass } from '@/generated/prisma/client';
 import {
   FlightCodeSearchSchema,
   type FlightCodeSearchParams,
@@ -157,5 +157,60 @@ export const flightRepository = {
   countBookings: (flightId: string) =>
     prisma.booking.count({
       where: { flightId },
+    }),
+
+  findSeatedTickets: (flightId: string) =>
+    prisma.ticket.findMany({
+      where: {
+        flightId,
+        seatNumber: { not: null },
+      },
+      select: {
+        id: true,
+        class: true,
+        seatNumber: true,
+      },
+      orderBy: { id: 'asc' },
+    }) as Promise<Array<{ id: string; class: TicketClass; seatNumber: string | null }>>,
+
+  changeAircraftAndSeats: async (params: {
+    flightId: string;
+    newAircraftId: string;
+    seatAssignments: Array<{ ticketId: string; seatNumber: string }>;
+  }) =>
+    prisma.$transaction(async (tx) => {
+      await tx.flight.update({
+        where: { id: params.flightId },
+        data: { aircraftId: params.newAircraftId },
+      });
+
+      const ticketIds = params.seatAssignments.map((a) => a.ticketId);
+
+      if (ticketIds.length > 0) {
+        await tx.ticket.updateMany({
+          where: {
+            id: { in: ticketIds },
+            flightId: params.flightId,
+          },
+          data: {
+            seatNumber: null,
+            checkedIn: false,
+            checkedInAt: null,
+            boardingPass: null,
+          },
+        });
+
+        for (const assignment of params.seatAssignments) {
+          await tx.ticket.update({
+            where: { id: assignment.ticketId },
+            data: { seatNumber: assignment.seatNumber },
+          });
+        }
+      }
+
+      return tx.flight.findUnique({
+        where: { id: params.flightId },
+        include: flightAdminInclude,
+      });
     }),
 };

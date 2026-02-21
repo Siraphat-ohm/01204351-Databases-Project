@@ -233,6 +233,7 @@ Methods:
 - `createFlight(input, session)`
 - `updateFlight(id, input, session)`
 - `updateStatus(id, status, session)`
+- `changeAircraftAndReassignSeats(id, input, session)`
 - `deleteFlight(id, session)`
 
 Errors:
@@ -240,6 +241,8 @@ Errors:
 - `FlightNotFoundError`
 - `FlightConflictError`
 - `FlightInUseError`
+- `AircraftNotFoundError`
+- `FlightSeatReassignmentError`
 - `UnauthorizedError`
 
 Public behavior:
