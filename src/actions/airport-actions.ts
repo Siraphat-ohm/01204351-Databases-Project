@@ -37,7 +37,7 @@ export async function createAirportAction(formData: unknown) {
 export async function deleteAirportAction(id: string) {
   try {
     const session = await requireServerSession();
-    await airportService.deleteAirport(id, session.user as any);
+    await airportService.deleteAirport(id, session as any);
     revalidatePath('/admin/dashboard/airports');
     return { success: true };
   } catch (error: any) {
