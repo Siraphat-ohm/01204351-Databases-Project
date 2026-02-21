@@ -8,20 +8,13 @@ import {
 import { canAccessStaff } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { PaginatedResponse } from '@/types/common';
+import { assertPermission } from '@/services/_shared/authorization';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '@/services/_shared/pagination';
 
 type StaffListItem = Awaited<ReturnType<typeof staffRepository.findAll>>[number];
-type PaginationParams = { page?: number; limit?: number };
-
-function toPagination(params?: PaginationParams) {
-  const page = Number.isFinite(params?.page)
-    ? Math.max(1, Math.trunc(params!.page!))
-    : 1;
-  const limit = Number.isFinite(params?.limit)
-    ? Math.min(100, Math.max(1, Math.trunc(params!.limit!)))
-    : 20;
-  const skip = (page - 1) * limit;
-  return { page, limit, skip };
-}
 
 export class StaffNotFoundError extends Error {
   constructor(identifier: string) {
@@ -55,8 +48,13 @@ function checkPermission(
   session: Session,
   action: 'create' | 'read' | 'update' | 'delete',
 ) {
-  const allowed = canAccessStaff(session.user.role, action);
-  if (!allowed) throw new UnauthorizedError(action);
+  assertPermission(
+    session,
+    action,
+    canAccessStaff,
+    'staff',
+    (a) => new UnauthorizedError(a),
+  );
 }
 
 export const staffService = {
@@ -79,7 +77,7 @@ export const staffService = {
   ): Promise<PaginatedResponse<StaffListItem>> {
     checkPermission(session, 'read');
 
-    const { page, limit, skip } = toPagination(params);
+    const { page, limit, skip } = resolvePagination(params);
     const [data, total] = await Promise.all([
       staffRepository.findAll({ skip, take: limit }),
       staffRepository.count(),

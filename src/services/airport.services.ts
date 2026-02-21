@@ -9,20 +9,13 @@ import {
 import { canAccessAirport } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { PaginatedResponse } from '@/types/common';
+import { assertPermission } from '@/services/_shared/authorization';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '@/services/_shared/pagination';
 
 type AirportListItem = Awaited<ReturnType<typeof airportRepository.findAll>>[number];
-type PaginationParams = { page?: number; limit?: number };
-
-function toPagination(params?: PaginationParams) {
-  const page = Number.isFinite(params?.page)
-    ? Math.max(1, Math.trunc(params!.page!))
-    : 1;
-  const limit = Number.isFinite(params?.limit)
-    ? Math.min(100, Math.max(1, Math.trunc(params!.limit!)))
-    : 20;
-  const skip = (page - 1) * limit;
-  return { page, limit, skip };
-}
 
 export class AirportNotFoundError extends Error {
   constructor(identifier: string) {
@@ -56,8 +49,13 @@ function checkPermission(
   session: Session,
   action: 'create' | 'read' | 'update' | 'delete',
 ) {
-  const allowed = canAccessAirport(session.user.role, action);
-  if (!allowed) throw new UnauthorizedError(action);
+  assertPermission(
+    session,
+    action,
+    canAccessAirport,
+    'airport',
+    (a) => new UnauthorizedError(a),
+  );
 }
 
 export const airportService = {
@@ -89,7 +87,7 @@ export const airportService = {
   ): Promise<PaginatedResponse<AirportListItem>> {
     checkPermission(session, 'read');
 
-    const { page, limit, skip } = toPagination(params);
+    const { page, limit, skip } = resolvePagination(params);
     const [data, total] = await Promise.all([
       airportRepository.findAll({ skip, take: limit }),
       airportRepository.count(),
