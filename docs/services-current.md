@@ -103,6 +103,31 @@ Errors:
 - `AircraftInUseError`
 - `UnauthorizedError`
 
+### 4.1.1 `aircraftTypeService`
+
+Files:
+
+- `src/services/aircraft-type.services.ts`
+- `src/repositories/aircraft-type.repository.ts`
+- `src/types/aircraft-type.type.ts`
+
+Methods:
+
+- `findById(id, session)`
+- `findByIataCode(iataCode, session)`
+- `findAll(session)`
+- `findAllPaginated(session, params)`
+- `createAircraftType(input, session)`
+- `updateAircraftType(id, input, session)`
+- `deleteAircraftType(id, session)`
+
+Errors:
+
+- `AircraftTypeNotFoundError`
+- `AircraftTypeConflictError`
+- `AircraftTypeInUseError`
+- `UnauthorizedError`
+
 ### 4.2 `airportService`
 
 File: `src/services/airport.services.ts`
