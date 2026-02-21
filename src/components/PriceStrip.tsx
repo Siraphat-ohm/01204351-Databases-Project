@@ -34,14 +34,17 @@ export function PriceStrip({ startDate, onDateChange, prices, loading }: PriceSt
               <Center w="100%" h={60}><Loader size="sm" color="teal" /></Center>
             ) : (
               dates.map((date) => {
-                const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const dateKey = `${year}-${month}-${day}`; 
+const dateKey = date.toISOString().split('T')[0]; 
 
-  const isSelected = activeDate.toDateString() === date.toDateString();
-  const price = prices[dateKey];
+// Debugging: Log this to your console to see if it matches your API object keys
+// console.log("Generated Key:", dateKey, "Available Keys:", Object.keys(prices));
 
+const isSelected = activeDate.toDateString() === date.toDateString();
+const price = prices[dateKey];
+const priceValue = prices[dateKey];
+const displayPrice = (priceValue !== null && !isNaN(Number(priceValue))) 
+  ? Math.round(Number(priceValue)) 
+  : null;
                 return (
                   <UnstyledButton
                     key={dateKey}
@@ -60,11 +63,9 @@ export function PriceStrip({ startDate, onDateChange, prices, loading }: PriceSt
                       <Text size="xs" c="dimmed">
                         {date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
                       </Text>
-                      <Text fw={700} size="sm" c={price ? (isSelected ? 'teal.9' : 'black') : 'gray.5'}>
-                        {price 
-                          ? `THB ${Number(price).toLocaleString(undefined, { maximumFractionDigits: 0 })}` 
-                          : 'No Flights'}
-                      </Text>
+                  <Text fw={700} size="sm" c={price ? (isSelected ? 'teal.9' : 'black') : 'gray.4'}>
+{displayPrice ? `THB ${displayPrice.toLocaleString()}` : '—'}
+</Text>
                     </Stack>
                   </UnstyledButton>
                 );

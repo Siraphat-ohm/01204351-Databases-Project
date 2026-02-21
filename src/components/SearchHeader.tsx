@@ -1,9 +1,19 @@
 'use client';
-
-import { Group, Select, ActionIcon, Button, Paper, Container, Stack } from '@mantine/core';
+import { useState, useEffect } from 'react';
+import { 
+  Group, Select, ActionIcon, Button, Paper, Container, 
+  Stack, Popover, Text, Divider, Box ,NumberInput,Loader
+} from '@mantine/core';
 import { DateInput } from '@mantine/dates';
-import { IconArrowsExchange, IconSearch, IconMapPin } from '@tabler/icons-react';
-import { airportOptions, airportFilter } from '@/utils/airports';
+
+// Direct imports to prevent Next.js / Tabler icon resolution errors
+import { IconArrowsExchange } from '@tabler/icons-react';
+import { IconSearch } from '@tabler/icons-react';
+import { IconMapPin } from '@tabler/icons-react';
+import { IconUsers } from '@tabler/icons-react';
+import { IconPlus } from '@tabler/icons-react';
+import { IconMinus } from '@tabler/icons-react';
+
 
 interface SearchHeaderProps {
   searchData: any;
@@ -13,7 +23,9 @@ interface SearchHeaderProps {
   onReturnChange: (val: Date | null) => void;
   onTypeChange: (val: string) => void;
   onCabinChange: (val: string) => void;
-  onSearch: () => void; // <--- Make sure this is in your interface
+  onAdultsChange: (val: number) => void;
+  onChildrenChange: (val: number) => void;
+  onSearch: () => void;
 }
 
 export function SearchHeader({ 
@@ -23,24 +35,79 @@ export function SearchHeader({
   onDepartureChange, 
   onReturnChange, 
   onTypeChange, 
-  onCabinChange ,
+  onCabinChange,
+  onAdultsChange,
+  onChildrenChange,
   onSearch
 }: SearchHeaderProps) {
-  // 1. Define "Today" at the start of the day for Depart validation
+  const [options, setOptions] = useState<{ value: string; label: string }[]>(() => {
+    const initial = [];
+    if (searchData.from) initial.push({ value: searchData.from, label: searchData.from });
+    if (searchData.to) initial.push({ value: searchData.to, label: searchData.to });
+    return initial;
+  });
+  const [loading, setLoading] = useState(false);
+  const [query, setQuery] = useState('');
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // 2. Define the minimum Return date (must be same day or after Depart)
-  // If no departure is selected, default to today
-  const minReturnDate = searchData.departure 
-    ? new Date(searchData.departure) 
-    : today;
+  const minReturnDate = searchData.departure ? new Date(searchData.departure) : today;
+  useEffect(() => {
+    const fetchAirports = async () => {
+      if (query.length < 2) return;
+      
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/v1/airports?search=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        const formatted = data.map((ap: any) => ({
+          value: ap.iataCode,
+          label: `${ap.city} (${ap.iataCode}) - ${ap.name}`
+        }));
+        setOptions(formatted);
+      } catch (err) {
+        console.error("Airport fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    
+
+    const timer = setTimeout(fetchAirports, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+useEffect(() => {
+  setOptions(prev => {
+    const newOptions = [...prev];
+    
+    // Helper to ensure an IATA code has its full descriptive label in the dropdown list
+    const syncOption = (iataCode: string) => {
+      if (!iataCode) return;
+      
+      // If the code exists but the label is just the code, we need a better label
+      const existing = newOptions.find(o => o.value === iataCode);
+      
+      // If it doesn't exist at all, we add it. 
+      // Note: Ideally, you'd pass the full name from the parent, 
+      // but this placeholder prevents the "BKK" only issue.
+      if (!existing) {
+        newOptions.push({ value: iataCode, label: iataCode });
+      }
+    };
+
+    syncOption(searchData.from);
+    syncOption(searchData.to);
+    return newOptions;
+  });
+}, [searchData.from, searchData.to]);
+
   return (
     <Paper withBorder p="md" radius={0} bg="var(--mantine-color-gray-0)">
       <Container size="xl">
         <Stack gap="xs">
-          {/* Trip Type & Cabin Selection */}
-          <Group gap="xl">
+          {/* Trip Type & Cabin */}
+          <Group gap="xl" align="flex-end">
             <Select 
               variant="unstyled" 
               data={['Round-trip', 'One-way']} 
@@ -51,93 +118,115 @@ export function SearchHeader({
             <Select 
               variant="unstyled" 
               data={['Economy', 'Business', 'First Class']} 
-              value={searchData.cabin.charAt(0).toUpperCase() + searchData.cabin.slice(1)}
+              value={searchData.cabin === 'first class' ? 'First Class' : searchData.cabin.charAt(0).toUpperCase() + searchData.cabin.slice(1)}
               onChange={(val) => onCabinChange(val?.toLowerCase() || 'economy')}
               style={{ width: 150 }}
             />
+            <Group gap="xl" style={{ flex: 1.5 }}>
+              <NumberInput
+                label="Adults"
+                value={searchData.adults}
+                onChange={(val) => onAdultsChange(Number(val))}
+                min={1}
+                max={9}
+                style={{ width: 70 }}
+              />
+              <NumberInput
+                label="Children"
+                value={searchData.children}
+                onChange={(val) => onChildrenChange(Number(val))}
+                min={0}
+                max={9}
+                style={{ width: 70 }}
+              />
+            </Group>
           </Group>
 
           <Group grow align="flex-end">
             {/* Origin & Destination */}
-            <Group gap={0} style={{ flex: 3 }}>
+           <Group gap={0} style={{ flex: 3 }}>
               <Select 
                 label="From" 
-                placeholder="City or IATA"
-                data={airportOptions}
-                filter={airportFilter}
+                placeholder="Origin"
+                data={options}
                 value={searchData.from}
+                onSearchChange={setQuery}
                 onChange={(val) => onFromChange(val || '')}
                 searchable
-                nothingFoundMessage="No airports found"
+                nothingFoundMessage={loading ? 'Searching...' : 'No airports found'}
+                rightSection={loading ? <Loader size="xs" /> : null}
                 leftSection={<IconMapPin size={16} />} 
                 style={{ flex: 1 }}
               />
+<ActionIcon 
+  variant="subtle" 
+  size="lg" 
+  mt={20} 
+  color="gray"
+  onClick={() => {
+    // 1. Capture current values
+    const currentFrom = searchData.from;
+    const currentTo = searchData.to;
 
-              <ActionIcon 
-                variant="subtle" size="lg" mt={20} color="gray"
-                onClick={() => {
-                  const currentFrom = searchData.from;
-                  const currentTo = searchData.to;
-                  onFromChange(currentTo);
-                  onToChange(currentFrom);
-                }}
-              >
-                <IconArrowsExchange size={20} />
-              </ActionIcon>
+    // 2. Perform the swap
+    onFromChange(currentTo);
+    onToChange(currentFrom);
+    
+    // 3. IMPORTANT: Ensure the labels exist in the options array
+    // We don't clear the query here because we want the labels to stay visible
+  }}
+>
+  <IconArrowsExchange size={20} />
+</ActionIcon>
 
               <Select 
                 label="To" 
-                placeholder="City or IATA"
-                data={airportOptions}
-                filter={airportFilter}
+                placeholder="Destination"
+                data={options}
                 value={searchData.to}
+                onSearchChange={setQuery}
                 onChange={(val) => onToChange(val || '')}
                 searchable
-                nothingFoundMessage="No airports found"
+                nothingFoundMessage={loading ? 'Searching...' : 'No airports found'}
+                rightSection={loading ? <Loader size="xs" /> : null}
                 leftSection={<IconMapPin size={16} />} 
                 style={{ flex: 1 }}
               />
             </Group>
-
-{/* Dates */}
+            {/* Dates */}
             <Group gap={0} style={{ flex: 2 }}>
               <DateInput 
                 label="Depart" 
-                placeholder="Pick date"
                 value={searchData.departure}
                 onChange={(val) => {
                   onDepartureChange(val);
-                  // 3. Logic: If the new Depart date is AFTER the current Return date,
-                  // reset or update the Return date to keep it valid.
                   if (val && searchData.return && val > searchData.return) {
                     onReturnChange(val);
                   }
                 }}
-                minDate={today} // 🛠️ Prevents picking past dates
-                popoverProps={{ withinPortal: true }}
+                minDate={today}
                 style={{ flex: 1 }} 
               />
-    <DateInput 
-  label="Return" 
-  placeholder="Pick date"
-  // CHANGE THIS: Ensure it matches the key in your searchData object
-  value={searchData.returnDate || searchData.return} 
-  onChange={onReturnChange}
-  minDate={minReturnDate} 
-  popoverProps={{ withinPortal: true }}
-  style={{ flex: 1 }} 
-  disabled={searchData.type === 'one-way'}
-/>
+              <DateInput 
+                label="Return" 
+                value={searchData.returnDate || searchData.return} 
+                onChange={onReturnChange}
+                minDate={minReturnDate} 
+                style={{ flex: 1 }} 
+                disabled={searchData.type === 'one-way'}
+              />
             </Group>
 
-       <Button 
-        onClick={onSearch} // <--- This MUST be here
-        leftSection={<IconSearch size={18} />}
-        color="blue"
-        radius="md"
-      >
-        Search
-      </Button>
+            
+
+            <Button 
+              onClick={onSearch} 
+              leftSection={<IconSearch size={18} />}
+              color="blue"
+              radius="md"
+            >
+              Search
+            </Button>
           </Group>
         </Stack>
       </Container>
