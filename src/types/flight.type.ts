@@ -42,6 +42,7 @@ export const updateFlightSchema = z
 
 export const changeFlightAircraftSchema = z.object({
   aircraftId: z.cuid({ message: 'Invalid aircraft ID' }),
+  allowDowngrade: z.boolean().default(false),
 });
 
 export type CreateFlightInput = z.infer<typeof createFlightSchema>;

@@ -176,7 +176,7 @@ export const flightRepository = {
   changeAircraftAndSeats: async (params: {
     flightId: string;
     newAircraftId: string;
-    seatAssignments: Array<{ ticketId: string; seatNumber: string }>;
+    seatAssignments: Array<{ ticketId: string; seatNumber: string; ticketClass?: TicketClass }>;
   }) =>
     prisma.$transaction(async (tx) => {
       await tx.flight.update({
@@ -203,7 +203,10 @@ export const flightRepository = {
         for (const assignment of params.seatAssignments) {
           await tx.ticket.update({
             where: { id: assignment.ticketId },
-            data: { seatNumber: assignment.seatNumber },
+            data: {
+              seatNumber: assignment.seatNumber,
+              ...(assignment.ticketClass ? { class: assignment.ticketClass } : {}),
+            },
           });
         }
       }

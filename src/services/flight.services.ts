@@ -50,6 +50,20 @@ function cabinToTicketClass(cabin: 'FIRST' | 'BUSINESS' | 'ECONOMY'): TicketClas
   return TicketClass.ECONOMY;
 }
 
+function downgradePriority(ticketClass: TicketClass, allowDowngrade: boolean): TicketClass[] {
+  if (!allowDowngrade) return [ticketClass];
+
+  if (ticketClass === TicketClass.FIRST_CLASS) {
+    return [TicketClass.FIRST_CLASS, TicketClass.BUSINESS, TicketClass.ECONOMY];
+  }
+
+  if (ticketClass === TicketClass.BUSINESS) {
+    return [TicketClass.BUSINESS, TicketClass.ECONOMY];
+  }
+
+  return [TicketClass.ECONOMY];
+}
+
 function buildSeatsByClass(layout: NonNullable<Awaited<ReturnType<typeof seatRepository.findLayoutByAircraftTypeIataCode>>>) {
   const byClass = new Map<TicketClass, string[]>();
   byClass.set(TicketClass.FIRST_CLASS, []);
@@ -225,7 +239,9 @@ export const flightService = {
     takenByClass.set(TicketClass.ECONOMY, new Set());
 
     const assignments = new Map<string, string>();
+    const classOverrides = new Map<string, TicketClass>();
     let preserved = 0;
+    let downgraded = 0;
 
     // Pass 1: Keep existing seat if valid in new layout and still free.
     for (const ticket of seatedTickets) {
@@ -242,27 +258,48 @@ export const flightService = {
       }
     }
 
-    // Pass 2: Assign new seats for remaining tickets.
+    // Pass 2: Assign new seats for remaining tickets (with optional downgrade).
     for (const ticket of seatedTickets) {
       if (assignments.has(ticket.id)) continue;
 
-      const classSeats = seatsByClass.get(ticket.class) ?? [];
-      const taken = takenByClass.get(ticket.class)!;
-      const nextSeat = classSeats.find((s) => !taken.has(s));
+      const priority = downgradePriority(ticket.class, data.allowDowngrade);
+      let nextSeat: string | null = null;
+      let assignedClass: TicketClass | null = null;
 
-      if (!nextSeat) {
+      for (const cls of priority) {
+        const classSeats = seatsByClass.get(cls) ?? [];
+        const taken = takenByClass.get(cls)!;
+        const found = classSeats.find((s) => !taken.has(s));
+        if (found) {
+          nextSeat = found;
+          assignedClass = cls;
+          break;
+        }
+      }
+
+      if (!nextSeat || !assignedClass) {
         throw new FlightSeatReassignmentError(
-          `Not enough seats in ${ticket.class} for aircraft change on flight ${id}`,
+          data.allowDowngrade
+            ? `Not enough seats across allowed classes for ${ticket.class} on flight ${id}`
+            : `Not enough seats in ${ticket.class} for aircraft change on flight ${id}`,
         );
       }
 
       assignments.set(ticket.id, nextSeat);
-      taken.add(nextSeat);
+      takenByClass.get(assignedClass)!.add(nextSeat);
+
+      if (assignedClass !== ticket.class) {
+        classOverrides.set(ticket.id, assignedClass);
+        downgraded++;
+      }
     }
 
     const seatAssignments = Array.from(assignments.entries()).map(([ticketId, seatNumber]) => ({
       ticketId,
       seatNumber,
+      ...(classOverrides.has(ticketId)
+        ? { ticketClass: classOverrides.get(ticketId)! }
+        : {}),
     }));
 
     const updatedFlight = await flightRepository.changeAircraftAndSeats({
@@ -279,6 +316,7 @@ export const flightService = {
         total: seatedTickets.length,
         preserved,
         moved: seatedTickets.length - preserved,
+        downgraded,
       },
     };
   },
