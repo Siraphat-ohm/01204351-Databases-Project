@@ -31,9 +31,21 @@ export const changeFlightSchema = z.object({
   currency: z.string().trim().min(3).max(3).optional(),
 });
 
+export const acceptReaccommodationSchema = z.object({
+  newFlightId: z.cuid({ message: 'Invalid new flight ID' }),
+  totalPrice: z.number().positive().optional(),
+  currency: z.string().trim().min(3).max(3).optional(),
+});
+
+export const cancelReaccommodationSchema = z.object({
+  reason: z.string().trim().min(2).optional(),
+});
+
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 export type UpdateBookingStatusInput = z.infer<typeof updateBookingStatusSchema>;
 export type ChangeFlightInput = z.infer<typeof changeFlightSchema>;
+export type AcceptReaccommodationInput = z.infer<typeof acceptReaccommodationSchema>;
+export type CancelReaccommodationInput = z.infer<typeof cancelReaccommodationSchema>;
 
 export const bookingAdminInclude = {
   user: true,

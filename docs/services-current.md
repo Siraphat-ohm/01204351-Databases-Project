@@ -278,6 +278,8 @@ Methods:
 - `createBooking(input, session)`
 - `cancelBooking(id, session)`
 - `changeFlight(id, input, session)`
+- `acceptReaccommodation(id, input, session)`
+- `cancelForReaccommodation(id, input, session)`
 
 Errors:
 
@@ -285,6 +287,7 @@ Errors:
 - `BookingConflictError`
 - `BookingAlreadyCancelledError`
 - `BookingChangeNotAllowedError`
+- `BookingReaccommodationError`
 - `UnauthorizedError`
 
 Notes:
