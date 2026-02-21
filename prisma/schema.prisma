@@ -46,6 +46,7 @@ enum FlightStatus {
 enum BookingStatus {
   PENDING
   CONFIRMED
+  REACCOMMODATION_PENDING
   CANCELLED
 }
 
