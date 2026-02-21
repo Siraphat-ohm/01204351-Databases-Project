@@ -8,6 +8,7 @@ import {
   type UpdateRouteInput,
 } from '@/types/route.type';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import { assertPermission } from '@/services/_shared/authorization';
 
 
 export class RouteNotFoundError extends Error {
@@ -43,8 +44,13 @@ function checkPermission(
   session: Session,
   action: 'create' | 'read' | 'update' | 'delete',
 ) {
-  const allowed = canAccessRoute(session.user.role, action);
-  if (!allowed) throw new UnauthorizedError(action);
+  assertPermission(
+    session,
+    action,
+    canAccessRoute,
+    'route',
+    (a) => new UnauthorizedError(a),
+  );
 }
 
 

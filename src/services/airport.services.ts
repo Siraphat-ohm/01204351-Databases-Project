@@ -8,6 +8,14 @@ import {
 } from '@/types/airport.type';
 import { canAccessAirport } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import type { PaginatedResponse } from '@/types/common';
+import { assertPermission } from '@/services/_shared/authorization';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '@/services/_shared/pagination';
+
+type AirportListItem = Awaited<ReturnType<typeof airportRepository.findAll>>[number];
 
 export class AirportNotFoundError extends Error {
   constructor(identifier: string) {
@@ -41,8 +49,13 @@ function checkPermission(
   session: Session,
   action: 'create' | 'read' | 'update' | 'delete',
 ) {
-  const allowed = canAccessAirport(session.user.role, action);
-  if (!allowed) throw new UnauthorizedError(action);
+  assertPermission(
+    session,
+    action,
+    canAccessAirport,
+    'airport',
+    (a) => new UnauthorizedError(a),
+  );
 }
 
 export const airportService = {
@@ -66,6 +79,29 @@ export const airportService = {
   async findAll(session: Session) {
     checkPermission(session, 'read');
     return airportRepository.findAll();
+  },
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<AirportListItem>> {
+    checkPermission(session, 'read');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const [data, total] = await Promise.all([
+      airportRepository.findAll({ skip, take: limit }),
+      airportRepository.count(),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   },
 
   async createAirport(input: CreateAirportInput, session: Session) {

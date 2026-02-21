@@ -32,6 +32,9 @@ export const staffRepository = {
       orderBy: { employeeId: 'asc' },
     }),
 
+  count: (where?: Prisma.StaffProfileWhereInput) =>
+    prisma.staffProfile.count({ where }),
+
   create: (data: CreateStaffInput) =>
     prisma.staffProfile.create({
       data,

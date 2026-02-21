@@ -26,6 +26,9 @@ export const aircraftRepository = {
       orderBy: { tailNumber: 'asc' },
     }),
 
+  count: (where?: Prisma.AircraftWhereInput) =>
+    prisma.aircraft.count({ where }),
+
   create: (data: CreateAircraftInput) =>
     prisma.aircraft.create({
       data: {

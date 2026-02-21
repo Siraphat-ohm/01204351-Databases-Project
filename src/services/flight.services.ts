@@ -17,6 +17,7 @@ import {
   type FlightCodeSearchParams,
 } from '@/schema/flight.schema';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import { assertPermission } from '@/services/_shared/authorization';
 
 
 export class FlightNotFoundError extends Error {
@@ -36,7 +37,13 @@ function checkPermission(
   session: Session,
   action: 'create' | 'read' | 'update' | 'delete' | 'manage-status',
 ) {
-  if (!canAccessFlight(session.user.role, action)) throw new UnauthorizedError(action);
+  assertPermission(
+    session,
+    action,
+    canAccessFlight,
+    'flight',
+    (a) => new UnauthorizedError(a),
+  );
 }
 
 

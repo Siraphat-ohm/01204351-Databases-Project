@@ -7,6 +7,14 @@ import {
 } from '@/types/aircraft.type';
 import { canAccessAircraft } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import type { PaginatedResponse } from '@/types/common';
+import { assertPermission } from '@/services/_shared/authorization';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '@/services/_shared/pagination';
+
+type AircraftListItem = Awaited<ReturnType<typeof aircraftRepository.findAll>>[number];
 
 export class AircraftNotFoundError extends Error {
   constructor(identifier: string) {
@@ -40,8 +48,13 @@ function checkPermission(
   session: Session,
   action: 'create' | 'read' | 'update' | 'delete' | 'manage-status',
 ) {
-  const allowed = canAccessAircraft(session.user.role, action);
-  if (!allowed) throw new UnauthorizedError(action);
+  assertPermission(
+    session,
+    action,
+    canAccessAircraft,
+    'aircraft',
+    (a) => new UnauthorizedError(a),
+  );
 }
 
 export const aircraftService = {
@@ -56,6 +69,29 @@ export const aircraftService = {
   async findAll(session: Session) {
     checkPermission(session, 'read');
     return aircraftRepository.findAll();
+  },
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<AircraftListItem>> {
+    checkPermission(session, 'read');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const [data, total] = await Promise.all([
+      aircraftRepository.findAll({ skip, take: limit }),
+      aircraftRepository.count(),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   },
 
   async createAircraft(input: CreateAircraftInput, session: Session) {
