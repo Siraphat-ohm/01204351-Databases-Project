@@ -219,6 +219,35 @@ API routes:
 - `GET /api/v1/crew-profiles/[userId]`
 - `PATCH /api/v1/crew-profiles/[userId]`
 
+### 4.3.2 `issueReportService` (Mongo)
+
+Files:
+
+- `src/services/issue-report.services.ts`
+- `src/repositories/issue-report.repository.ts`
+- `src/types/issue-report.type.ts`
+- `src/models/IssueReport.ts`
+
+Methods:
+
+- `findById(id, session)`
+- `findMine(session)`
+- `findAll(session)` (admin)
+- `createMine(input, session)`
+- `updateStatus(id, input, session)` (admin)
+
+Errors:
+
+- `IssueReportNotFoundError`
+- `UnauthorizedError`
+
+API routes:
+
+- `GET /api/v1/issues`
+- `POST /api/v1/issues`
+- `GET /api/v1/issues/[id]`
+- `PATCH /api/v1/issues/[id]`
+
 ### 4.4 `routeService`
 
 File: `src/services/route.services.ts`

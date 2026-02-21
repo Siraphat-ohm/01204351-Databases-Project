@@ -1,11 +1,13 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 
+export type IssueStatus = "open" | "investigating" | "resolved" | "closed";
+
 export interface IIssueReport extends Document {
-  mysqlUserId: number;
-  category: string;
+  userId: string;
+  category: "booking" | "payment" | "flight" | "baggage" | "other";
   description: string;
   attachments: string[];
-  status: string;
+  status: IssueStatus;
   adminResolution?: {
     resolvedBy: string;
     note: string;
@@ -15,10 +17,14 @@ export interface IIssueReport extends Document {
 
 const IssueReportSchema = new Schema<IIssueReport>(
   {
-    mysqlUserId: { type: Number, required: true, index: true },
-    category: { type: String, required: true },
+    userId: { type: String, required: true, index: true },
+    category: {
+      type: String,
+      enum: ["booking", "payment", "flight", "baggage", "other"],
+      required: true,
+    },
     description: { type: String, required: true },
-    attachments: [String],
+    attachments: { type: [String], default: [] },
     status: {
       type: String,
       enum: ["open", "investigating", "resolved", "closed"],
