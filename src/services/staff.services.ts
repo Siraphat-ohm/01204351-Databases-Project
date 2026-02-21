@@ -7,6 +7,21 @@ import {
 } from '@/types/staff.type';
 import { canAccessStaff } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import type { PaginatedResponse } from '@/types/common';
+
+type StaffListItem = Awaited<ReturnType<typeof staffRepository.findAll>>[number];
+type PaginationParams = { page?: number; limit?: number };
+
+function toPagination(params?: PaginationParams) {
+  const page = Number.isFinite(params?.page)
+    ? Math.max(1, Math.trunc(params!.page!))
+    : 1;
+  const limit = Number.isFinite(params?.limit)
+    ? Math.min(100, Math.max(1, Math.trunc(params!.limit!)))
+    : 20;
+  const skip = (page - 1) * limit;
+  return { page, limit, skip };
+}
 
 export class StaffNotFoundError extends Error {
   constructor(identifier: string) {
@@ -56,6 +71,29 @@ export const staffService = {
   async findAll(session: Session) {
     checkPermission(session, 'read');
     return staffRepository.findAll();
+  },
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<StaffListItem>> {
+    checkPermission(session, 'read');
+
+    const { page, limit, skip } = toPagination(params);
+    const [data, total] = await Promise.all([
+      staffRepository.findAll({ skip, take: limit }),
+      staffRepository.count(),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   },
 
   async createStaff(input: CreateStaffInput, session: Session) {
