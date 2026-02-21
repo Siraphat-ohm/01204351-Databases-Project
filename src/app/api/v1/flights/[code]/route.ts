@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getFlightDetail } from "@/lib/services/flight/flight.service";
+import { getFlightDetailWithAvailability } from "@/services/flight.services";
 import {
   successResponse,
   errorResponse,
@@ -15,7 +15,7 @@ export async function GET(
   try {
     const { code } = await params;
 
-    const flight = await getFlightDetail({ flightCode: code });
+    const flight = await getFlightDetailWithAvailability({ flightCode: code });
 
     if (!flight) {
       return notFoundResponse("Flight");
