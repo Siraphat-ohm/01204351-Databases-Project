@@ -3,12 +3,19 @@ import {
   checkInTicketSchema,
   type CheckInTicketInput,
 } from '@/types/ticket.type';
+import type { PaginatedResponse } from '@/types/common';
 import { canAccessTicket } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import {
   assertPermission,
   hasPermission,
 } from '@/services/_shared/authorization';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '@/services/_shared/pagination';
+
+type TicketListItem = Awaited<ReturnType<typeof ticketRepository.findAll>>[number];
 
 export class TicketNotFoundError extends Error {
   constructor(identifier: string) {
@@ -89,6 +96,27 @@ export const ticketService = {
   async findAll(session: Session) {
     checkPermission(session, 'read-all');
     return ticketRepository.findAll();
+  },
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<TicketListItem>> {
+    checkPermission(session, 'read-all');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const rows = await ticketRepository.findAll();
+    const total = rows.length;
+
+    return {
+      data: rows.slice(skip, skip + limit),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   },
 
   async checkInTicket(id: string, input: CheckInTicketInput, session: Session) {

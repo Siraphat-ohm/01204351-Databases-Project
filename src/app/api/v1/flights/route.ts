@@ -1,9 +1,10 @@
 import { NextRequest } from "next/server";
-import { searchFlightsWithAvailability } from "@/services/flight.services";
+import { flightService } from "@/services/flight.services";
 import {
   successResponse,
   errorResponse,
   validationErrorResponse,
+  zodFieldErrors,
 } from "@/lib/utils/api-response";
 import { ZodError } from "zod";
 
@@ -15,16 +16,21 @@ export async function GET(req: NextRequest) {
       originIataCode: searchParams.get("originIataCode") ?? undefined,
       destinationIataCode: searchParams.get("destinationIataCode") ?? undefined,
       departureDate: searchParams.get("departureDate") ?? undefined,
-      page: searchParams.get("page") ?? undefined,
-      limit: searchParams.get("limit") ?? undefined,
+      page: Number(searchParams.get("page") ?? 1),
+      limit: Number(searchParams.get("limit") ?? 10),
     };
 
-    const result = await searchFlightsWithAvailability(params);
+    const result = await flightService.searchWithAvailability(params, {
+      user: {
+        id: "public",
+        role: "PASSENGER",
+      },
+    });
 
     return successResponse(result);
   } catch (err) {
     if (err instanceof ZodError) {
-      return validationErrorResponse(err.flatten().fieldErrors);
+      return validationErrorResponse(zodFieldErrors(err)); 
     }
     console.error("[GET /api/v1/flights]", err);
     return errorResponse("Internal server error");

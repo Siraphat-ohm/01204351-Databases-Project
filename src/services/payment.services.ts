@@ -7,6 +7,7 @@ import {
   type CreatePaymentInput,
   type RefundPaymentInput,
 } from '@/types/payment.type';
+import type { PaginatedResponse } from '@/types/common';
 import {
   TransactionStatus,
   TransactionType,
@@ -17,6 +18,12 @@ import {
   assertPermission,
   hasPermission,
 } from '@/services/_shared/authorization';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '@/services/_shared/pagination';
+
+type PaymentListItem = Awaited<ReturnType<typeof paymentRepository.findAll>>[number];
 
 export class PaymentNotFoundError extends Error {
   constructor(identifier: string) {
@@ -98,6 +105,27 @@ export const paymentService = {
   async findAll(session: Session) {
     checkPermission(session, 'read-all');
     return paymentRepository.findAll();
+  },
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<PaymentListItem>> {
+    checkPermission(session, 'read-all');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const rows = await paymentRepository.findAll();
+    const total = rows.length;
+
+    return {
+      data: rows.slice(skip, skip + limit),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   },
 
   async createPayment(input: CreatePaymentInput, session: Session) {
