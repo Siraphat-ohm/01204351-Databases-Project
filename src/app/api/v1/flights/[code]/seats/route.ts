@@ -5,6 +5,7 @@ import {
   errorResponse,
   notFoundResponse,
   validationErrorResponse,
+  zodFieldErrors,
 } from "@/lib/utils/api-response";
 import { ZodError } from "zod";
 
@@ -24,7 +25,7 @@ export async function GET(
     return successResponse(seatLayout);
   } catch (err) {
     if (err instanceof ZodError) {
-      return validationErrorResponse(err.flatten().fieldErrors);
+      return validationErrorResponse(zodFieldErrors(err));
     }
     console.error("[GET /api/v1/flights/[code]/seats]", err);
     return errorResponse("Internal server error");
