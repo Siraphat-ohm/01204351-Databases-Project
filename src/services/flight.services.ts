@@ -1,5 +1,6 @@
 import { flightRepository }    from '@/repositories/flight.repository';
 import { aircraftRepository } from '@/repositories/aircraft.repository';
+import { bookingRepository } from '@/repositories/booking.repository';
 import { seatRepository } from '@/repositories/seat.repository';
 import { canAccessFlight }     from '@/auth/permissions';
 import {
@@ -228,7 +229,14 @@ export const flightService = {
       const updated = await flightRepository.update(id, { aircraftId: data.aircraftId });
       return {
         flight: updated,
-        reassignment: { total: 0, preserved: 0, moved: 0 },
+        reassignment: {
+          total: 0,
+          preserved: 0,
+          moved: 0,
+          downgraded: 0,
+          unseated: 0,
+          pendingReaccommodationBookings: 0,
+        },
       };
     }
 
@@ -240,6 +248,7 @@ export const flightService = {
 
     const assignments = new Map<string, string>();
     const classOverrides = new Map<string, TicketClass>();
+    const overflowTicketIds: string[] = [];
     let preserved = 0;
     let downgraded = 0;
 
@@ -278,11 +287,8 @@ export const flightService = {
       }
 
       if (!nextSeat || !assignedClass) {
-        throw new FlightSeatReassignmentError(
-          data.allowDowngrade
-            ? `Not enough seats across allowed classes for ${ticket.class} on flight ${id}`
-            : `Not enough seats in ${ticket.class} for aircraft change on flight ${id}`,
-        );
+        overflowTicketIds.push(ticket.id);
+        continue;
       }
 
       assignments.set(ticket.id, nextSeat);
@@ -305,18 +311,25 @@ export const flightService = {
     const updatedFlight = await flightRepository.changeAircraftAndSeats({
       flightId: id,
       newAircraftId: data.aircraftId,
+      resetTicketIds: seatedTickets.map((t) => t.id),
       seatAssignments,
     });
 
     if (!updatedFlight) throw new FlightNotFoundError(id);
+
+    const pendingBookingIds = await bookingRepository.markReaccommodationPendingByTicketIds(
+      overflowTicketIds,
+    );
 
     return {
       flight: updatedFlight,
       reassignment: {
         total: seatedTickets.length,
         preserved,
-        moved: seatedTickets.length - preserved,
+        moved: seatAssignments.length - preserved,
         downgraded,
+        unseated: overflowTicketIds.length,
+        pendingReaccommodationBookings: pendingBookingIds.length,
       },
     };
   },

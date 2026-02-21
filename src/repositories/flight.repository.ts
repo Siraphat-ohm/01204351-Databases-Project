@@ -176,6 +176,7 @@ export const flightRepository = {
   changeAircraftAndSeats: async (params: {
     flightId: string;
     newAircraftId: string;
+    resetTicketIds: string[];
     seatAssignments: Array<{ ticketId: string; seatNumber: string; ticketClass?: TicketClass }>;
   }) =>
     prisma.$transaction(async (tx) => {
@@ -184,12 +185,10 @@ export const flightRepository = {
         data: { aircraftId: params.newAircraftId },
       });
 
-      const ticketIds = params.seatAssignments.map((a) => a.ticketId);
-
-      if (ticketIds.length > 0) {
+      if (params.resetTicketIds.length > 0) {
         await tx.ticket.updateMany({
           where: {
-            id: { in: ticketIds },
+            id: { in: params.resetTicketIds },
             flightId: params.flightId,
           },
           data: {
@@ -200,15 +199,16 @@ export const flightRepository = {
           },
         });
 
-        for (const assignment of params.seatAssignments) {
-          await tx.ticket.update({
-            where: { id: assignment.ticketId },
-            data: {
-              seatNumber: assignment.seatNumber,
-              ...(assignment.ticketClass ? { class: assignment.ticketClass } : {}),
-            },
-          });
-        }
+      }
+
+      for (const assignment of params.seatAssignments) {
+        await tx.ticket.update({
+          where: { id: assignment.ticketId },
+          data: {
+            seatNumber: assignment.seatNumber,
+            ...(assignment.ticketClass ? { class: assignment.ticketClass } : {}),
+          },
+        });
       }
 
       return tx.flight.findUnique({
