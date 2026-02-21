@@ -191,6 +191,34 @@ Errors:
 - `StaffInUseError`
 - `UnauthorizedError`
 
+### 4.3.1 `crewProfileService` (Mongo)
+
+Files:
+
+- `src/services/crew-profile.services.ts`
+- `src/repositories/crew-profile.repository.ts`
+- `src/types/crew-profile.type.ts`
+- `src/models/CrewProfile.ts`
+
+Methods:
+
+- `findByUserId(userId, session)`
+- `findMyProfile(session)`
+- `upsertMyProfile(input, session)`
+- `patchByUserId(userId, input, session)`
+
+Errors:
+
+- `CrewProfileNotFoundError`
+- `UnauthorizedError`
+
+API routes:
+
+- `GET /api/v1/crew-profiles/me`
+- `PUT /api/v1/crew-profiles/me`
+- `GET /api/v1/crew-profiles/[userId]`
+- `PATCH /api/v1/crew-profiles/[userId]`
+
 ### 4.4 `routeService`
 
 File: `src/services/route.services.ts`
