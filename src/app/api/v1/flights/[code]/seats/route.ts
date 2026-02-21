@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getFlightSeatLayout } from "@/lib/services/flight/flight.service";
+import { getFlightSeatLayout } from "@/services/seat.services";
 import {
   successResponse,
   errorResponse,
