@@ -329,6 +329,7 @@ Methods:
 - `findAllPaginated(session, params)`
 - `upsertByFlightId(flightId, input, session)`
 - `patchById(id, input, session)`
+- `deleteById(id, session)`
 
 Errors:
 
@@ -343,6 +344,7 @@ API routes:
 - `PUT /api/v1/flight-ops-logs?flightId=...`
 - `GET /api/v1/flight-ops-logs/[id]`
 - `PATCH /api/v1/flight-ops-logs/[id]`
+- `DELETE /api/v1/flight-ops-logs/[id]`
 
 ### 4.4 `routeService`
 

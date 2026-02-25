@@ -113,4 +113,13 @@ export const flightOpsLogService = {
 
     return row;
   },
+
+  async deleteById(id: string, session: Session) {
+    if (!canWrite(session)) throw new UnauthorizedError('delete');
+
+    const row = await flightOpsLogRepository.deleteById(id);
+    if (!row) throw new FlightOpsLogNotFoundError(id);
+
+    return row;
+  },
 };
