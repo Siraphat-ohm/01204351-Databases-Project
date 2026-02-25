@@ -16,9 +16,37 @@ export const flightOpsLogRepository = {
     return FlightOpsLog.findOne({ flightId }).lean();
   },
 
-  async findAll() {
+  async findAll(args?: {
+    where?: Record<string, unknown>;
+    skip?: number;
+    take?: number;
+  }) {
     await connectMongo();
-    return FlightOpsLog.find({}).sort({ updatedAt: -1 }).lean();
+
+    const query = FlightOpsLog.find(args?.where ?? {}).sort({ updatedAt: -1 });
+    if (args?.skip !== undefined) query.skip(args.skip);
+    if (args?.take !== undefined) query.limit(args.take);
+
+    return query.lean();
+  },
+
+  async findMany(args: {
+    where?: Record<string, unknown>;
+    skip?: number;
+    take?: number;
+  }) {
+    await connectMongo();
+
+    const query = FlightOpsLog.find(args.where ?? {}).sort({ updatedAt: -1 });
+    if (args.skip !== undefined) query.skip(args.skip);
+    if (args.take !== undefined) query.limit(args.take);
+
+    return query.lean();
+  },
+
+  async count(where?: Record<string, unknown>) {
+    await connectMongo();
+    return FlightOpsLog.countDocuments(where ?? {});
   },
 
   async upsertByFlightId(flightId: string, input: UpsertFlightOpsLogInput) {

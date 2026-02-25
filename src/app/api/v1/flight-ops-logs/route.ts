@@ -38,6 +38,8 @@ export async function GET(req: NextRequest) {
     if (rl) return rl;
 
     const flightId = req.nextUrl.searchParams.get('flightId');
+    const page = Number(req.nextUrl.searchParams.get('page') ?? 1);
+    const limit = Number(req.nextUrl.searchParams.get('limit') ?? 20);
     const s = { user: { id: session.user.id, role: session.user.role } };
 
     if (flightId) {
@@ -45,8 +47,8 @@ export async function GET(req: NextRequest) {
       return successResponse(row);
     }
 
-    const rows = await flightOpsLogService.findAll(s);
-    return successResponse(rows);
+    const result = await flightOpsLogService.findAllPaginated(s, { page, limit });
+    return successResponse(result);
   } catch (err) {
     if (err instanceof Error && err.name === 'UnauthorizedError') {
       return unauthorized();
