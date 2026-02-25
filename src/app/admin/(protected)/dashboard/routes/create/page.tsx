@@ -7,7 +7,7 @@ export default async function CreateRoutePage() {
   const session = await requireServerSession();
 
   // 2. Fetch Airports for the selection dropdowns
-  const airports = await airportService.findAll(session as any);
+  const airports = await airportService.findAll(session);
 
   // 3. Render the dedicated form component
   return <RouteCreateForm airports={airports as any} />;

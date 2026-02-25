@@ -2,13 +2,13 @@
 import { useDisclosure } from '@mantine/hooks';
 import { 
   Table, Badge, Text, ActionIcon, Group, Paper, TextInput, Button, Title, 
-  Pagination, Center, Select, Avatar, ThemeIcon, Divider, Autocomplete, Stack, Box, Grid, Modal, Alert
+  Pagination, Center, Select, Avatar, ThemeIcon, Divider, Autocomplete, Stack, Box, Grid, Modal, Alert,Tooltip
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
 import { 
   Pencil, Trash, Search, Filter, Plus, PlaneTakeoff, X, ChevronUp, 
-  ChevronDown, User, Clock, ChevronRight, MapPin, Gauge, DollarSign, Plane, Calendar, AlertTriangle, Check
+  ChevronDown, User, Clock, ChevronRight, MapPin, Gauge, DollarSign, Plane, Calendar, AlertTriangle, Check,Ticket
 } from 'lucide-react';
 import { useRouter, useSearchParams, usePathname} from 'next/navigation';
 import { useState, useMemo, Fragment, useTransition } from 'react';
@@ -240,16 +240,40 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
           </Table.Td>
           <Table.Td>
             <Group gap={4} justify="flex-end">
-              <ActionIcon component={Link} href={`/admin/dashboard/flights/${flight.id}/edit`} variant="subtle" color="blue" onClick={(e) => e.stopPropagation()}>
-                <Pencil size={16} />
-              </ActionIcon>
-              <ActionIcon 
-                variant="subtle" 
-                color="red" 
-                onClick={(e) => handleDeleteClick(flight, e)}
-              >
-                <Trash size={16} />
-              </ActionIcon>
+              {/* ✅ ADDED TICKETS BUTTON HERE */}
+              <Tooltip label="View Tickets">
+                <ActionIcon 
+                  component={Link} 
+                  href={`/admin/dashboard/flights/${flight.id}/tickets`} 
+                  variant="subtle" 
+                  color="grape" 
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Ticket size={16} />
+                </ActionIcon>
+              </Tooltip>
+
+              <Tooltip label="Edit Flight">
+                <ActionIcon 
+                  component={Link} 
+                  href={`/admin/dashboard/flights/${flight.id}/edit`} 
+                  variant="subtle" 
+                  color="blue" 
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Pencil size={16} />
+                </ActionIcon>
+              </Tooltip>
+
+              <Tooltip label="Delete Flight">
+                <ActionIcon 
+                  variant="subtle" 
+                  color="red" 
+                  onClick={(e) => handleDeleteClick(flight, e)}
+                >
+                  <Trash size={16} />
+                </ActionIcon>
+              </Tooltip>
             </Group>
           </Table.Td>
         </Table.Tr>
@@ -415,7 +439,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
             <Table.Thead bg="gray.0">
               <Table.Tr>
                 <Table.Th onClick={() => handleSort('flightCode')} style={{ cursor: 'pointer' }}><Group gap={4}>Flight / Aircraft <SortIcon columnKey="flightCode" /></Group></Table.Th>
-                <Table.Th onClick={() => handleSort('route')} style={{ cursor: 'pointer', minWidth: '220px' }}><Group gap={4}>Route <SortIcon columnKey="route" /></Group></Table.Th>
+                <Table.Th onClick={() => handleSort('route')} style={{ cursor: 'pointer', minWidth: '220px' }}><Group gap={4} ml={50}>Route <SortIcon columnKey="route" /></Group></Table.Th>
                 <Table.Th onClick={() => handleSort('departureTime')} style={{ cursor: 'pointer' }}><Group gap={4}>STD <SortIcon columnKey="departureTime" /></Group></Table.Th>
                 <Table.Th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}><Group gap={4}>Status <SortIcon columnKey="status" /></Group></Table.Th>
                 <Table.Th>Gate</Table.Th>
