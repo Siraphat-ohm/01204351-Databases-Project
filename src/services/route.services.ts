@@ -113,11 +113,16 @@ export const routeService = {
     checkPermission(session, 'read');
 
     const { page, limit, skip } = resolvePagination(params);
-    const rows = await routeRepository.findAll();
-    const total = rows.length;
+    const [data, total] = await Promise.all([
+      routeRepository.findMany({
+        skip,
+        take: limit,
+      }),
+      routeRepository.count(),
+    ]);
 
     return {
-      data: rows.slice(skip, skip + limit),
+      data,
       meta: {
         page,
         limit,

@@ -371,7 +371,7 @@ Errors:
 
 Notes:
 
-- Pagination currently slices in-memory from `findAll()` result.
+- Pagination uses repository-level `skip/take` plus `count()`.
 
 ### 4.5 `flightService`
 
@@ -522,7 +522,7 @@ Errors:
 
 Notes:
 
-- `findAllPaginated` currently slices in-memory from `findAll()` result.
+- `findAllPaginated` uses repository-level `skip/take` plus `count()`.
 
 ## 5) Current Public Flight APIs
 

@@ -3,10 +3,17 @@ import {
   paymentAdminInclude,
   type CreatePaymentInput,
 } from '@/types/payment.type';
+import type { Prisma } from '@/generated/prisma/client';
 import {
   TransactionStatus,
   TransactionType,
 } from '@/generated/prisma/client';
+
+type PaymentFindManyArgs = {
+  where?: Prisma.TransactionWhereInput;
+  skip?: number;
+  take?: number;
+};
 
 export const paymentRepository = {
   findById: (id: string) =>
@@ -37,11 +44,26 @@ export const paymentRepository = {
       orderBy: { createdAt: 'desc' },
     }),
 
-  findAll: () =>
+  findAll: (args?: PaymentFindManyArgs) =>
     prisma.transaction.findMany({
+      where: args?.where,
+      skip: args?.skip,
+      take: args?.take,
       include: paymentAdminInclude,
       orderBy: { createdAt: 'desc' },
     }),
+
+  findMany: (args: PaymentFindManyArgs) =>
+    prisma.transaction.findMany({
+      where: args.where,
+      skip: args.skip,
+      take: args.take,
+      include: paymentAdminInclude,
+      orderBy: { createdAt: 'desc' },
+    }),
+
+  count: (where?: Prisma.TransactionWhereInput) =>
+    prisma.transaction.count({ where }),
 
   createPayment: (input: CreatePaymentInput) =>
     prisma.transaction.create({
