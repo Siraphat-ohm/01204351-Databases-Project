@@ -449,7 +449,7 @@ Errors:
 
 Notes:
 
-- `findAllPaginated` currently slices in-memory from `findAll()` result.
+- `findAllPaginated` uses repository-level `skip/take` plus `count()`.
 - `findByFlightCode` normalizes input with `trim().toUpperCase()`.
 - Non-admin users only receive their own bookings for `findByFlightId`/`findByFlightCode`.
 
@@ -480,7 +480,7 @@ Errors:
 
 Notes:
 
-- `findAllPaginated` currently slices in-memory from `findAll()` result.
+- `findAllPaginated` uses repository-level `skip/take` plus `count()`.
 - `findByFlightCode` normalizes input with `trim().toUpperCase()`.
 - Non-admin users only receive their own tickets for `findByFlightId`/`findByFlightCode`.
 
