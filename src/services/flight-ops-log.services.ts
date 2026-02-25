@@ -6,8 +6,13 @@ import {
   type UpsertFlightOpsLogInput,
   type PatchFlightOpsLogInput,
 } from '@/types/flight-ops-log.type';
+import type { PaginatedResponse } from '@/types/common';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import { hasAnyRole } from '@/services/_shared/role';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '@/services/_shared/pagination';
 
 export class FlightOpsLogNotFoundError extends Error {
   constructor(id: string) {
@@ -61,6 +66,32 @@ export const flightOpsLogService = {
   async findAll(session: Session) {
     if (!canRead(session)) throw new UnauthorizedError('read-all');
     return flightOpsLogRepository.findAll();
+  },
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<Awaited<ReturnType<typeof flightOpsLogRepository.findAll>>[number]>> {
+    if (!canRead(session)) throw new UnauthorizedError('read-all');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const [data, total] = await Promise.all([
+      flightOpsLogRepository.findMany({
+        skip,
+        take: limit,
+      }),
+      flightOpsLogRepository.count(),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   },
 
   async upsertByFlightId(flightId: string, input: UpsertFlightOpsLogInput, session: Session) {

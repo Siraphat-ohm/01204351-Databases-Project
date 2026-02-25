@@ -55,3 +55,22 @@ export function getClientIpFromHeaders(headers: Headers) {
 
   return 'unknown';
 }
+
+type ApiRateLimitOptions = {
+  headers: Headers;
+  namespace: string;
+  userId: string;
+  action: 'read' | 'write';
+  readLimit?: number;
+  writeLimit?: number;
+  windowMs?: number;
+};
+
+export function enforceApiRateLimit(options: ApiRateLimitOptions) {
+  const ip = getClientIpFromHeaders(options.headers);
+  return checkRateLimit({
+    key: `${options.namespace}:${options.action}:${options.userId}:${ip}`,
+    limit: options.action === 'read' ? (options.readLimit ?? 120) : (options.writeLimit ?? 30),
+    windowMs: options.windowMs ?? 60_000,
+  });
+}

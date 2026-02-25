@@ -6,8 +6,13 @@ import {
   type CreatePaymentLogInput,
   type UpdatePaymentLogInput,
 } from '@/types/payment-log.type';
+import type { PaginatedResponse } from '@/types/common';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import { hasAnyRole } from '@/services/_shared/role';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '@/services/_shared/pagination';
 
 export class PaymentLogNotFoundError extends Error {
   constructor(id: string) {
@@ -64,6 +69,32 @@ export const paymentLogService = {
   async findAll(session: Session) {
     if (!isAdmin(session)) throw new UnauthorizedError('read-all');
     return paymentLogRepository.findAll();
+  },
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<Awaited<ReturnType<typeof paymentLogRepository.findAll>>[number]>> {
+    if (!isAdmin(session)) throw new UnauthorizedError('read-all');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const [data, total] = await Promise.all([
+      paymentLogRepository.findMany({
+        skip,
+        take: limit,
+      }),
+      paymentLogRepository.count(),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   },
 
   async create(input: CreatePaymentLogInput, session: Session) {

@@ -8,7 +8,7 @@ import {
   validationErrorResponse,
   zodFieldErrors,
 } from '@/lib/utils/api-response';
-import { checkRateLimit, getClientIpFromHeaders } from '@/lib/utils/rate-limit';
+import { enforceApiRateLimit } from '@/lib/utils/rate-limit';
 
 function unauthorized() {
   return errorResponse('Unauthorized', 401);
@@ -16,17 +16,6 @@ function unauthorized() {
 
 function tooManyRequests(retryAfterMs: number) {
   return errorResponse(`Too many requests. Retry in ${Math.ceil(retryAfterMs / 1000)}s`, 429);
-}
-
-function enforceRateLimit(req: NextRequest, userId: string, action: 'read' | 'write') {
-  const ip = getClientIpFromHeaders(req.headers);
-  const limited = checkRateLimit({
-    key: `api:v1:issues:id:${action}:${userId}:${ip}`,
-    limit: action === 'read' ? 120 : 30,
-    windowMs: 60_000,
-  });
-  if (!limited.ok) return tooManyRequests(limited.retryAfterMs);
-  return null;
 }
 
 export async function GET(
@@ -37,8 +26,13 @@ export async function GET(
     const session = await getServerSession();
     if (!session?.user) return unauthorized();
 
-    const rl = enforceRateLimit(req, session.user.id, 'read');
-    if (rl) return rl;
+    const limited = enforceApiRateLimit({
+      headers: req.headers,
+      namespace: 'api:v1:issues:id',
+      userId: session.user.id,
+      action: 'read',
+    });
+    if (!limited.ok) return tooManyRequests(limited.retryAfterMs);
 
     const { id } = await params;
     const row = await issueReportService.findById(id, {
@@ -66,8 +60,13 @@ export async function PATCH(
     const session = await getServerSession();
     if (!session?.user) return unauthorized();
 
-    const rl = enforceRateLimit(req, session.user.id, 'write');
-    if (rl) return rl;
+    const limited = enforceApiRateLimit({
+      headers: req.headers,
+      namespace: 'api:v1:issues:id',
+      userId: session.user.id,
+      action: 'write',
+    });
+    if (!limited.ok) return tooManyRequests(limited.retryAfterMs);
 
     const { id } = await params;
     const body = await req.json();
