@@ -2,30 +2,31 @@
 import { useDisclosure } from '@mantine/hooks';
 import { 
   Table, Badge, Text, ActionIcon, Group, Paper, TextInput, Button, Title, 
-  Pagination, Center, Select, Avatar, ThemeIcon, Divider, Autocomplete, Stack, Box,Grid, Modal,Alert
+  Pagination, Center, Select, Avatar, ThemeIcon, Divider, Autocomplete, Stack, Box, Grid, Modal, Alert
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
+import { notifications } from '@mantine/notifications';
 import { 
   Pencil, Trash, Search, Filter, Plus, PlaneTakeoff, X, ChevronUp, 
-  ChevronDown, User, Clock, ChevronRight, MapPin, Gauge, DollarSign, Plane, Calendar, AlertTriangle
+  ChevronDown, User, Clock, ChevronRight, MapPin, Gauge, DollarSign, Plane, Calendar, AlertTriangle, Check
 } from 'lucide-react';
 import { useRouter, useSearchParams, usePathname} from 'next/navigation';
-import { useState, useMemo, Fragment,useTransition } from 'react';
+import { useState, useMemo, Fragment, useTransition } from 'react';
 import Link from 'next/link';
 import { FlightStatus } from '@/generated/prisma/client';
 import '@mantine/dates/styles.css';
-import { deleteFlightAction } from '@/app/actions/flight-actions';
+import { deleteFlightAction } from '@/actions/flight-actions';
 
-// --- Types ---
+// --- Types (Fixed ID to string) ---
 export interface FlightTableRow {
-  id: number;
+  id: string; 
   flightCode: string;
   status: FlightStatus;
   gate: string | null;
   departureTime: Date;
   arrivalTime: Date;
   basePrice: number;
-  captainId: number | null;
+  captainId: string | null;
   route: {
     distanceKm: number;
     durationMins: number;
@@ -56,28 +57,6 @@ const getStatusColor = (status: string) => {
   }
 };
 
-export interface FlightTableRow {
-  id: number;
-  flightCode: string;
-  status: FlightStatus;
-  gate: string | null;
-  departureTime: Date;
-  arrivalTime: Date;
-  basePrice: number;
-  captainId: number | null;
-  route: {
-    distanceKm: number;
-    durationMins: number;
-    origin: { iataCode: string; city: string; name: string; country: string };
-    destination: { iataCode: string; city: string; name: string; country: string };
-  };
-  aircraft: {
-    tailNumber: string;
-    model: string;
-    status: string;
-  };
-}
-
 const formatTime = (date: Date | string) => {
   return new Intl.DateTimeFormat('en-GB', { 
     hour: '2-digit', minute: '2-digit' 
@@ -89,10 +68,12 @@ interface SortConfig {
   direction: 'asc' | 'desc';
 }
 
-const getMockCaptain = (id: number) => {
+const getMockCaptain = (id: string | null) => {
   if (!id) return "Unassigned"; 
   const captains = ['Capt. James Maverick', 'Capt. Sarah Connor', 'Capt. Ellen Ripley', 'Capt. Han Solo'];
-  return captains[id % captains.length];
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash += id.charCodeAt(i);
+  return captains[hash % captains.length];
 };
 
 export function FlightTable({ data, totalPages }: { data: FlightTableRow[], totalPages: number }) {
@@ -100,7 +81,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [expandedRows, setExpandedRows] = useState<number[]>([]);
+  const [expandedRows, setExpandedRows] = useState<string[]>([]);
   
   // Filter States
   const [flightCodeSearch, setFlightCodeSearch] = useState(searchParams.get('flightCode') || '');
@@ -115,7 +96,6 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
 
   // Sorting State
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
-  const [deletingFlightId, setDeletingFlightId] = useState<number | null>(null);
 
   const [deleteOpened, { open: openDelete, close: closeDelete }] = useDisclosure(false);
   const [flightToDelete, setFlightToDelete] = useState<FlightTableRow | null>(null);
@@ -123,7 +103,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleDeleteClick = (flight: FlightTableRow, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent row expansion
+    e.stopPropagation(); 
     setFlightToDelete(flight);
     setDeleteError(null);
     openDelete();
@@ -137,37 +117,32 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
       if (result?.error) {
         setDeleteError(result.error);
       } else {
+        notifications.show({
+          title: "Flight Deleted",
+          message: `${flightToDelete.flightCode} has been successfully removed.`,
+          color: "green",
+          icon: <Check size={18} />,
+        });
         closeDelete();
         setFlightToDelete(null);
       }
     });
   };
 
-  const toggleRow = (id: number) => {
+  const toggleRow = (id: string) => {
     setExpandedRows((current) =>
       current.includes(id) ? current.filter((rowId) => rowId !== id) : [...current, id]
     );
   };
 
-  // ✅ UPDATED: 3-State Sorting Logic
   const handleSort = (key: string) => {
     setSortConfig((current) => {
-      // 1. If clicking a new key -> ASC
-      if (!current || current.key !== key) {
-        return { key, direction: 'asc' };
-      }
-      
-      // 2. If currently ASC -> DESC
-      if (current.direction === 'asc') {
-        return { key, direction: 'desc' };
-      }
-
-      // 3. If currently DESC -> NULL (Reset)
+      if (!current || current.key !== key) return { key, direction: 'asc' };
+      if (current.direction === 'asc') return { key, direction: 'desc' };
       return null;
     });
   };
 
-  // Sorting Logic Implementation
   const sortedData = useMemo(() => {
     if (!sortConfig) return data;
     return [...data].sort((a, b) => {
@@ -188,7 +163,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
   }, [data, sortConfig]);
 
   const SortIcon = ({ columnKey }: { columnKey: string }) => {
-    if (sortConfig?.key !== columnKey) return null; // No icon if not sorted or sorted by other key
+    if (sortConfig?.key !== columnKey) return null; 
     return sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
   };
 
@@ -235,21 +210,24 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
               <PlaneTakeoff size={14} color="var(--mantine-color-blue-6)" />
               <Text fw={700}>{flight.flightCode}</Text>
             </Group>
-            <Text size="xs" c="dimmed" pl={34}>{flight.aircraft.model}</Text>
+            <Text size="xs" c="dimmed" pl={34}>{flight.aircraft?.model}</Text>
           </Table.Td>
+          
           <Table.Td>
-            <Group gap="xs" align="center">
-              <div style={{ textAlign: 'right' }}>
-                <Text fw={700} lh={1}>{flight.route.origin.iataCode}</Text>
-                <Text size="xs" c="dimmed">{flight.route.origin.city}</Text>
-              </div>
+            {/* 🔒 FIX: LOCKED ROUTE COLUMN WITH FIXED WIDTHS */}
+            <Group gap="sm" align="center" wrap="nowrap">
+              <Box w={80} style={{ textAlign: 'right' }}>
+                <Text fw={700} lh={1}>{flight.route?.origin?.iataCode}</Text>
+                <Text size="xs" c="dimmed" truncate>{flight.route?.origin?.city}</Text>
+              </Box>
               <Text c="dimmed">→</Text>
-              <div>
-                <Text fw={700} lh={1}>{flight.route.destination.iataCode}</Text>
-                <Text size="xs" c="dimmed">{flight.route.destination.city}</Text>
-              </div>
+              <Box w={80}>
+                <Text fw={700} lh={1}>{flight.route?.destination?.iataCode}</Text>
+                <Text size="xs" c="dimmed" truncate>{flight.route?.destination?.city}</Text>
+              </Box>
             </Group>
           </Table.Td>
+          
           <Table.Td>
             <Text fw={500}>{formatTime(flight.departureTime)}</Text>
             <Text size="xs" c="dimmed">{new Date(flight.departureTime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short'})}</Text>
@@ -262,7 +240,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
           </Table.Td>
           <Table.Td>
             <Group gap={4} justify="flex-end">
-              <ActionIcon component={Link} href={`/dashboard/flights/${flight.flightCode}/edit`} variant="subtle" color="blue" onClick={(e) => e.stopPropagation()}>
+              <ActionIcon component={Link} href={`/admin/dashboard/flights/${flight.id}/edit`} variant="subtle" color="blue" onClick={(e) => e.stopPropagation()}>
                 <Pencil size={16} />
               </ActionIcon>
               <ActionIcon 
@@ -288,27 +266,27 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
                       <Group align="flex-start" wrap="nowrap">
                         <ThemeIcon size="sm" color="blue" variant="light" mt={2}><MapPin size={12}/></ThemeIcon>
                         <Box>
-                          <Text size="sm" fw={600}>{flight.route.origin.city} ({flight.route.origin.iataCode})</Text>
-                          <Text size="xs" c="dimmed">{flight.route.origin.name}, {flight.route.origin.country}</Text>
+                          <Text size="sm" fw={600}>{flight.route?.origin?.city} ({flight.route?.origin?.iataCode})</Text>
+                          <Text size="xs" c="dimmed">{flight.route?.origin?.name}, {flight.route?.origin?.country}</Text>
                         </Box>
                       </Group>
                       <Box ml={11} h={16} style={{ borderLeft: '1px dashed var(--mantine-color-gray-5)' }} />
                       <Group align="flex-start" wrap="nowrap">
                         <ThemeIcon size="sm" color="orange" variant="light" mt={2}><MapPin size={12}/></ThemeIcon>
                         <Box>
-                          <Text size="sm" fw={600}>{flight.route.destination.city} ({flight.route.destination.iataCode})</Text>
-                          <Text size="xs" c="dimmed">{flight.route.destination.name}, {flight.route.destination.country}</Text>
+                          <Text size="sm" fw={600}>{flight.route?.destination?.city} ({flight.route?.destination?.iataCode})</Text>
+                          <Text size="xs" c="dimmed">{flight.route?.destination?.name}, {flight.route?.destination?.country}</Text>
                         </Box>
                       </Group>
                       <Divider my="xs" label="Stats" labelPosition="left" />
                       <Group gap="xl">
                         <Group gap="xs">
                           <Gauge size={16} className="text-gray-500" />
-                          <div><Text size="xs" c="dimmed">Distance</Text><Text size="sm" fw={500}>{flight.route.distanceKm.toLocaleString()} km</Text></div>
+                          <div><Text size="xs" c="dimmed">Distance</Text><Text size="sm" fw={500}>{flight.route?.distanceKm?.toLocaleString()} km</Text></div>
                         </Group>
                         <Group gap="xs">
                           <Clock size={16} className="text-gray-500" />
-                          <div><Text size="xs" c="dimmed">Duration</Text><Text size="sm" fw={500}>{flight.route.durationMins || '-'} mins</Text></div>
+                          <div><Text size="xs" c="dimmed">Duration</Text><Text size="sm" fw={500}>{flight.route?.durationMins || '-'} mins</Text></div>
                         </Group>
                       </Group>
                     </Stack>
@@ -320,9 +298,9 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
                       <Group align="flex-start">
                         <Avatar color="gray" radius="sm"><Plane size={20} /></Avatar>
                         <div>
-                          <Text size="sm" fw={600}>{flight.aircraft.model}</Text>
-                          <Text size="xs" c="dimmed">Tail: {flight.aircraft.tailNumber}</Text>
-                          <Badge size="xs" variant="outline" color={flight.aircraft.status === 'ACTIVE' ? 'green' : 'red'} mt={4}>Fleet: {flight.aircraft.status}</Badge>
+                          <Text size="sm" fw={600}>{flight.aircraft?.model}</Text>
+                          <Text size="xs" c="dimmed">Tail: {flight.aircraft?.tailNumber}</Text>
+                          <Badge size="xs" variant="outline" color={flight.aircraft?.status === 'ACTIVE' ? 'green' : 'red'} mt={4}>Fleet: {flight.aircraft?.status}</Badge>
                         </div>
                       </Group>
                       <Group gap="xl">
@@ -345,7 +323,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
                       <Paper withBorder p="xs" radius="md" bg="white">
                         <Group justify="space-between">
                           <Group gap="xs"><DollarSign size={16} className="text-green-600" /><Text size="sm" c="dimmed">Base Price</Text></Group>
-                          <Text fw={700} size="lg">${flight.basePrice.toLocaleString()}</Text>
+                          <Text fw={700} size="lg">${flight.basePrice?.toLocaleString()}</Text>
                         </Group>
                       </Paper>
                     </Stack>
@@ -366,80 +344,70 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
           <Title order={2}>Flight Operations</Title>
           <Text c="dimmed" size="sm">Monitor real-time flight status</Text>
         </div>
-        <Button component={Link} href="/dashboard/flights/create" leftSection={<Plus size={16} />}>
+        <Button component={Link} href="/admin/dashboard/flights/create" leftSection={<Plus size={16} />}>
           New Flight
         </Button>
       </Group>
 
       {/* --- SEARCH BAR --- */}
-    <Paper shadow="xs" p="md" mb="lg" withBorder>
-  {/* w="100%" ensures the group fills the paper. align="end" aligns inputs with buttons. */}
-  <Group align="end" gap="sm" w="100%">
-    
-    <TextInput 
-      label="Flight Code" 
-      placeholder="TG101" 
-      leftSection={<Search size={16} />} 
-      value={flightCodeSearch} 
-      onChange={(e) => setFlightCodeSearch(e.currentTarget.value)}
-      // flex: 1 makes it grow. minWidth prevents it from crushing on small screens
-      style={{ flex: 1, minWidth: '110px' }} 
-    />
-
-    <Autocomplete
-      label="Origin" 
-      placeholder="BKK"
-      data={AIRPORT_SUGGESTIONS}
-      leftSection={<MapPin size={16} />}
-      value={originSearch} 
-      onChange={setOriginSearch}
-      style={{ flex: 1, minWidth: '110px' }}
-    />
-
-    <Autocomplete
-      label="Dest" 
-      placeholder="NRT"
-      data={AIRPORT_SUGGESTIONS}
-      leftSection={<MapPin size={16} />}
-      value={destSearch} 
-      onChange={setDestSearch}
-      style={{ flex: 1, minWidth: '110px' }}
-    />
-
-    <DatePickerInput
-      label="Date"
-      placeholder="Select date"
-      leftSection={<Calendar size={16} />}
-      value={dateValue}
-      onChange={(e) => setDateValue(e ? new Date(e) : null)}
-      clearable
-      style={{ flex: 1, minWidth: '130px' }}
-    />
-    
-    <Select
-      label="Status" 
-      placeholder="All"
-      data={['SCHEDULED', 'BOARDING', 'DELAYED', 'DEPARTED', 'ARRIVED', 'CANCELLED']}
-      value={statusFilter} 
-      onChange={setStatusFilter}
-      clearable 
-      style={{ flex: 1, minWidth: '130px' }}
-    />
-
-    {/* Button Group: No flex grow, so it stays compact at the end */}
-    <Group justify="flex-end" gap="xs">
-      {(flightCodeSearch || originSearch || destSearch || dateValue || statusFilter) && (
-        <Button variant="default" color="gray" onClick={clearFilters}>
-          Clear
-        </Button>
-      )}
-      <Button variant="filled" leftSection={<Filter size={16} />} onClick={applyFilters}>
-        Filter
-      </Button>
-    </Group>
-
-  </Group>
-</Paper>
+      <Paper shadow="xs" p="md" mb="lg" withBorder>
+        <Group align="end" gap="sm" w="100%">
+          <TextInput 
+            label="Flight Code" 
+            placeholder="TG101" 
+            leftSection={<Search size={16} />} 
+            value={flightCodeSearch} 
+            onChange={(e) => setFlightCodeSearch(e.currentTarget.value)}
+            style={{ flex: 1, minWidth: '110px' }} 
+          />
+          <Autocomplete
+            label="Origin" 
+            placeholder="BKK"
+            data={AIRPORT_SUGGESTIONS}
+            leftSection={<MapPin size={16} />}
+            value={originSearch} 
+            onChange={setOriginSearch}
+            style={{ flex: 1, minWidth: '110px' }}
+          />
+          <Autocomplete
+            label="Dest" 
+            placeholder="NRT"
+            data={AIRPORT_SUGGESTIONS}
+            leftSection={<MapPin size={16} />}
+            value={destSearch} 
+            onChange={setDestSearch}
+            style={{ flex: 1, minWidth: '110px' }}
+          />
+          <DatePickerInput
+            label="Date"
+            placeholder="Select date"
+            leftSection={<Calendar size={16} />}
+            value={dateValue}
+            onChange={(e) => setDateValue(e ? new Date(e) : null)}
+            clearable
+            style={{ flex: 1, minWidth: '130px' }}
+          />
+          <Select
+            label="Status" 
+            placeholder="All"
+            data={['SCHEDULED', 'BOARDING', 'DELAYED', 'DEPARTED', 'ARRIVED', 'CANCELLED']}
+            value={statusFilter} 
+            onChange={setStatusFilter}
+            clearable 
+            style={{ flex: 1, minWidth: '130px' }}
+          />
+          <Group justify="flex-end" gap="xs">
+            {(flightCodeSearch || originSearch || destSearch || dateValue || statusFilter) && (
+              <Button variant="default" color="gray" onClick={clearFilters}>
+                Clear
+              </Button>
+            )}
+            <Button variant="filled" leftSection={<Filter size={16} />} onClick={applyFilters}>
+              Filter
+            </Button>
+          </Group>
+        </Group>
+      </Paper>
 
       <Paper shadow="xs" withBorder mb="lg">
         <Table.ScrollContainer minWidth={900}>
@@ -447,7 +415,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
             <Table.Thead bg="gray.0">
               <Table.Tr>
                 <Table.Th onClick={() => handleSort('flightCode')} style={{ cursor: 'pointer' }}><Group gap={4}>Flight / Aircraft <SortIcon columnKey="flightCode" /></Group></Table.Th>
-                <Table.Th onClick={() => handleSort('route')} style={{ cursor: 'pointer' }}><Group gap={4}>Route <SortIcon columnKey="route" /></Group></Table.Th>
+                <Table.Th onClick={() => handleSort('route')} style={{ cursor: 'pointer', minWidth: '220px' }}><Group gap={4}>Route <SortIcon columnKey="route" /></Group></Table.Th>
                 <Table.Th onClick={() => handleSort('departureTime')} style={{ cursor: 'pointer' }}><Group gap={4}>STD <SortIcon columnKey="departureTime" /></Group></Table.Th>
                 <Table.Th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}><Group gap={4}>Status <SortIcon columnKey="status" /></Group></Table.Th>
                 <Table.Th>Gate</Table.Th>
@@ -479,7 +447,6 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
             This action cannot be undone. Associated bookings and data will be removed.
           </Alert>
 
-          {/* Show error from server if deletion failed */}
           {deleteError && (
             <Alert color="red" title="Error" icon={<X size={16} />}>
               {deleteError}
@@ -503,5 +470,3 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
     </>
   );
 }
-
-

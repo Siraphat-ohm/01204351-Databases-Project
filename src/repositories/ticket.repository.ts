@@ -1,8 +1,16 @@
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@/generated/prisma/client';
 import {
   ticketAdminInclude,
   type CreateTicketInput,
+  type UpdateTicketInput,
 } from '@/types/ticket.type';
+
+type TicketFindManyArgs = {
+  where?: Prisma.TicketWhereInput;
+  skip?: number;
+  take?: number;
+};
 
 export const ticketRepository = {
   findById: (id: string) =>
@@ -11,11 +19,26 @@ export const ticketRepository = {
       include: ticketAdminInclude,
     }),
 
-  findAll: () =>
+  findAll: (args?: TicketFindManyArgs) =>
     prisma.ticket.findMany({
+      where: args?.where,
+      skip: args?.skip,
+      take: args?.take,
       include: ticketAdminInclude,
       orderBy: { id: 'asc' },
     }),
+
+  findMany: (args: TicketFindManyArgs) =>
+    prisma.ticket.findMany({
+      where: args.where,
+      skip: args.skip,
+      take: args.take,
+      include: ticketAdminInclude,
+      orderBy: { id: 'asc' },
+    }),
+
+  count: (where?: Prisma.TicketWhereInput) =>
+    prisma.ticket.count({ where }),
 
   findByUserId: (userId: string) =>
     prisma.ticket.findMany({
@@ -33,6 +56,24 @@ export const ticketRepository = {
       orderBy: { id: 'asc' },
     }),
 
+  findByFlightId: (flightId: string) =>
+    prisma.ticket.findMany({
+      where: { flightId },
+      include: ticketAdminInclude,
+      orderBy: { id: 'asc' },
+    }),
+
+  findByFlightCode: (flightCode: string) =>
+    prisma.ticket.findMany({
+      where: {
+        flight: {
+          flightCode,
+        },
+      },
+      include: ticketAdminInclude,
+      orderBy: { id: 'asc' },
+    }),
+
   findSeatAssignment: (flightId: string, seatNumber: string) =>
     prisma.ticket.findFirst({
       where: {
@@ -44,6 +85,19 @@ export const ticketRepository = {
   create: (data: CreateTicketInput) =>
     prisma.ticket.create({
       data,
+      include: ticketAdminInclude,
+    }),
+
+  update: (id: string, data: UpdateTicketInput) =>
+    prisma.ticket.update({
+      where: { id },
+      data,
+      include: ticketAdminInclude,
+    }),
+
+  delete: (id: string) =>
+    prisma.ticket.delete({
+      where: { id },
       include: ticketAdminInclude,
     }),
 

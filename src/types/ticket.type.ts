@@ -12,7 +12,26 @@ export const checkInTicketSchema = z.object({
   boardingPass: z.string().trim().min(4).optional(),
 });
 
+export const updateTicketSchema = z
+  .object({
+    class: z.nativeEnum(TicketClass).optional(),
+    seatNumber: seatNumberSchema.nullable().optional(),
+    price: z.number().positive().optional(),
+    firstName: z.string().trim().min(1).optional(),
+    lastName: z.string().trim().min(1).optional(),
+    dateOfBirth: z.coerce.date().nullable().optional(),
+    passportNumber: z.string().trim().min(1).nullable().optional(),
+    nationality: z.string().trim().min(1).nullable().optional(),
+    gender: z.string().trim().min(1).nullable().optional(),
+    seatSurcharge: z.number().min(0).optional(),
+  })
+  .refine(
+    (data) => Object.values(data).some((value) => value !== undefined),
+    { message: 'At least one field must be provided for update' },
+  );
+
 export type CheckInTicketInput = z.infer<typeof checkInTicketSchema>;
+export type UpdateTicketInput = z.infer<typeof updateTicketSchema>;
 
 export const ticketAdminInclude = {
   booking: {

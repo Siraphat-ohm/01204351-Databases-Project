@@ -1,20 +1,61 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { NextRequest } from 'next/server';
+import { airportService } from '@/services/airport.services';
+import { getServerSession } from '@/services/auth.services';
+import {
+  successResponse,
+  errorResponse,
+  unauthorizedResponse,
+  tooManyRequestsResponse,
+} from '@/lib/utils/api-response';
+import { enforceApiRateLimit } from '@/lib/utils/rate-limit';
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const search = searchParams.get("search") || "";
+function resolvePageLimit(req: NextRequest) {
+  const pageParam = req.nextUrl.searchParams.get('page');
+  const limitParam = req.nextUrl.searchParams.get('limit');
+  const skipParam = req.nextUrl.searchParams.get('skip');
+  const takeParam = req.nextUrl.searchParams.get('take');
 
-  const airports = await prisma.airport.findMany({
-    where: {
-      OR: [
-        { iataCode: { contains: search, mode: "insensitive" } },
-        { city: { contains: search, mode: "insensitive" } },
-        { name: { contains: search, mode: "insensitive" } },
-      ],
-    },
-    take: 20,
-  });
+  if (skipParam !== null || takeParam !== null) {
+    const skip = Number(skipParam ?? 0);
+    const take = Number(takeParam ?? 20);
+    const limit = take > 0 ? take : 20;
+    const page = Math.floor((skip > 0 ? skip : 0) / limit) + 1;
+    return { page, limit };
+  }
 
-  return NextResponse.json(airports);
+  return {
+    page: Number(pageParam ?? 1),
+    limit: Number(limitParam ?? 20),
+  };
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getServerSession();
+    if (!session?.user) return unauthorizedResponse();
+
+    const limited = enforceApiRateLimit({
+      headers: req.headers,
+      namespace: 'api:v1:airports',
+      userId: session.user.id,
+      action: 'read',
+    });
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
+
+    const search = req.nextUrl.searchParams.get('search') ?? '';
+    const { page, limit } = resolvePageLimit(req);
+    const result = await airportService.searchPaginated(
+      search,
+      { user: { id: session.user.id, role: session.user.role } },
+      { page, limit },
+    );
+
+    return successResponse(result);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'UnauthorizedError') {
+      return unauthorizedResponse();
+    }
+    console.error('[GET /api/v1/airports]', err);
+    return errorResponse('Internal server error');
+  }
 }

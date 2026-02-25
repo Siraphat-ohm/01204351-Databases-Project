@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@/generated/prisma/client';
 import {
   routePublicSelect,
   routeAdminInclude,
@@ -6,7 +7,15 @@ import {
   type UpdateRouteInput,
 } from '@/types/route.type';
 
+type RouteFindManyArgs = {
+  where?: Prisma.RouteWhereInput;
+  skip?: number;
+  take?: number;
+};
+
 export const routeRepository = {
+  isAdminRole: (role: string) => role?.trim().toUpperCase() === 'ADMIN',
+
   findByIdPublic: (id: string) =>
     prisma.route.findUnique({
       where: { id },
@@ -20,7 +29,7 @@ export const routeRepository = {
     }),
 
   findByIdForRole: (id: string, role: string) => {
-    if (role === 'ADMIN') return routeRepository.findByIdAdmin(id);
+    if (routeRepository.isAdminRole(role)) return routeRepository.findByIdAdmin(id);
     return routeRepository.findByIdPublic(id);
   },
 
@@ -86,14 +95,32 @@ export const routeRepository = {
       orderBy: { iataCode: 'asc' },
     }),
 
-  findAll: () =>
+  findAll: (args?: RouteFindManyArgs) =>
     prisma.route.findMany({
+      where: args?.where,
+      skip: args?.skip,
+      take: args?.take,
       include: routeAdminInclude,
       orderBy: [
         { origin:      { iataCode: 'asc' } },
         { destination: { iataCode: 'asc' } },
       ],
     }),
+
+  findMany: (args: RouteFindManyArgs) =>
+    prisma.route.findMany({
+      where: args.where,
+      skip: args.skip,
+      take: args.take,
+      include: routeAdminInclude,
+      orderBy: [
+        { origin:      { iataCode: 'asc' } },
+        { destination: { iataCode: 'asc' } },
+      ],
+    }),
+
+  count: (where?: Prisma.RouteWhereInput) =>
+    prisma.route.count({ where }),
 
   create: (data: Omit<CreateRouteInput, 'createReturn'>) =>
     prisma.route.create({

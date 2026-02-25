@@ -3,7 +3,14 @@ import {
   bookingAdminInclude,
   type CreateBookingInput,
 } from '@/types/booking.type';
+import type { Prisma } from '@/generated/prisma/client';
 import { BookingStatus } from '@/generated/prisma/client';
+
+type BookingFindManyArgs = {
+  where?: Prisma.BookingWhereInput;
+  skip?: number;
+  take?: number;
+};
 
 export const bookingRepository = {
   findById: (id: string) =>
@@ -18,15 +25,48 @@ export const bookingRepository = {
       include: bookingAdminInclude,
     }),
 
-  findAll: () =>
+  findAll: (args?: BookingFindManyArgs) =>
     prisma.booking.findMany({
+      where: args?.where,
+      skip: args?.skip,
+      take: args?.take,
       include: bookingAdminInclude,
       orderBy: { createdAt: 'desc' },
     }),
 
+  findMany: (args: BookingFindManyArgs) =>
+    prisma.booking.findMany({
+      where: args.where,
+      skip: args.skip,
+      take: args.take,
+      include: bookingAdminInclude,
+      orderBy: { createdAt: 'desc' },
+    }),
+
+  count: (where?: Prisma.BookingWhereInput) =>
+    prisma.booking.count({ where }),
+
   findByUserId: (userId: string) =>
     prisma.booking.findMany({
       where: { userId },
+      include: bookingAdminInclude,
+      orderBy: { createdAt: 'desc' },
+    }),
+
+  findByFlightId: (flightId: string) =>
+    prisma.booking.findMany({
+      where: { flightId },
+      include: bookingAdminInclude,
+      orderBy: { createdAt: 'desc' },
+    }),
+
+  findByFlightCode: (flightCode: string) =>
+    prisma.booking.findMany({
+      where: {
+        flight: {
+          flightCode,
+        },
+      },
       include: bookingAdminInclude,
       orderBy: { createdAt: 'desc' },
     }),
@@ -51,6 +91,30 @@ export const bookingRepository = {
       data: { status },
       include: bookingAdminInclude,
     }),
+
+  markReaccommodationPendingByTicketIds: async (ticketIds: string[]) => {
+    if (ticketIds.length === 0) return [] as string[];
+
+    const ticketRows = await prisma.ticket.findMany({
+      where: { id: { in: ticketIds } },
+      select: { bookingId: true },
+    });
+
+    const bookingIds = Array.from(new Set(ticketRows.map((t) => t.bookingId)));
+    if (bookingIds.length === 0) return [] as string[];
+
+    await prisma.booking.updateMany({
+      where: {
+        id: { in: bookingIds },
+        status: { not: BookingStatus.CANCELLED },
+      },
+      data: {
+        status: BookingStatus.REACCOMMODATION_PENDING,
+      },
+    });
+
+    return bookingIds;
+  },
 
   changeFlight: async (params: {
     bookingId: string;

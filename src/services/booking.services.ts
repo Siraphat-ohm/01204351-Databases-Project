@@ -1,15 +1,23 @@
 import { bookingRepository } from '@/repositories/booking.repository';
 import { flightRepository } from '@/repositories/flight.repository';
+import { paymentService } from '@/services/payment.services';
 import {
+  acceptReaccommodationSchema,
+  cancelReaccommodationSchema,
   createBookingSchema,
   changeFlightSchema,
   updateBookingStatusSchema,
+  type AcceptReaccommodationInput,
+  type CancelReaccommodationInput,
   type CreateBookingInput,
   type ChangeFlightInput,
 } from '@/types/booking.type';
 import type { PaginatedResponse } from '@/types/common';
 import { canAccessBooking } from '@/auth/permissions';
-import { BookingStatus, FlightStatus } from '@/generated/prisma/client';
+import {
+  BookingStatus,
+  FlightStatus,
+} from '@/generated/prisma/client';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import {
   assertPermission,
@@ -47,6 +55,13 @@ export class BookingChangeNotAllowedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'BookingChangeNotAllowedError';
+  }
+}
+
+export class BookingReaccommodationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BookingReaccommodationError';
   }
 }
 
@@ -130,6 +145,25 @@ export const bookingService = {
     return bookingRepository.findByUserId(session.user.id);
   },
 
+  async findByFlightId(flightId: string, session: Session) {
+    checkPermission(session, 'read');
+
+    const bookings = await bookingRepository.findByFlightId(flightId);
+    if (canReadAll(session)) return bookings;
+
+    return bookings.filter((b) => b.userId === session.user.id);
+  },
+
+  async findByFlightCode(flightCode: string, session: Session) {
+    checkPermission(session, 'read');
+
+    const normalizedCode = flightCode.trim().toUpperCase();
+    const bookings = await bookingRepository.findByFlightCode(normalizedCode);
+    if (canReadAll(session)) return bookings;
+
+    return bookings.filter((b) => b.userId === session.user.id);
+  },
+
   async findAll(session: Session) {
     checkPermission(session, 'read-all');
     return bookingRepository.findAll();
@@ -142,11 +176,16 @@ export const bookingService = {
     checkPermission(session, 'read-all');
 
     const { page, limit, skip } = resolvePagination(params);
-    const rows = await bookingRepository.findAll();
-    const total = rows.length;
+    const [data, total] = await Promise.all([
+      bookingRepository.findMany({
+        skip,
+        take: limit,
+      }),
+      bookingRepository.count(),
+    ]);
 
     return {
-      data: rows.slice(skip, skip + limit),
+      data,
       meta: {
         page,
         limit,
@@ -242,5 +281,81 @@ export const bookingService = {
 
     if (!changedBooking) throw new BookingNotFoundError(id);
     return changedBooking;
+  },
+
+  async acceptReaccommodation(id: string, input: AcceptReaccommodationInput, session: Session) {
+    checkPermission(session, 'read');
+    checkPermission(session, 'cancel');
+    checkPermission(session, 'create');
+
+    const booking = await bookingRepository.findById(id);
+    if (!booking) throw new BookingNotFoundError(id);
+
+    if (!canReadAll(session) && booking.userId !== session.user.id) {
+      throw new UnauthorizedError('accept-reaccommodation');
+    }
+
+    if (booking.status !== BookingStatus.REACCOMMODATION_PENDING) {
+      throw new BookingReaccommodationError(
+        `Booking is not pending reaccommodation: ${booking.status}`,
+      );
+    }
+
+    const data = acceptReaccommodationSchema.parse(input);
+
+    if (data.newFlightId === booking.flightId) {
+      throw new BookingConflictError('New flight must be different from current flight');
+    }
+
+    const newFlight = await flightRepository.findById(data.newFlightId);
+    if (!newFlight) throw new BookingNotFoundError(`flight:${data.newFlightId}`);
+
+    if (newFlight.status !== FlightStatus.SCHEDULED) {
+      throw new BookingReaccommodationError('Selected flight is not available for reaccommodation');
+    }
+
+    const newBookingRef = await generateUniqueBookingRef();
+    const changedBooking = await bookingRepository.changeFlight({
+      bookingId: id,
+      newFlightId: data.newFlightId,
+      newBookingRef,
+      totalPrice: data.totalPrice,
+      currency: data.currency,
+      keepSeatAssignments: false,
+    });
+
+    if (!changedBooking) throw new BookingNotFoundError(id);
+    return changedBooking;
+  },
+
+  async cancelForReaccommodation(
+    id: string,
+    input: CancelReaccommodationInput,
+    session: Session,
+  ) {
+    checkPermission(session, 'cancel');
+    checkPermission(session, 'read');
+
+    const booking = await bookingRepository.findById(id);
+    if (!booking) throw new BookingNotFoundError(id);
+
+    if (!canReadAll(session) && booking.userId !== session.user.id) {
+      throw new UnauthorizedError('cancel-reaccommodation');
+    }
+
+    if (booking.status !== BookingStatus.REACCOMMODATION_PENDING) {
+      throw new BookingReaccommodationError(
+        `Booking is not pending reaccommodation: ${booking.status}`,
+      );
+    }
+
+    const { reason } = cancelReaccommodationSchema.parse(input ?? {});
+    await paymentService.refundBookingForReaccommodation(
+      id,
+      reason ?? 'Passenger cancelled during reaccommodation',
+    );
+
+    const { status } = updateBookingStatusSchema.parse({ status: BookingStatus.CANCELLED });
+    return bookingRepository.updateStatus(id, status);
   },
 };

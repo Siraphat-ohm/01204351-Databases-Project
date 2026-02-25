@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface ICrewProfile extends Document {
-  mysqlUserId: number;
+  userId: string;
   nickname?: string;
   languages: string[];
   certifications: Array<{ name: string; expireDate: Date }>;
@@ -10,13 +10,13 @@ export interface ICrewProfile extends Document {
 
 const CrewProfileSchema = new Schema<ICrewProfile>(
   {
-    mysqlUserId: { type: Number, required: true, unique: true },
-    nickname: String,
-    languages: [String],
+    userId: { type: String, required: true, unique: true, index: true },
+    nickname: { type: String },
+    languages: { type: [String], default: [] },
     certifications: [
       {
-        name: String,
-        expireDate: Date,
+        name: { type: String, required: true },
+        expireDate: { type: Date, required: true },
       },
     ],
     flightHours: { type: Number, default: 0 },

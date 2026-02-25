@@ -9,6 +9,17 @@ export function errorResponse(message: string, status = 500) {
   return NextResponse.json({ error: message }, { status });
 }
 
+export function unauthorizedResponse() {
+  return errorResponse("Unauthorized", 401);
+}
+
+export function tooManyRequestsResponse(retryAfterMs: number) {
+  return errorResponse(
+    `Too many requests. Retry in ${Math.ceil(retryAfterMs / 1000)}s`,
+    429,
+  );
+}
+
 export function notFoundResponse(resource = "Resource") {
   return errorResponse(`${resource} not found`, 404);
 }

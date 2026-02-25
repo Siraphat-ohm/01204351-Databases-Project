@@ -1,7 +1,11 @@
 import { ticketRepository } from '@/repositories/ticket.repository';
 import {
   checkInTicketSchema,
+  ticketCreateSchema,
+  updateTicketSchema,
   type CheckInTicketInput,
+  type CreateTicketInput,
+  type UpdateTicketInput,
 } from '@/types/ticket.type';
 import type { PaginatedResponse } from '@/types/common';
 import { canAccessTicket } from '@/auth/permissions';
@@ -47,7 +51,7 @@ export class UnauthorizedError extends Error {
 
 function checkPermission(
   session: Session,
-  action: 'read' | 'check-in' | 'read-all',
+  action: 'create' | 'read' | 'update' | 'delete' | 'check-in' | 'read-all',
 ) {
   assertPermission(
     session,
@@ -63,6 +67,24 @@ function canReadAll(session: Session) {
 }
 
 export const ticketService = {
+  async createTicket(input: CreateTicketInput, session: Session) {
+    checkPermission(session, 'create');
+
+    const data = ticketCreateSchema.parse(input);
+
+    if (data.seatNumber) {
+      const seatTaken = await ticketRepository.findSeatAssignment(
+        data.flightId,
+        data.seatNumber,
+      );
+      if (seatTaken) {
+        throw new TicketConflictError(`Seat already assigned: ${data.seatNumber}`);
+      }
+    }
+
+    return ticketRepository.create(data);
+  },
+
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
 
@@ -93,6 +115,25 @@ export const ticketService = {
     return tickets;
   },
 
+  async findByFlightId(flightId: string, session: Session) {
+    checkPermission(session, 'read');
+
+    const tickets = await ticketRepository.findByFlightId(flightId);
+    if (canReadAll(session)) return tickets;
+
+    return tickets.filter((t) => t.booking.userId === session.user.id);
+  },
+
+  async findByFlightCode(flightCode: string, session: Session) {
+    checkPermission(session, 'read');
+
+    const normalizedCode = flightCode.trim().toUpperCase();
+    const tickets = await ticketRepository.findByFlightCode(normalizedCode);
+    if (canReadAll(session)) return tickets;
+
+    return tickets.filter((t) => t.booking.userId === session.user.id);
+  },
+
   async findAll(session: Session) {
     checkPermission(session, 'read-all');
     return ticketRepository.findAll();
@@ -105,11 +146,16 @@ export const ticketService = {
     checkPermission(session, 'read-all');
 
     const { page, limit, skip } = resolvePagination(params);
-    const rows = await ticketRepository.findAll();
-    const total = rows.length;
+    const [data, total] = await Promise.all([
+      ticketRepository.findMany({
+        skip,
+        take: limit,
+      }),
+      ticketRepository.count(),
+    ]);
 
     return {
-      data: rows.slice(skip, skip + limit),
+      data,
       meta: {
         page,
         limit,
@@ -140,5 +186,35 @@ export const ticketService = {
     }
 
     return ticketRepository.checkIn(id, data);
+  },
+
+  async updateTicket(id: string, input: UpdateTicketInput, session: Session) {
+    checkPermission(session, 'update');
+
+    const ticket = await ticketRepository.findById(id);
+    if (!ticket) throw new TicketNotFoundError(id);
+
+    const data = updateTicketSchema.parse(input);
+
+    if (data.seatNumber) {
+      const seatTaken = await ticketRepository.findSeatAssignment(
+        ticket.flightId,
+        data.seatNumber,
+      );
+      if (seatTaken && seatTaken.id !== ticket.id) {
+        throw new TicketConflictError(`Seat already assigned: ${data.seatNumber}`);
+      }
+    }
+
+    return ticketRepository.update(id, data);
+  },
+
+  async deleteTicket(id: string, session: Session) {
+    checkPermission(session, 'delete');
+
+    const ticket = await ticketRepository.findById(id);
+    if (!ticket) throw new TicketNotFoundError(id);
+
+    return ticketRepository.delete(id);
   },
 };

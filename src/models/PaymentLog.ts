@@ -1,21 +1,32 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 
+export type PaymentLogStatus = "pending" | "success" | "failed" | "refunded";
+export type PaymentGateway = "stripe" | "promptpay" | "truemoney" | "other";
+
 export interface IPaymentLog extends Document {
-  mysqlBookingId: number;
+  bookingId: string;
   amount: number;
   currency: string;
-  status: string;
-  gateway: string;
-  rawResponse: any;
+  status: PaymentLogStatus;
+  gateway: PaymentGateway;
+  rawResponse: Record<string, unknown>;
 }
 
 const PaymentLogSchema = new Schema<IPaymentLog>(
   {
-    mysqlBookingId: { type: Number, required: true, index: true },
+    bookingId: { type: String, required: true, index: true },
     amount: { type: Number, required: true },
     currency: { type: String, default: "THB" },
-    status: { type: String, required: true },
-    gateway: { type: String, default: "Stripe" },
+    status: {
+      type: String,
+      enum: ["pending", "success", "failed", "refunded"],
+      required: true,
+    },
+    gateway: {
+      type: String,
+      enum: ["stripe", "promptpay", "truemoney", "other"],
+      default: "stripe",
+    },
     rawResponse: { type: Schema.Types.Mixed },
   },
   {

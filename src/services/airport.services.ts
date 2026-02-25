@@ -104,6 +104,41 @@ export const airportService = {
     };
   },
 
+  async searchPaginated(
+    search: string,
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<AirportListItem>> {
+    checkPermission(session, 'read');
+
+    const keyword = search.trim();
+    const where = keyword
+      ? {
+          OR: [
+            { iataCode: { contains: keyword, mode: 'insensitive' as const } },
+            { city: { contains: keyword, mode: 'insensitive' as const } },
+            { name: { contains: keyword, mode: 'insensitive' as const } },
+          ],
+        }
+      : undefined;
+
+    const { page, limit, skip } = resolvePagination(params);
+    const [data, total] = await Promise.all([
+      airportRepository.findAll({ where, skip, take: limit }),
+      airportRepository.count(where),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  },
+
   async createAirport(input: CreateAirportInput, session: Session) {
     checkPermission(session, 'create');
 

@@ -2,15 +2,18 @@
 
 import { 
   Button, Group, TextInput, Title, Paper, Select, Container, 
-  NumberInput, Grid, Text, ThemeIcon, Stack, Divider, LoadingOverlay, Alert
+  NumberInput, Grid, Text, ThemeIcon, Stack, Divider, LoadingOverlay, Alert, Box
 } from '@mantine/core';
-import { useState, useTransition } from 'react';
+import { notifications } from '@mantine/notifications';
+import { useState, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Plane, MapPin, Clock, DollarSign, Building, AlertCircle } from 'lucide-react';
+import { 
+  ArrowLeft, Save, Plane, MapPin, Clock, DollarSign, 
+  Building, AlertCircle, Check, X, User 
+} from 'lucide-react';
 import { FlightStatus } from '@/generated/prisma/client'; 
-import { updateFlightAction } from '@/app/actions/flight-actions';
+import { updateFlightAction } from '@/actions/flight-actions';
 
-// Define the interface for the props
 interface AircraftOption {
   value: string;
   label: string;
@@ -18,42 +21,71 @@ interface AircraftOption {
 }
 
 interface FlightEditFormProps {
-  flight: any;
-  aircraftOptions: AircraftOption[]; // ✅ Received from Server
+  flight: any; // Using the serializableFlight from our page
+  aircraftOptions: AircraftOption[];
 }
 
 export function FlightEditForm({ flight, aircraftOptions }: FlightEditFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [aircraftOptionsState, setAircraftOptionsState] = useState<AircraftOption[]>(aircraftOptions); // ✅ Store in state
-  // ✅ Debug Log: Check what the server passed
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+
+  // Initialize form data with the new multi-price structure
   const [formData, setFormData] = useState({
+    flightCode: flight.flightCode,
     status: flight.status as FlightStatus,
     gate: flight.gate || '',
-    basePrice: Number(flight.basePrice),
+    aircraftId: flight.aircraftId || '',
+    // New Pricing Fields
+    basePriceEconomy: flight.basePriceEconomy || 0,
+    basePriceBusiness: flight.basePriceBusiness || 0,
+    basePriceFirst: flight.basePriceFirst || 0,
+    // Times
     departureTime: new Date(flight.departureTime).toISOString().slice(0, 16),
-    arrivalTime: flight.arrivalTime 
-      ? new Date(flight.arrivalTime).toISOString().slice(0, 16)
-      : new Date(new Date(flight.departureTime).getTime() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16),
-    aircraftId: flight.aircraft?.id?.toString() || '',
-    flightCode: flight.flightCode, 
+    arrivalTime: new Date(flight.arrivalTime).toISOString().slice(0, 16),
   });
-
-  // ❌ REMOVED: useEffect fetch logic (It was conflicting and causing the undefined error)
+  // Optimize aircraft options lookup
+  const memoizedOptions = useMemo(() => aircraftOptions, [aircraftOptions]);
 
   const handleChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear field errors as user types
+    if (fieldErrors[field]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setFieldErrors({});
 
     startTransition(async () => {
+      // Pass the string CUID and the updated formData
       const result = await updateFlightAction(flight.id, formData);
+
       if (result?.error) {
-        setError(result.error);
+        if (result.fieldErrors) {
+          setFieldErrors(result.fieldErrors);
+        }
+        notifications.show({
+          title: "Update Failed",
+          message: result.error,
+          color: "red",
+          icon: <X size={18} />,
+        });
+      } else {
+        notifications.show({
+          title: "Flight Updated",
+          message: `Flight ${flight.flightCode} has been updated successfully.`,
+          color: "green",
+          icon: <Check size={18} />,
+        });
+        router.push("/dashboard/flights");
+        router.refresh();
       }
     });
   };
@@ -64,8 +96,11 @@ export function FlightEditForm({ flight, aircraftOptions }: FlightEditFormProps)
 
       <Group justify="space-between" mb="lg">
         <Button 
-          variant="subtle" color="gray" leftSection={<ArrowLeft size={18} />} 
-          onClick={() => router.back()} disabled={isPending}
+          variant="subtle" 
+          color="gray" 
+          leftSection={<ArrowLeft size={18} />} 
+          onClick={() => router.back()} 
+          disabled={isPending}
         >
           Back to Flights
         </Button>
@@ -81,21 +116,14 @@ export function FlightEditForm({ flight, aircraftOptions }: FlightEditFormProps)
         </Group>
       </Group>
 
-      {error && (
-        <Alert variant="light" color="red" title="Error" icon={<AlertCircle size={16} />} mb="md">
-          {error}
-        </Alert>
-      )}
-
       <form onSubmit={handleSubmit}>
         <Grid gutter="lg">
-          
-          {/* --- LEFT COLUMN: FLIGHT SUMMARY (READ ONLY) --- */}
+          {/* --- LEFT COLUMN: READ ONLY SUMMARY --- */}
           <Grid.Col span={{ base: 12, md: 4 }}>
             <Paper shadow="xs" p="xl" radius="md" withBorder h="100%" bg="var(--mantine-color-gray-0)">
               <Stack gap="lg">
                 <div>
-                   <Text c="dimmed" size="xs" tt="uppercase" fw={700} mb={5}>Flight Number</Text>
+                   <Text c="dimmed" size="xs" tt="uppercase" fw={700} mb={5}>Flight Assignment</Text>
                    <Group>
                       <ThemeIcon variant="light" size="lg" color="blue"><Plane size={20}/></ThemeIcon>
                       <Title order={2}>{flight.flightCode}</Title>
@@ -105,24 +133,24 @@ export function FlightEditForm({ flight, aircraftOptions }: FlightEditFormProps)
                 <Divider />
 
                 <div>
-                  <Text c="dimmed" size="xs" tt="uppercase" fw={700} mb="xs">Route Information</Text>
+                  <Text c="dimmed" size="xs" tt="uppercase" fw={700} mb="xs">Route Summary</Text>
                   <Stack gap="md">
                     <Group align="flex-start" wrap="nowrap">
                        <ThemeIcon variant="outline" color="gray" size="sm"><MapPin size={14}/></ThemeIcon>
-                       <div>
+                       <Box>
                           <Text fw={600} lh={1}>{flight.route.origin.iataCode}</Text>
                           <Text size="sm" c="dimmed">{flight.route.origin.city}</Text>
-                       </div>
+                       </Box>
                     </Group>
                     
-                    <div style={{ borderLeft: '2px dashed var(--mantine-color-gray-4)', height: 20, marginLeft: 13 }} />
+                    <Box ml={13} h={20} style={{ borderLeft: '2px dashed var(--mantine-color-gray-4)' }} />
 
                     <Group align="flex-start" wrap="nowrap">
                        <ThemeIcon variant="filled" color="blue" size="sm"><MapPin size={14}/></ThemeIcon>
-                       <div>
+                       <Box>
                           <Text fw={600} lh={1}>{flight.route.destination.iataCode}</Text>
                           <Text size="sm" c="dimmed">{flight.route.destination.city}</Text>
-                       </div>
+                       </Box>
                     </Group>
                   </Stack>
                 </div>
@@ -130,80 +158,108 @@ export function FlightEditForm({ flight, aircraftOptions }: FlightEditFormProps)
             </Paper>
           </Grid.Col>
 
-          {/* --- RIGHT COLUMN: EDITABLE FORM --- */}
+          {/* --- RIGHT COLUMN: EDITABLE DETAILS --- */}
           <Grid.Col span={{ base: 12, md: 8 }}>
             <Paper shadow="xs" p="xl" radius="md" withBorder>
-              <Title order={4} mb="md">Operational Details</Title>
-              
               <Stack gap="md">
-                {/* ✅ CORRECT: Use the prop directly */}
+                <Title order={4}>Flight Operations</Title>
+                
                 <Select
                   label="Assigned Aircraft"
-                  description="Change the aircraft servicing this route"
-                  placeholder="Search tail number or model"
-                  data={aircraftOptionsState} 
+                  description="Required for active flight operations"
+                  placeholder="Select aircraft"
+                  data={memoizedOptions} 
                   value={formData.aircraftId}
                   onChange={(val) => handleChange('aircraftId', val)}
                   searchable
-                  nothingFoundMessage="No aircraft found"
-                  maxDropdownHeight={200}
+                  error={fieldErrors.aircraftId?.join(', ')}
                   leftSection={<Plane size={16} />}
                 />
 
                 <Grid>
                   <Grid.Col span={6}>
                     <Select
-                      label="Current Status"
+                      label="Flight Status"
                       data={['SCHEDULED', 'BOARDING', 'DELAYED', 'DEPARTED', 'ARRIVED', 'CANCELLED']}
                       value={formData.status}
                       onChange={(val) => handleChange('status', val)}
+                      error={fieldErrors.status?.join(', ')}
                     />
                   </Grid.Col>
                   <Grid.Col span={6}>
                     <TextInput
-                      label="Gate Assignment"
-                      placeholder="e.g. C3"
+                      label="Gate"
+                      placeholder="e.g. A12"
                       value={formData.gate}
                       onChange={(e) => handleChange('gate', e.currentTarget.value)}
                       leftSection={<Building size={16} />}
+                      error={fieldErrors.gate?.join(', ')}
                     />
                   </Grid.Col>
                 </Grid>
 
-                <Divider label="Schedule & Pricing" labelPosition="center" my="sm" />
+                <Divider label="Departure & Arrival" labelPosition="center" my="sm" />
 
                 <Grid>
                   <Grid.Col span={6}>
                     <TextInput
                       type="datetime-local"
-                      label="Departure Time (Local)"
+                      label="Scheduled Departure"
                       value={formData.departureTime}
                       onChange={(e) => handleChange('departureTime', e.currentTarget.value)}
                       leftSection={<Clock size={16} />}
+                      error={fieldErrors.departureTime?.join(', ')}
                     />
                   </Grid.Col>
                   <Grid.Col span={6}>
                     <TextInput
                       type="datetime-local"
-                      label="Arrival Time (Local)"
+                      label="Scheduled Arrival"
                       value={formData.arrivalTime}
                       onChange={(e) => handleChange('arrivalTime', e.currentTarget.value)}
                       leftSection={<Clock size={16} />}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={12}>
-                    <NumberInput
-                      label="Base Ticket Price"
-                      prefix="$"
-                      value={formData.basePrice}
-                      onChange={(val) => handleChange('basePrice', val)}
-                      decimalScale={2}
-                      fixedDecimalScale
-                      leftSection={<DollarSign size={16} />}
+                      error={fieldErrors.arrivalTime?.join(', ')}
                     />
                   </Grid.Col>
                 </Grid>
 
+                <Divider label="Class Pricing (USD)" labelPosition="center" my="sm" />
+
+                <Grid>
+                  <Grid.Col span={4}>
+                    <NumberInput
+                      label="Economy"
+                      prefix="$"
+                      value={formData.basePriceEconomy}
+                      onChange={(val) => handleChange('basePriceEconomy', val)}
+                      decimalScale={2}
+                      leftSection={<DollarSign size={16} />}
+                      error={fieldErrors.basePriceEconomy?.join(', ')}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={4}>
+                    <NumberInput
+                      label="Business"
+                      prefix="$"
+                      value={formData.basePriceBusiness}
+                      onChange={(val) => handleChange('basePriceBusiness', val)}
+                      decimalScale={2}
+                      leftSection={<DollarSign size={16} />}
+                      error={fieldErrors.basePriceBusiness?.join(', ')}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={4}>
+                    <NumberInput
+                      label="First Class"
+                      prefix="$"
+                      value={formData.basePriceFirst}
+                      onChange={(val) => handleChange('basePriceFirst', val)}
+                      decimalScale={2}
+                      leftSection={<DollarSign size={16} />}
+                      error={fieldErrors.basePriceFirst?.join(', ')}
+                    />
+                  </Grid.Col>
+                </Grid>
               </Stack>
             </Paper>
           </Grid.Col>
