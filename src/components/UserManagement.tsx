@@ -2,37 +2,27 @@
 
 import { 
   Title, Group, Button, Table, Badge, Text, ActionIcon, 
-  TextInput, Paper, Select, Pagination, Center, Avatar, Tooltip, Stack 
+  TextInput, Paper, Select, Pagination, Center, Avatar, Tooltip 
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
-import { Search, Filter, Plus, Pencil, Trash, UserCog, ShieldCheck, MapPin } from 'lucide-react';
+import { Search, Filter, Plus, Pencil, Trash, ShieldCheck, MapPin } from 'lucide-react';
 import { useState } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
-// --- Types based on Schema ---
-type Role = 'PASSENGER' | 'ADMIN' | 'PILOT' | 'CABIN_CREW' | 'GROUND_STAFF' | 'MECHANIC';
-type Rank = 'CAPTAIN' | 'FIRST_OFFICER' | 'PURSER' | 'CREW' | 'MANAGER' | 'SUPERVISOR' | 'STAFF';
-
-interface StaffProfile {
-  employeeId: string;
-  rank: Rank | null;
-  baseAirport: { iataCode: string; city: string } | null;
-}
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  role: Role;
-  staffProfile: StaffProfile | null;
-}
+// ✅ IMPORT YOUR REAL TYPES HERE
+import { UserAdmin } from '@/types/user.type'; 
 
 interface UserManagementProps {
-  initialUsers: User[];
+  initialUsers: UserAdmin[];
+  totalPages: number;
+  currentPage: number;
 }
 
-export function UserManagement({ initialUsers }: UserManagementProps) {
+export function UserManagement({ initialUsers, totalPages, currentPage }: UserManagementProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Local state for client-side filtering of the CURRENT page
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
 
@@ -48,96 +38,111 @@ export function UserManagement({ initialUsers }: UserManagementProps) {
     }
   };
 
-  // Helper: Formatted Name
-  const getFullName = (user: User) => {
-    if (user.firstName && user.lastName) return `${user.firstName} ${user.lastName}`;
-    return user.username;
+  // Helper: Formatted Name (Fall back to email prefix if name is missing)
+  const getDisplayName = (user: UserAdmin) => {
+    if (user.name) return user.name;
+    return user.email.split('@')[0];
   };
 
-  // Filter Logic
+  // Pagination Handler
+  const handlePageChange = (page: number) => {
+    const params = new URLSearchParams(searchParams);
+    params.set('page', page.toString());
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
+  // Filter Logic (Client-side on current page data)
   const filteredUsers = initialUsers.filter(user => {
+    const searchLower = searchTerm.toLowerCase();
+    
     const matchesSearch = 
-      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (user.staffProfile?.employeeId || '').toLowerCase().includes(searchTerm.toLowerCase());
+      (user.name || '').toLowerCase().includes(searchLower) ||
+      user.email.toLowerCase().includes(searchLower) ||
+      (user.staffProfile?.employeeId || '').toLowerCase().includes(searchLower);
     
     const matchesRole = roleFilter ? user.role === roleFilter : true;
 
     return matchesSearch && matchesRole;
   });
 
-  const rows = filteredUsers.map((user) => (
-    <Table.Tr key={user.id}>
-      <Table.Td>
-        <Group gap="sm">
-          <Avatar radius="xl" color="blue" src={null} alt={user.username}>
-            {user.username.substring(0, 2).toUpperCase()}
-          </Avatar>
-          <div>
-            <Text size="sm" fw={500}>{getFullName(user)}</Text>
-            <Text size="xs" c="dimmed">{user.email}</Text>
-          </div>
-        </Group>
-      </Table.Td>
+  const rows = filteredUsers.map((user) => {
+    const displayName = getDisplayName(user);
+    
+    // Determine the relevant location (baseAirport or station)
+    const location = user.staffProfile?.baseAirport || user.staffProfile?.station;
 
-      <Table.Td>
-        <Badge color={getRoleColor(user.role)} variant="light">
-          {user.role.replace('_', ' ')}
-        </Badge>
-      </Table.Td>
+    return (
+      <Table.Tr key={user.id}>
+        <Table.Td>
+          <Group gap="sm">
+            {/* ✅ Uses Real Image if available, otherwise uses initials */}
+            <Avatar radius="xl" color="blue" src={user.image || null} alt={displayName}>
+              {displayName.charAt(0).toUpperCase()}
+            </Avatar>
+            <div>
+              <Text size="sm" fw={500}>{displayName}</Text>
+              <Text size="xs" c="dimmed">{user.email}</Text>
+            </div>
+          </Group>
+        </Table.Td>
 
-      <Table.Td>
-        {user.staffProfile ? (
-          <Group gap={4}>
+        <Table.Td>
+          <Badge color={getRoleColor(user.role)} variant="light">
+            {user.role.replace('_', ' ')}
+          </Badge>
+        </Table.Td>
+
+        <Table.Td>
+          {user.staffProfile ? (
             <Badge variant="outline" color="gray" size="sm">
               {user.staffProfile.employeeId}
             </Badge>
-          </Group>
-        ) : (
-          <Text size="xs" c="dimmed">-</Text>
-        )}
-      </Table.Td>
-
-      <Table.Td>
-        {user.staffProfile?.rank ? (
-           <Text size="sm" fw={500}>{user.staffProfile.rank.replace('_', ' ')}</Text>
-        ) : (
-           <Text size="xs" c="dimmed">-</Text>
-        )}
-      </Table.Td>
-
-      <Table.Td>
-         {user.staffProfile?.baseAirport ? (
-            <Group gap={4}>
-               <MapPin size={14} color="gray" />
-               <Text size="sm">{user.staffProfile.baseAirport.iataCode}</Text>
-            </Group>
-         ) : (
+          ) : (
             <Text size="xs" c="dimmed">-</Text>
-         )}
-      </Table.Td>
+          )}
+        </Table.Td>
 
-      <Table.Td>
-        <Group gap={4} justify="flex-end">
-          <Tooltip label="Manage Roles">
-            <ActionIcon variant="subtle" color="blue">
-              <ShieldCheck size={16} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Edit Profile">
-            <ActionIcon variant="subtle" color="gray">
-              <Pencil size={16} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Deactivate">
-            <ActionIcon variant="subtle" color="red">
-              <Trash size={16} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
-      </Table.Td>
-    </Table.Tr>
-  ));
+        <Table.Td>
+          {user.staffProfile?.rank ? (
+             <Text size="sm" fw={500}>{user.staffProfile.rank.replace('_', ' ')}</Text>
+          ) : (
+             <Text size="xs" c="dimmed">-</Text>
+          )}
+        </Table.Td>
+
+        <Table.Td>
+           {location ? (
+              <Group gap={4}>
+                 <MapPin size={14} color="gray" />
+                 <Text size="sm">{location.iataCode}</Text>
+              </Group>
+           ) : (
+              <Text size="xs" c="dimmed">-</Text>
+           )}
+        </Table.Td>
+
+        <Table.Td>
+          <Group gap={4} justify="flex-end">
+            <Tooltip label="Manage Role">
+              <ActionIcon variant="subtle" color="blue">
+                <ShieldCheck size={16} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="Edit Profile">
+              <ActionIcon variant="subtle" color="gray">
+                <Pencil size={16} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="Deactivate">
+              <ActionIcon variant="subtle" color="red">
+                <Trash size={16} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        </Table.Td>
+      </Table.Tr>
+    );
+  });
 
   return (
     <>
@@ -163,7 +168,7 @@ export function UserManagement({ initialUsers }: UserManagementProps) {
           />
           <Select 
             placeholder="Filter Role"
-            data={['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'PASSENGER']}
+            data={['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC', 'PASSENGER']}
             value={roleFilter}
             onChange={setRoleFilter}
             clearable
@@ -200,9 +205,17 @@ export function UserManagement({ initialUsers }: UserManagementProps) {
         </Table.ScrollContainer>
       </Paper>
       
-      <Center mt="md">
-         <Pagination total={1} color="blue" />
-      </Center>
+      {/* Real Pagination */}
+      {totalPages > 1 && (
+        <Center mt="md">
+           <Pagination 
+             total={totalPages} 
+             value={currentPage} 
+             onChange={handlePageChange} 
+             color="blue" 
+           />
+        </Center>
+      )}
     </>
   );
 }
