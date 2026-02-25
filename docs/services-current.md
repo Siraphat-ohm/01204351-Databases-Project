@@ -237,6 +237,8 @@ Methods:
 - `findById(id, session)`
 - `findMine(session)`
 - `findAll(session)` (admin)
+- `findMinePaginated(session, params)`
+- `findAllPaginated(session, params)` (admin)
 - `createMine(input, session)`
 - `updateStatus(id, input, session)` (admin)
 
@@ -248,6 +250,9 @@ Errors:
 API routes:
 
 - `GET /api/v1/issues`
+  - supports `page` + `limit`
+  - admin gets all issues (paginated)
+  - non-admin gets own issues (paginated)
 - `POST /api/v1/issues`
 - `GET /api/v1/issues/[id]`
 - `PATCH /api/v1/issues/[id]`
@@ -299,6 +304,7 @@ Methods:
 - `findById(id, session)`
 - `findByFlightId(flightId, session)`
 - `findAll(session)`
+- `findAllPaginated(session, params)`
 - `upsertByFlightId(flightId, input, session)`
 - `patchById(id, input, session)`
 
@@ -311,6 +317,7 @@ Errors:
 API routes:
 
 - `GET /api/v1/flight-ops-logs`
+  - supports `page` + `limit` when `flightId` is not provided
 - `PUT /api/v1/flight-ops-logs?flightId=...`
 - `GET /api/v1/flight-ops-logs/[id]`
 - `PATCH /api/v1/flight-ops-logs/[id]`

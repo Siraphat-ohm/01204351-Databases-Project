@@ -37,15 +37,17 @@ export async function GET(req: NextRequest) {
     const rl = enforceRateLimit(req, session.user.id, 'read');
     if (rl) return rl;
 
+    const page = Number(req.nextUrl.searchParams.get('page') ?? 1);
+    const limit = Number(req.nextUrl.searchParams.get('limit') ?? 20);
     const serviceSession = { user: { id: session.user.id, role: session.user.role } };
 
     if (session.user.role === 'ADMIN') {
-      const rows = await issueReportService.findAll(serviceSession);
-      return successResponse(rows);
+      const result = await issueReportService.findAllPaginated(serviceSession, { page, limit });
+      return successResponse(result);
     }
 
-    const rows = await issueReportService.findMine(serviceSession);
-    return successResponse(rows);
+    const result = await issueReportService.findMinePaginated(serviceSession, { page, limit });
+    return successResponse(result);
   } catch (err) {
     if (err instanceof Error && err.name === 'UnauthorizedError') {
       return unauthorized();
