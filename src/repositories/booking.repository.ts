@@ -52,6 +52,30 @@ export const bookingRepository = {
       include: bookingAdminInclude,
     }),
 
+  markReaccommodationPendingByTicketIds: async (ticketIds: string[]) => {
+    if (ticketIds.length === 0) return [] as string[];
+
+    const ticketRows = await prisma.ticket.findMany({
+      where: { id: { in: ticketIds } },
+      select: { bookingId: true },
+    });
+
+    const bookingIds = Array.from(new Set(ticketRows.map((t) => t.bookingId)));
+    if (bookingIds.length === 0) return [] as string[];
+
+    await prisma.booking.updateMany({
+      where: {
+        id: { in: bookingIds },
+        status: { not: BookingStatus.CANCELLED },
+      },
+      data: {
+        status: BookingStatus.REACCOMMODATION_PENDING,
+      },
+    });
+
+    return bookingIds;
+  },
+
   changeFlight: async (params: {
     bookingId: string;
     newFlightId: string;
