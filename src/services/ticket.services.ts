@@ -1,8 +1,10 @@
 import { ticketRepository } from '@/repositories/ticket.repository';
 import {
   checkInTicketSchema,
+  ticketCreateSchema,
   updateTicketSchema,
   type CheckInTicketInput,
+  type CreateTicketInput,
   type UpdateTicketInput,
 } from '@/types/ticket.type';
 import type { PaginatedResponse } from '@/types/common';
@@ -49,7 +51,7 @@ export class UnauthorizedError extends Error {
 
 function checkPermission(
   session: Session,
-  action: 'read' | 'update' | 'check-in' | 'read-all',
+  action: 'create' | 'read' | 'update' | 'delete' | 'check-in' | 'read-all',
 ) {
   assertPermission(
     session,
@@ -65,6 +67,24 @@ function canReadAll(session: Session) {
 }
 
 export const ticketService = {
+  async createTicket(input: CreateTicketInput, session: Session) {
+    checkPermission(session, 'create');
+
+    const data = ticketCreateSchema.parse(input);
+
+    if (data.seatNumber) {
+      const seatTaken = await ticketRepository.findSeatAssignment(
+        data.flightId,
+        data.seatNumber,
+      );
+      if (seatTaken) {
+        throw new TicketConflictError(`Seat already assigned: ${data.seatNumber}`);
+      }
+    }
+
+    return ticketRepository.create(data);
+  },
+
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
 
@@ -182,5 +202,14 @@ export const ticketService = {
     }
 
     return ticketRepository.update(id, data);
+  },
+
+  async deleteTicket(id: string, session: Session) {
+    checkPermission(session, 'delete');
+
+    const ticket = await ticketRepository.findById(id);
+    if (!ticket) throw new TicketNotFoundError(id);
+
+    return ticketRepository.delete(id);
   },
 };

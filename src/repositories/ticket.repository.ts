@@ -73,6 +73,12 @@ export const ticketRepository = {
       include: ticketAdminInclude,
     }),
 
+  delete: (id: string) =>
+    prisma.ticket.delete({
+      where: { id },
+      include: ticketAdminInclude,
+    }),
+
   checkIn: (id: string, data: { seatNumber?: string; boardingPass?: string }) =>
     prisma.ticket.update({
       where: { id },

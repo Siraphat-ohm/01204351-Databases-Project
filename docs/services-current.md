@@ -435,6 +435,7 @@ File: `src/services/ticket.services.ts`
 
 Methods:
 
+- `createTicket(input, session)`
 - `findById(id, session)`
 - `findMine(session)`
 - `findByBookingId(bookingId, session)`
@@ -442,7 +443,9 @@ Methods:
 - `findByFlightCode(flightCode, session)`
 - `findAll(session)`
 - `findAllPaginated(session, params)`
+- `updateTicket(id, input, session)`
 - `checkInTicket(id, input, session)`
+- `deleteTicket(id, session)`
 
 Errors:
 
