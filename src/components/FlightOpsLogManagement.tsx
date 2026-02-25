@@ -7,7 +7,7 @@ import {
   ThemeIcon, Divider
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Search, Eye, AlertTriangle, CloudRain, DoorOpen, Wrench, User, Plane, Plus } from 'lucide-react';
+import { Search, Eye, AlertTriangle, CloudRain, DoorOpen, Wrench, User, Plane, Plus, CheckCircle, XCircle } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { patchFlightOpsLogAction } from '@/actions/flight-op-actions';
 
@@ -319,11 +319,48 @@ export function FlightOpsLogManagement({ initialLogs, userRole }: FlightOpsLogMa
                   <Text fw={600}>Maintenance Checklist</Text>
                 </Accordion.Control>
                 <Accordion.Panel>
-                  <ScrollArea h={200} type="always" offsetScrollbars>
-                    <Code block style={{ whiteSpace: 'pre-wrap' }}>
-                      {JSON.stringify(selectedLog.maintenanceChecklist, null, 2)}
-                    </Code>
-                  </ScrollArea>
+                  {selectedLog.maintenanceChecklist && Object.keys(selectedLog.maintenanceChecklist).length > 0 ? (
+                    <Stack gap="sm">
+                      {Object.entries(selectedLog.maintenanceChecklist).map(([key, value]) => {
+                        // Format the camelCase keys (e.g., "fuelChecked" -> "Fuel Checked")
+                        const formattedKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                        
+                        // Check if the value is truthy (checked) or falsy
+                        const isChecked = Boolean(value);
+
+                        return (
+                          <Group key={key} justify="space-between" wrap="nowrap">
+                            <Text size="sm">{formattedKey}</Text>
+                            {isChecked ? (
+                              <Group gap="xs" c="green">
+                                <CheckCircle size={16} />
+                                <Text size="sm" fw={500}>Passed</Text>
+                              </Group>
+                            ) : (
+                              <Group gap="xs" c="red">
+                                <XCircle size={16} />
+                                <Text size="sm" fw={500}>Failed / Pending</Text>
+                              </Group>
+                            )}
+                          </Group>
+                        );
+                      })}
+                    </Stack>
+                  ) : (
+                    <Text size="sm" c="dimmed">No maintenance records available.</Text>
+                  )}
+                  
+                  {/* Keep the raw JSON view available for complex nested objects or debugging
+                  {canWrite && (
+                    <>
+                      <Divider my="md" label="Raw Data" labelPosition="center" />
+                      <ScrollArea h={120} type="hover">
+                        <Code block style={{ whiteSpace: 'pre-wrap' }}>
+                          {JSON.stringify(selectedLog.maintenanceChecklist, null, 2)}
+                        </Code>
+                      </ScrollArea>
+                    </>
+                  )} */}
                 </Accordion.Panel>
               </Accordion.Item>
             </Accordion>
