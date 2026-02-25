@@ -62,4 +62,9 @@ export const paymentLogRepository = {
       { new: true },
     ).lean();
   },
+
+  async deleteById(id: string) {
+    await connectMongo();
+    return PaymentLog.findByIdAndDelete(id).lean();
+  },
 };

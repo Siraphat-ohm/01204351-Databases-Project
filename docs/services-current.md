@@ -274,6 +274,7 @@ Methods:
 - `findAllPaginated(session, params)` (admin)
 - `create(input, session)` (admin)
 - `updateById(id, input, session)` (admin)
+- `deleteById(id, session)` (admin)
 
 Errors:
 
@@ -289,6 +290,7 @@ API routes:
 - `POST /api/v1/payment-logs`
 - `GET /api/v1/payment-logs/[id]`
 - `PATCH /api/v1/payment-logs/[id]`
+- `DELETE /api/v1/payment-logs/[id]`
 
 ### 4.3.4 `flightOpsLogService` (Mongo)
 

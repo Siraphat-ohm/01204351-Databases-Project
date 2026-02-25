@@ -87,3 +87,37 @@ export async function PATCH(
     return errorResponse('Internal server error');
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const session = await getServerSession();
+    if (!session?.user) return unauthorizedResponse();
+
+    const limited = enforceApiRateLimit({
+      headers: req.headers,
+      namespace: 'api:v1:payment-logs:id',
+      userId: session.user.id,
+      action: 'write',
+    });
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
+
+    const { id } = await params;
+    const row = await paymentLogService.deleteById(id, {
+      user: { id: session.user.id, role: session.user.role },
+    });
+
+    return successResponse(row);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'PaymentLogNotFoundError') {
+      return errorResponse(err.message, 404);
+    }
+    if (err instanceof Error && err.name === 'UnauthorizedError') {
+      return unauthorizedResponse();
+    }
+    console.error('[DELETE /api/v1/payment-logs/[id]]', err);
+    return errorResponse('Internal server error');
+  }
+}
