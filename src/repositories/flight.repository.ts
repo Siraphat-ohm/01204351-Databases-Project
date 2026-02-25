@@ -13,19 +13,27 @@ import {
 } from '@/schema/flight.schema';
 
 export const flightRepository = {
+  isAdminRole: (role: string) => role?.trim().toUpperCase() === 'ADMIN',
+
   findByIdForRole: (id: string, role: string) => {
-    if (role === 'ADMIN') return flightRepository.findById(id);
-    return flightRepository.findById(id);
+    if (flightRepository.isAdminRole(role)) return flightRepository.findById(id);
+    return prisma.flight.findFirst({
+      where: { id, status: 'SCHEDULED' },
+      include: flightAdminInclude,
+    });
   },
 
   findByCodeForRole: (flightCode: string, role: string) => {
-    if (role === 'ADMIN') return flightRepository.findByCode(flightCode);
-    return flightRepository.findByCode(flightCode);
+    if (flightRepository.isAdminRole(role)) return flightRepository.findByCode(flightCode);
+    return prisma.flight.findFirst({
+      where: { flightCode, status: 'SCHEDULED' },
+      include: flightAdminInclude,
+    });
   },
 
   findAllForRole: (role: string) => {
-    if (role === 'ADMIN') return flightRepository.findAll();
-    return flightRepository.findAll();
+    if (flightRepository.isAdminRole(role)) return flightRepository.findAll();
+    return flightRepository.findAll({ where: { status: 'SCHEDULED' } });
   },
 
   findById: (id: string) =>

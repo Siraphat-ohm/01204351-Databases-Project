@@ -7,6 +7,8 @@ import {
 } from '@/types/route.type';
 
 export const routeRepository = {
+  isAdminRole: (role: string) => role?.trim().toUpperCase() === 'ADMIN',
+
   findByIdPublic: (id: string) =>
     prisma.route.findUnique({
       where: { id },
@@ -20,7 +22,7 @@ export const routeRepository = {
     }),
 
   findByIdForRole: (id: string, role: string) => {
-    if (role === 'ADMIN') return routeRepository.findByIdAdmin(id);
+    if (routeRepository.isAdminRole(role)) return routeRepository.findByIdAdmin(id);
     return routeRepository.findByIdPublic(id);
   },
 
