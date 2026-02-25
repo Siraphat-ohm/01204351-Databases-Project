@@ -1,7 +1,9 @@
 import { ticketRepository } from '@/repositories/ticket.repository';
 import {
   checkInTicketSchema,
+  updateTicketSchema,
   type CheckInTicketInput,
+  type UpdateTicketInput,
 } from '@/types/ticket.type';
 import type { PaginatedResponse } from '@/types/common';
 import { canAccessTicket } from '@/auth/permissions';
@@ -47,7 +49,7 @@ export class UnauthorizedError extends Error {
 
 function checkPermission(
   session: Session,
-  action: 'read' | 'check-in' | 'read-all',
+  action: 'read' | 'update' | 'check-in' | 'read-all',
 ) {
   assertPermission(
     session,
@@ -159,5 +161,26 @@ export const ticketService = {
     }
 
     return ticketRepository.checkIn(id, data);
+  },
+
+  async updateTicket(id: string, input: UpdateTicketInput, session: Session) {
+    checkPermission(session, 'update');
+
+    const ticket = await ticketRepository.findById(id);
+    if (!ticket) throw new TicketNotFoundError(id);
+
+    const data = updateTicketSchema.parse(input);
+
+    if (data.seatNumber) {
+      const seatTaken = await ticketRepository.findSeatAssignment(
+        ticket.flightId,
+        data.seatNumber,
+      );
+      if (seatTaken && seatTaken.id !== ticket.id) {
+        throw new TicketConflictError(`Seat already assigned: ${data.seatNumber}`);
+      }
+    }
+
+    return ticketRepository.update(id, data);
   },
 };

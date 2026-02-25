@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import {
   ticketAdminInclude,
   type CreateTicketInput,
+  type UpdateTicketInput,
 } from '@/types/ticket.type';
 
 export const ticketRepository = {
@@ -61,6 +62,13 @@ export const ticketRepository = {
 
   create: (data: CreateTicketInput) =>
     prisma.ticket.create({
+      data,
+      include: ticketAdminInclude,
+    }),
+
+  update: (id: string, data: UpdateTicketInput) =>
+    prisma.ticket.update({
+      where: { id },
       data,
       include: ticketAdminInclude,
     }),
