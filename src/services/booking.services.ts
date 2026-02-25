@@ -80,6 +80,20 @@ export class BookingSeatConflictError extends Error {
   }
 }
 
+export class BookingPassengerLimitError extends Error {
+  constructor(limit: number) {
+    super(`Too many passengers in one booking. Maximum allowed: ${limit}`);
+    this.name = 'BookingPassengerLimitError';
+  }
+}
+
+export class BookingPriceMismatchError extends Error {
+  constructor(expectedTotal: number, providedTotal: number) {
+    super(`Total price mismatch. Expected ${expectedTotal}, got ${providedTotal}`);
+    this.name = 'BookingPriceMismatchError';
+  }
+}
+
 export class UnauthorizedError extends Error {
   constructor(action: string) {
     super(`Unauthorized: cannot perform "${action}" on booking`);
@@ -144,6 +158,21 @@ function makeGuestEmail(contactEmail: string) {
   const [local = 'guest', domain = 'example.com'] = contactEmail.toLowerCase().split('@');
   const token = Math.random().toString(36).slice(2, 10);
   return `${local}+guest-${token}@${domain}`;
+}
+
+const MAX_PASSENGERS_PER_BOOKING = 9;
+
+function assertPassengerLimit(tickets: BookingTicketInput[]) {
+  if (tickets.length > MAX_PASSENGERS_PER_BOOKING) {
+    throw new BookingPassengerLimitError(MAX_PASSENGERS_PER_BOOKING);
+  }
+}
+
+function assertBookingTotalMatchesTickets(totalPrice: number, tickets: BookingTicketInput[]) {
+  const expected = tickets.reduce((sum, t) => sum + t.price + (t.seatSurcharge ?? 0), 0);
+  if (Math.abs(expected - totalPrice) > 0.01) {
+    throw new BookingPriceMismatchError(expected, totalPrice);
+  }
 }
 
 export const bookingService = {
@@ -257,6 +286,9 @@ export const bookingService = {
       throw new UnauthorizedError('create');
     }
 
+    assertPassengerLimit(data.tickets);
+    assertBookingTotalMatchesTickets(data.totalPrice, data.tickets);
+
     const flight = await flightRepository.findById(data.flightId);
     if (!flight) throw new BookingNotFoundError(`flight:${data.flightId}`);
 
@@ -326,6 +358,9 @@ export const bookingService = {
 
   async createGuestBookingWithTickets(input: CreateGuestBookingWithTicketsInput) {
     const data = createGuestBookingWithTicketsSchema.parse(input);
+
+    assertPassengerLimit(data.tickets);
+    assertBookingTotalMatchesTickets(data.totalPrice, data.tickets);
 
     const flight = await flightRepository.findById(data.flightId);
     if (!flight) throw new BookingNotFoundError(`flight:${data.flightId}`);
