@@ -38,11 +38,18 @@ export const openApiDocument = {
       post: {
         tags: ['Bookings'],
         summary: 'Create booking',
+        description:
+          'Authenticated users can create with userId. Guests (no session) can create with contactEmail and optional guestName.',
         requestBody: {
           required: true,
           content: {
             'application/json': {
-              schema: { $ref: '#/components/schemas/CreateBookingInput' },
+              schema: {
+                oneOf: [
+                  { $ref: '#/components/schemas/CreateBookingInput' },
+                  { $ref: '#/components/schemas/GuestCreateBookingInput' },
+                ],
+              },
             },
           },
         },
@@ -181,6 +188,45 @@ export const openApiDocument = {
           currency: { type: 'string', minLength: 3, maxLength: 3, default: 'THB' },
           contactEmail: { type: 'string', format: 'email', nullable: true },
           contactPhone: { type: 'string', nullable: true },
+          tickets: {
+            type: 'array',
+            minItems: 1,
+            items: { $ref: '#/components/schemas/BookingTicketInput' },
+          },
+        },
+      },
+      GuestCreateBookingInput: {
+        type: 'object',
+        required: ['flightId', 'totalPrice', 'contactEmail'],
+        properties: {
+          bookingRef: { type: 'string' },
+          flightId: { type: 'string' },
+          totalPrice: { type: 'number' },
+          currency: { type: 'string', minLength: 3, maxLength: 3, default: 'THB' },
+          contactEmail: { type: 'string', format: 'email' },
+          contactPhone: { type: 'string', nullable: true },
+          guestName: { type: 'string' },
+          tickets: {
+            type: 'array',
+            minItems: 1,
+            items: { $ref: '#/components/schemas/BookingTicketInput' },
+          },
+        },
+      },
+      BookingTicketInput: {
+        type: 'object',
+        required: ['price', 'firstName', 'lastName'],
+        properties: {
+          class: { type: 'string', enum: ['ECONOMY', 'BUSINESS', 'FIRST_CLASS'] },
+          seatNumber: { type: 'string', pattern: '^[\\d]{1,2}[A-Z]$' },
+          price: { type: 'number' },
+          firstName: { type: 'string' },
+          lastName: { type: 'string' },
+          dateOfBirth: { type: 'string', format: 'date-time' },
+          passportNumber: { type: 'string' },
+          nationality: { type: 'string' },
+          gender: { type: 'string' },
+          seatSurcharge: { type: 'number' },
         },
       },
       BookingActionInput: {

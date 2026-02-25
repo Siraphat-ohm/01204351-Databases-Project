@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Prisma, BookingStatus } from '@/generated/prisma/client';
+import { Prisma, BookingStatus, TicketClass } from '@/generated/prisma/client';
 
 export const bookingRefSchema = z
   .string()
@@ -17,8 +17,44 @@ export const createBookingSchema = z.object({
   contactPhone: z.string().trim().min(6).max(30).optional().nullable(),
 });
 
+export const bookingTicketInputSchema = z.object({
+  class: z.enum(TicketClass).default(TicketClass.ECONOMY),
+  seatNumber: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[\d]{1,2}[A-Z]$/, 'Seat number must match format like 12A')
+    .optional(),
+  price: z.number().positive({ message: 'Ticket price must be positive' }),
+  firstName: z.string().trim().min(1),
+  lastName: z.string().trim().min(1),
+  dateOfBirth: z.coerce.date().optional(),
+  passportNumber: z.string().trim().min(1).optional(),
+  nationality: z.string().trim().min(1).optional(),
+  gender: z.string().trim().min(1).optional(),
+  seatSurcharge: z.number().min(0).optional(),
+});
+
+export const createBookingWithTicketsSchema = createBookingSchema.extend({
+  tickets: z.array(bookingTicketInputSchema).min(1, 'At least one ticket is required'),
+});
+
+export const createGuestBookingSchema = z.object({
+  bookingRef: bookingRefSchema.optional(),
+  flightId: z.cuid({ message: 'Invalid flight ID' }),
+  totalPrice: z.number().positive({ message: 'Total price must be positive' }),
+  currency: z.string().trim().min(3).max(3).default('THB'),
+  contactEmail: z.string().email(),
+  contactPhone: z.string().trim().min(6).max(30).optional().nullable(),
+  guestName: z.string().trim().min(2).max(120).optional(),
+});
+
+export const createGuestBookingWithTicketsSchema = createGuestBookingSchema.extend({
+  tickets: z.array(bookingTicketInputSchema).min(1, 'At least one ticket is required'),
+});
+
 export const updateBookingStatusSchema = z.object({
-  status: z.nativeEnum(BookingStatus),
+  status: z.enum(BookingStatus),
 });
 
 export const changeFlightSchema = z.object({
@@ -42,6 +78,12 @@ export const cancelReaccommodationSchema = z.object({
 });
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
+export type BookingTicketInput = z.infer<typeof bookingTicketInputSchema>;
+export type CreateBookingWithTicketsInput = z.infer<typeof createBookingWithTicketsSchema>;
+export type CreateGuestBookingInput = z.infer<typeof createGuestBookingSchema>;
+export type CreateGuestBookingWithTicketsInput = z.infer<
+  typeof createGuestBookingWithTicketsSchema
+>;
 export type UpdateBookingStatusInput = z.infer<typeof updateBookingStatusSchema>;
 export type ChangeFlightInput = z.infer<typeof changeFlightSchema>;
 export type AcceptReaccommodationInput = z.infer<typeof acceptReaccommodationSchema>;

@@ -1,15 +1,23 @@
 import { bookingRepository } from '@/repositories/booking.repository';
 import { flightRepository } from '@/repositories/flight.repository';
+import { userRepository } from '@/repositories/user.repository';
 import { paymentService } from '@/services/payment.services';
 import {
   acceptReaccommodationSchema,
   cancelReaccommodationSchema,
   createBookingSchema,
+  createBookingWithTicketsSchema,
+  createGuestBookingSchema,
+  createGuestBookingWithTicketsSchema,
   changeFlightSchema,
   updateBookingStatusSchema,
   type AcceptReaccommodationInput,
+  type BookingTicketInput,
   type CancelReaccommodationInput,
   type CreateBookingInput,
+  type CreateGuestBookingInput,
+  type CreateGuestBookingWithTicketsInput,
+  type CreateBookingWithTicketsInput,
   type ChangeFlightInput,
 } from '@/types/booking.type';
 import type { PaginatedResponse } from '@/types/common';
@@ -65,6 +73,13 @@ export class BookingReaccommodationError extends Error {
   }
 }
 
+export class BookingSeatConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BookingSeatConflictError';
+  }
+}
+
 export class UnauthorizedError extends Error {
   constructor(action: string) {
     super(`Unauthorized: cannot perform "${action}" on booking`);
@@ -111,6 +126,24 @@ async function generateUniqueBookingRef() {
     if (!exists) return bookingRef;
   }
   throw new BookingConflictError('Could not generate unique booking reference');
+}
+
+function assertNoDuplicateSeatAssignments(tickets: BookingTicketInput[]) {
+  const seen = new Set<string>();
+  for (const t of tickets) {
+    if (!t.seatNumber) continue;
+    const seat = t.seatNumber.trim().toUpperCase();
+    if (seen.has(seat)) {
+      throw new BookingSeatConflictError(`Duplicate seat in request: ${seat}`);
+    }
+    seen.add(seat);
+  }
+}
+
+function makeGuestEmail(contactEmail: string) {
+  const [local = 'guest', domain = 'example.com'] = contactEmail.toLowerCase().split('@');
+  const token = Math.random().toString(36).slice(2, 10);
+  return `${local}+guest-${token}@${domain}`;
 }
 
 export const bookingService = {
@@ -213,6 +246,131 @@ export const bookingService = {
     if (existingByRef) throw new BookingConflictError('Booking reference already exists');
 
     return bookingRepository.create({ ...data, bookingRef });
+  },
+
+  async createBookingWithTickets(input: CreateBookingWithTicketsInput, session: Session) {
+    checkPermission(session, 'create');
+
+    const data = createBookingWithTicketsSchema.parse(input);
+
+    if (!canReadAll(session) && data.userId !== session.user.id) {
+      throw new UnauthorizedError('create');
+    }
+
+    const flight = await flightRepository.findById(data.flightId);
+    if (!flight) throw new BookingNotFoundError(`flight:${data.flightId}`);
+
+    assertNoDuplicateSeatAssignments(data.tickets);
+
+    const requestedSeats = data.tickets
+      .map((t) => t.seatNumber?.trim().toUpperCase())
+      .filter((s): s is string => Boolean(s));
+
+    if (requestedSeats.length > 0) {
+      const occupied = await bookingRepository.findOccupiedSeats(data.flightId, requestedSeats);
+      if (occupied.length > 0) {
+        const occupiedSeatList = occupied
+          .map((s) => s.seatNumber)
+          .filter((s): s is string => Boolean(s))
+          .sort();
+        throw new BookingSeatConflictError(
+          `Seat already assigned: ${occupiedSeatList.join(', ')}`,
+        );
+      }
+    }
+
+    const bookingRef = data.bookingRef ?? (await generateUniqueBookingRef());
+    const existingByRef = await bookingRepository.findByBookingRef(bookingRef);
+    if (existingByRef) throw new BookingConflictError('Booking reference already exists');
+
+    return bookingRepository.createWithTickets({
+      booking: {
+        bookingRef,
+        userId: data.userId,
+        flightId: data.flightId,
+        totalPrice: data.totalPrice,
+        currency: data.currency,
+        contactEmail: data.contactEmail,
+        contactPhone: data.contactPhone,
+      },
+      tickets: data.tickets,
+    });
+  },
+
+  async createGuestBooking(input: CreateGuestBookingInput) {
+    const data = createGuestBookingSchema.parse(input);
+
+    const flight = await flightRepository.findById(data.flightId);
+    if (!flight) throw new BookingNotFoundError(`flight:${data.flightId}`);
+
+    const bookingRef = data.bookingRef ?? (await generateUniqueBookingRef());
+    const existingByRef = await bookingRepository.findByBookingRef(bookingRef);
+    if (existingByRef) throw new BookingConflictError('Booking reference already exists');
+
+    const guestUser = await userRepository.createGuestUser({
+      email: makeGuestEmail(data.contactEmail),
+      name: data.guestName ?? 'Guest Passenger',
+      phone: data.contactPhone,
+    });
+
+    return bookingRepository.create({
+      bookingRef,
+      userId: guestUser.id,
+      flightId: data.flightId,
+      totalPrice: data.totalPrice,
+      currency: data.currency,
+      contactEmail: data.contactEmail,
+      contactPhone: data.contactPhone,
+    });
+  },
+
+  async createGuestBookingWithTickets(input: CreateGuestBookingWithTicketsInput) {
+    const data = createGuestBookingWithTicketsSchema.parse(input);
+
+    const flight = await flightRepository.findById(data.flightId);
+    if (!flight) throw new BookingNotFoundError(`flight:${data.flightId}`);
+
+    assertNoDuplicateSeatAssignments(data.tickets);
+
+    const requestedSeats = data.tickets
+      .map((t) => t.seatNumber?.trim().toUpperCase())
+      .filter((s): s is string => Boolean(s));
+
+    if (requestedSeats.length > 0) {
+      const occupied = await bookingRepository.findOccupiedSeats(data.flightId, requestedSeats);
+      if (occupied.length > 0) {
+        const occupiedSeatList = occupied
+          .map((s) => s.seatNumber)
+          .filter((s): s is string => Boolean(s))
+          .sort();
+        throw new BookingSeatConflictError(
+          `Seat already assigned: ${occupiedSeatList.join(', ')}`,
+        );
+      }
+    }
+
+    const bookingRef = data.bookingRef ?? (await generateUniqueBookingRef());
+    const existingByRef = await bookingRepository.findByBookingRef(bookingRef);
+    if (existingByRef) throw new BookingConflictError('Booking reference already exists');
+
+    const guestUser = await userRepository.createGuestUser({
+      email: makeGuestEmail(data.contactEmail),
+      name: data.guestName ?? 'Guest Passenger',
+      phone: data.contactPhone,
+    });
+
+    return bookingRepository.createWithTickets({
+      booking: {
+        bookingRef,
+        userId: guestUser.id,
+        flightId: data.flightId,
+        totalPrice: data.totalPrice,
+        currency: data.currency,
+        contactEmail: data.contactEmail,
+        contactPhone: data.contactPhone,
+      },
+      tickets: data.tickets,
+    });
   },
 
   async cancelBooking(id: string, session: Session) {

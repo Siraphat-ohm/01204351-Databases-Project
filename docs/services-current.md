@@ -454,6 +454,9 @@ Methods:
 - `findAll(session)`
 - `findAllPaginated(session, params)`
 - `createBooking(input, session)`
+- `createBookingWithTickets(input, session)`
+- `createGuestBooking(input)`
+- `createGuestBookingWithTickets(input)`
 - `cancelBooking(id, session)`
 - `changeFlight(id, input, session)`
 - `acceptReaccommodation(id, input, session)`
@@ -466,6 +469,7 @@ Errors:
 - `BookingAlreadyCancelledError`
 - `BookingChangeNotAllowedError`
 - `BookingReaccommodationError`
+- `BookingSeatConflictError`
 - `UnauthorizedError`
 
 Notes:
@@ -481,6 +485,12 @@ API routes:
   - supports `page` + `limit` for read-all roles when no filter is set
   - non read-all roles default to own bookings when no filter is set
 - `POST /api/v1/bookings`
+  - authenticated: existing behavior (`userId` checked against session unless read-all role)
+  - guest (no session): supports booking by `contactEmail` without account
+  - guest payload does not require `userId`
+  - optional `guestName` used for generated guest user profile
+  - when body includes non-empty `tickets[]`, booking + all tickets are created together in one transaction
+  - validates duplicate seats in request and already-assigned seats on the flight
 - `GET /api/v1/bookings/[id]`
 - `PATCH /api/v1/bookings/[id]`
   - action-based: `cancel`, `change-flight`, `accept-reaccommodation`, `cancel-reaccommodation`
