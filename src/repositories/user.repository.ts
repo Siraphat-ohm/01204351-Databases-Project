@@ -42,4 +42,19 @@ export const userRepository = {
       data: { role },
       select: userAdminSelect,
     }),
+
+  createGuestUser: (data: { email: string; name: string; phone?: string | null }) =>
+    prisma.user.create({
+      data: {
+        email: data.email,
+        name: data.name,
+        phone: data.phone ?? null,
+        role: Role.PASSENGER,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+      },
+    }),
 };

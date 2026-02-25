@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import {
   bookingAdminInclude,
+  type BookingTicketInput,
   type CreateBookingInput,
 } from '@/types/booking.type';
 import type { Prisma } from '@/generated/prisma/client';
@@ -83,6 +84,55 @@ export const bookingRepository = {
         contactPhone: data.contactPhone ?? null,
       },
       include: bookingAdminInclude,
+    }),
+
+  findOccupiedSeats: (flightId: string, seatNumbers: string[]) =>
+    prisma.ticket.findMany({
+      where: {
+        flightId,
+        seatNumber: { in: seatNumbers },
+      },
+      select: { seatNumber: true },
+    }),
+
+  createWithTickets: (params: {
+    booking: CreateBookingInput & { bookingRef: string };
+    tickets: BookingTicketInput[];
+  }) =>
+    prisma.$transaction(async (tx) => {
+      const createdBooking = await tx.booking.create({
+        data: {
+          bookingRef: params.booking.bookingRef,
+          userId: params.booking.userId,
+          flightId: params.booking.flightId,
+          totalPrice: params.booking.totalPrice,
+          currency: params.booking.currency,
+          contactEmail: params.booking.contactEmail ?? null,
+          contactPhone: params.booking.contactPhone ?? null,
+        },
+      });
+
+      await tx.ticket.createMany({
+        data: params.tickets.map((t) => ({
+          bookingId: createdBooking.id,
+          flightId: params.booking.flightId,
+          class: t.class,
+          seatNumber: t.seatNumber,
+          price: t.price,
+          firstName: t.firstName,
+          lastName: t.lastName,
+          dateOfBirth: t.dateOfBirth,
+          passportNumber: t.passportNumber,
+          nationality: t.nationality,
+          gender: t.gender,
+          seatSurcharge: t.seatSurcharge,
+        })),
+      });
+
+      return tx.booking.findUnique({
+        where: { id: createdBooking.id },
+        include: bookingAdminInclude,
+      });
     }),
 
   updateStatus: (id: string, status: BookingStatus) =>

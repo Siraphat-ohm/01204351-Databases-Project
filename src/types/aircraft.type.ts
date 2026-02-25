@@ -4,14 +4,14 @@ import { Prisma, AircraftStatus } from '@/generated/prisma/client';
 export const createAircraftSchema = z.object({
   tailNumber: z.string().min(2, { message: 'Tail number is required' }),
   aircraftTypeId: z.cuid({ message: 'Invalid aircraft type ID' }),
-  status: z.nativeEnum(AircraftStatus).optional(),
+  status: z.enum(AircraftStatus).optional(),
 });
 
 export const updateAircraftSchema = z
   .object({
     tailNumber: z.string().min(2).optional(),
     aircraftTypeId: z.cuid().optional(),
-    status: z.nativeEnum(AircraftStatus).optional(),
+    status: z.enum(AircraftStatus).optional(),
   })
   .refine(
     (data) => data.tailNumber || data.aircraftTypeId || data.status,

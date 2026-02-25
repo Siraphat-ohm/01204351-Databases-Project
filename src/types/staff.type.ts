@@ -4,8 +4,8 @@ import { Prisma, Role, Rank } from '@/generated/prisma/client';
 export const createStaffSchema = z.object({
   userId: z.cuid({ message: 'Invalid user ID' }),
   employeeId: z.string().min(3, { message: 'Employee ID is required' }),
-  role: z.nativeEnum(Role),
-  rank: z.nativeEnum(Rank).optional(),
+  role: z.enum(Role),
+  rank: z.enum(Rank).optional(),
   baseAirportId: z.cuid().optional(),
   stationId: z.cuid().optional(),
 });
@@ -13,8 +13,8 @@ export const createStaffSchema = z.object({
 export const updateStaffSchema = z
   .object({
     employeeId: z.string().min(3).optional(),
-    role: z.nativeEnum(Role).optional(),
-    rank: z.nativeEnum(Rank).optional(),
+    role: z.enum(Role).optional(),
+    rank: z.enum(Rank).optional(),
     baseAirportId: z.cuid().optional(),
     stationId: z.cuid().optional(),
   })

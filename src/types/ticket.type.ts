@@ -14,7 +14,7 @@ export const checkInTicketSchema = z.object({
 
 export const updateTicketSchema = z
   .object({
-    class: z.nativeEnum(TicketClass).optional(),
+    class: z.enum(TicketClass).optional(),
     seatNumber: seatNumberSchema.nullable().optional(),
     price: z.number().positive().optional(),
     firstName: z.string().trim().min(1).optional(),
@@ -54,7 +54,7 @@ export type TicketAdmin = Prisma.TicketGetPayload<{
 export const ticketCreateSchema = z.object({
   bookingId: z.cuid({ message: 'Invalid booking ID' }),
   flightId: z.cuid({ message: 'Invalid flight ID' }),
-  class: z.nativeEnum(TicketClass).default(TicketClass.ECONOMY),
+  class: z.enum(TicketClass).default(TicketClass.ECONOMY),
   seatNumber: seatNumberSchema.optional(),
   price: z.number().positive(),
   firstName: z.string().min(1),

@@ -75,20 +75,32 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession();
-    if (!session?.user) return unauthorizedResponse();
+    const userId = session?.user?.id ?? 'guest';
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
       namespace: 'api:v1:bookings',
-      userId: session.user.id,
+      userId,
       action: 'write',
     });
     if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
     const body = await req.json();
-    const created = await bookingService.createBooking(body, {
-      user: { id: session.user.id, role: session.user.role },
-    });
+    const hasTickets =
+      Array.isArray((body as { tickets?: unknown }).tickets) &&
+      (body as { tickets?: unknown[] }).tickets!.length > 0;
+
+    const created = session?.user
+      ? hasTickets
+        ? await bookingService.createBookingWithTickets(body, {
+            user: { id: session.user.id, role: session.user.role },
+          })
+        : await bookingService.createBooking(body, {
+            user: { id: session.user.id, role: session.user.role },
+          })
+      : hasTickets
+        ? await bookingService.createGuestBookingWithTickets(body)
+        : await bookingService.createGuestBooking(body);
 
     return successResponse(created, 201);
   } catch (err) {
@@ -102,6 +114,9 @@ export async function POST(req: NextRequest) {
       return errorResponse(err.message, 404);
     }
     if (err instanceof Error && err.name === 'BookingConflictError') {
+      return errorResponse(err.message, 409);
+    }
+    if (err instanceof Error && err.name === 'BookingSeatConflictError') {
       return errorResponse(err.message, 409);
     }
     console.error('[POST /api/v1/bookings]', err);

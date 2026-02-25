@@ -16,7 +16,7 @@ export const updateMyProfileSchema = z
   );
 
 export const updateUserRoleSchema = z.object({
-  role: z.nativeEnum(Role),
+  role: z.enum(Role),
 });
 
 export type UpdateMyProfileInput = z.infer<typeof updateMyProfileSchema>;
