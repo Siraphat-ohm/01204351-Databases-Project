@@ -278,6 +278,36 @@ API routes:
 - `GET /api/v1/payment-logs/[id]`
 - `PATCH /api/v1/payment-logs/[id]`
 
+### 4.3.4 `flightOpsLogService` (Mongo)
+
+Files:
+
+- `src/services/flight-ops-log.services.ts`
+- `src/repositories/flight-ops-log.repository.ts`
+- `src/types/flight-ops-log.type.ts`
+- `src/models/FlightOpsLog.ts`
+
+Methods:
+
+- `findById(id, session)`
+- `findByFlightId(flightId, session)`
+- `findAll(session)`
+- `upsertByFlightId(flightId, input, session)`
+- `patchById(id, input, session)`
+
+Errors:
+
+- `FlightOpsLogNotFoundError`
+- `FlightNotFoundError`
+- `UnauthorizedError`
+
+API routes:
+
+- `GET /api/v1/flight-ops-logs`
+- `PUT /api/v1/flight-ops-logs?flightId=...`
+- `GET /api/v1/flight-ops-logs/[id]`
+- `PATCH /api/v1/flight-ops-logs/[id]`
+
 ### 4.4 `routeService`
 
 File: `src/services/route.services.ts`
