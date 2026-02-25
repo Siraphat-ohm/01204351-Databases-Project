@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { bookingService } from '@/services/booking.services';
 import { getServerSession } from '@/services/auth.services';
@@ -114,10 +115,25 @@ export async function POST(req: NextRequest) {
       return errorResponse(err.message, 404);
     }
     if (err instanceof Error && err.name === 'BookingConflictError') {
-      return errorResponse(err.message, 409);
+      return NextResponse.json({ error: err.message, validationCode: 'BOOKING_CONFLICT' }, {
+        status: 409,
+      });
     }
     if (err instanceof Error && err.name === 'BookingSeatConflictError') {
-      return errorResponse(err.message, 409);
+      return NextResponse.json({ error: err.message, validationCode: 'SEAT_CONFLICT' }, {
+        status: 409,
+      });
+    }
+    if (err instanceof Error && err.name === 'BookingPassengerLimitError') {
+      return NextResponse.json(
+        { error: err.message, validationCode: 'PASSENGER_LIMIT' },
+        { status: 409 },
+      );
+    }
+    if (err instanceof Error && err.name === 'BookingPriceMismatchError') {
+      return NextResponse.json({ error: err.message, validationCode: 'PRICE_MISMATCH' }, {
+        status: 409,
+      });
     }
     console.error('[POST /api/v1/bookings]', err);
     return errorResponse('Internal server error');
