@@ -164,6 +164,7 @@ Methods:
 - `findByIataCode(iataCode, session)`
 - `findAll(session)`
 - `findAllPaginated(session, params)`
+- `searchPaginated(search, session, params)`
 - `createAirport(input, session)`
 - `updateAirport(id, input, session)`
 - `deleteAirport(id, session)`
@@ -174,6 +175,13 @@ Errors:
 - `AirportConflictError`
 - `AirportInUseError`
 - `UnauthorizedError`
+
+API routes:
+
+- `GET /api/v1/airports`
+  - supports `search`
+  - supports `page` + `limit`
+  - also supports legacy `skip` + `take`
 
 ### 4.3 `staffService`
 
@@ -358,6 +366,7 @@ Methods:
 - `getDestinationsFromOrigin(originCode, session)`
 - `findAll(session)`
 - `findAllPaginated(session, params)`
+- `searchPaginated(search, session, params)`
 - `createRoute(input, session)`
 - `updateRoute(id, input, session)`
 - `deleteRoute(id, session)`
@@ -372,6 +381,18 @@ Errors:
 Notes:
 
 - Pagination uses repository-level `skip/take` plus `count()`.
+
+API routes:
+
+- `GET /api/v1/routes`
+  - supports `search`
+  - supports `page` + `limit`
+  - also supports legacy `skip` + `take`
+- `POST /api/v1/routes`
+- `PATCH /api/v1/routes`
+  - expects `id` in body
+- `DELETE /api/v1/routes`
+  - accepts `id` via query or JSON body
 
 ### 4.5 `flightService`
 

@@ -132,6 +132,44 @@ export const routeService = {
     };
   },
 
+  async searchPaginated(
+    search: string,
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<RouteListItem>> {
+    checkPermission(session, 'read');
+
+    const keyword = search.trim();
+    const where = keyword
+      ? {
+          OR: [
+            { origin: { name: { contains: keyword, mode: 'insensitive' as const } } },
+            { destination: { name: { contains: keyword, mode: 'insensitive' as const } } },
+          ],
+        }
+      : undefined;
+
+    const { page, limit, skip } = resolvePagination(params);
+    const [data, total] = await Promise.all([
+      routeRepository.findMany({
+        where,
+        skip,
+        take: limit,
+      }),
+      routeRepository.count(where),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  },
+
   async createRoute(input: CreateRouteInput, session: Session) {
     checkPermission(session, 'create');
 

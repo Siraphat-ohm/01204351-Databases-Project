@@ -1,167 +1,175 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { z } from "zod";
-import { createRouteSchema, updateRouteSchema } from "@/types/route.type";
-import { routeRepository } from "@/repositories/route.repository";
+import { NextRequest } from 'next/server';
+import { ZodError } from 'zod';
+import { routeService } from '@/services/route.services';
+import { getServerSession } from '@/services/auth.services';
+import {
+  successResponse,
+  errorResponse,
+  unauthorizedResponse,
+  tooManyRequestsResponse,
+  validationErrorResponse,
+  zodFieldErrors,
+} from '@/lib/utils/api-response';
+import { enforceApiRateLimit } from '@/lib/utils/rate-limit';
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const search = searchParams.get("search") || "";
-  const skip = Number(searchParams.get("skip") || 0);
-  const take = Number(searchParams.get("take") || 20);
+function resolvePageLimit(req: NextRequest) {
+  const pageParam = req.nextUrl.searchParams.get('page');
+  const limitParam = req.nextUrl.searchParams.get('limit');
+  const skipParam = req.nextUrl.searchParams.get('skip');
+  const takeParam = req.nextUrl.searchParams.get('take');
 
-  const where = search
-    ? {
-        OR: [
-          { origin: { name: { contains: search, mode: "insensitive" } } },
-          { destination: { name: { contains: search, mode: "insensitive" } } },
-        ],
-      }
-    : undefined;
+  if (skipParam !== null || takeParam !== null) {
+    const skip = Number(skipParam ?? 0);
+    const take = Number(takeParam ?? 20);
+    const limit = take > 0 ? take : 20;
+    const page = Math.floor((skip > 0 ? skip : 0) / limit) + 1;
+    return { page, limit };
+  }
 
-  const [data, total] = await Promise.all([
-    prisma.route.findMany({
-      where,
-      skip,
-      take,
-      include: { origin: true, destination: true },
-    }),
-    prisma.route.count({ where }),
-  ]);
-
-  return NextResponse.json({ data, total, skip, take });
+  return {
+    page: Number(pageParam ?? 1),
+    limit: Number(limitParam ?? 20),
+  };
 }
 
-export async function POST(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const body = await req.json();
-    const data = createRouteSchema.parse(body);
+    const session = await getServerSession();
+    if (!session?.user) return unauthorizedResponse();
 
-    const existing = await routeRepository.findByAirportIds(
-      data.originAirportId,
-      data.destAirportId,
-    );
-    if (existing) {
-      return NextResponse.json(
-        { message: "Route already exists" },
-        { status: 409 },
-      );
-    }
-
-    if (data.createReturn) {
-      const reverseExists = await routeRepository.findByAirportIds(
-        data.destAirportId,
-        data.originAirportId,
-      );
-      if (reverseExists) {
-        return NextResponse.json(
-          { message: "Return route already exists" },
-          { status: 409 },
-        );
-      }
-    }
-
-    if (data.createReturn) {
-      const [route, returnRoute] = await prisma.$transaction([
-        prisma.route.create({
-          data: {
-            originAirportId: data.originAirportId,
-            destAirportId: data.destAirportId,
-            distanceKm: data.distanceKm,
-            durationMins: data.durationMins ?? null,
-          },
-          include: { origin: true, destination: true },
-        }),
-        prisma.route.create({
-          data: {
-            originAirportId: data.destAirportId,
-            destAirportId: data.originAirportId,
-            distanceKm: data.distanceKm,
-            durationMins: data.durationMins ?? null,
-          },
-          include: { origin: true, destination: true },
-        }),
-      ]);
-
-      return NextResponse.json({ route, returnRoute });
-    }
-
-    const route = await prisma.route.create({
-      data: {
-        originAirportId: data.originAirportId,
-        destAirportId: data.destAirportId,
-        distanceKm: data.distanceKm,
-        durationMins: data.durationMins ?? null,
-      },
-      include: { origin: true, destination: true },
+    const limited = enforceApiRateLimit({
+      headers: req.headers,
+      namespace: 'api:v1:routes',
+      userId: session.user.id,
+      action: 'read',
     });
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
-    return NextResponse.json({ route, returnRoute: null });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ issues: error.issues }, { status: 400 });
+    const search = req.nextUrl.searchParams.get('search') ?? '';
+    const { page, limit } = resolvePageLimit(req);
+    const serviceSession = { user: { id: session.user.id, role: session.user.role } };
+
+    const result = await routeService.searchPaginated(search, serviceSession, { page, limit });
+    return successResponse(result);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'UnauthorizedError') {
+      return unauthorizedResponse();
     }
-    return NextResponse.json({ message: "Failed to create route" }, { status: 500 });
+    console.error('[GET /api/v1/routes]', err);
+    return errorResponse('Internal server error');
   }
 }
 
-export async function PATCH(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession();
+    if (!session?.user) return unauthorizedResponse();
+
+    const limited = enforceApiRateLimit({
+      headers: req.headers,
+      namespace: 'api:v1:routes',
+      userId: session.user.id,
+      action: 'write',
+    });
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
+
     const body = await req.json();
-    const id = z.string().cuid().parse(body?.id);
-    const data = updateRouteSchema.parse(body);
-
-    const existing = await routeRepository.findByIdAdmin(id);
-    if (!existing) {
-      return NextResponse.json({ message: "Route not found" }, { status: 404 });
-    }
-
-    const route = await prisma.route.update({
-      where: { id },
-      data,
-      include: { origin: true, destination: true },
+    const created = await routeService.createRoute(body, {
+      user: { id: session.user.id, role: session.user.role },
     });
 
-    return NextResponse.json({ route });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ issues: error.issues }, { status: 400 });
+    return successResponse(created, 201);
+  } catch (err) {
+    if (err instanceof ZodError) {
+      return validationErrorResponse(zodFieldErrors(err));
     }
-    return NextResponse.json({ message: "Failed to update route" }, { status: 500 });
+    if (err instanceof Error && err.name === 'UnauthorizedError') {
+      return unauthorizedResponse();
+    }
+    if (err instanceof Error && err.name === 'RouteConflictError') {
+      return errorResponse(err.message, 409);
+    }
+    console.error('[POST /api/v1/routes]', err);
+    return errorResponse('Internal server error');
   }
 }
 
-export async function DELETE(req: Request) {
+export async function PATCH(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    let id = searchParams.get("id");
+    const session = await getServerSession();
+    if (!session?.user) return unauthorizedResponse();
 
-    if (!id && req.headers.get("content-type")?.includes("application/json")) {
+    const limited = enforceApiRateLimit({
+      headers: req.headers,
+      namespace: 'api:v1:routes',
+      userId: session.user.id,
+      action: 'write',
+    });
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
+
+    const body = await req.json();
+    const id = typeof body?.id === 'string' ? body.id : '';
+    if (!id) return errorResponse('id is required', 400);
+
+    const { id: _id, ...payload } = body as Record<string, unknown>;
+    const updated = await routeService.updateRoute(id, payload, {
+      user: { id: session.user.id, role: session.user.role },
+    });
+
+    return successResponse(updated);
+  } catch (err) {
+    if (err instanceof ZodError) {
+      return validationErrorResponse(zodFieldErrors(err));
+    }
+    if (err instanceof Error && err.name === 'UnauthorizedError') {
+      return unauthorizedResponse();
+    }
+    if (err instanceof Error && err.name === 'RouteNotFoundError') {
+      return errorResponse(err.message, 404);
+    }
+    console.error('[PATCH /api/v1/routes]', err);
+    return errorResponse('Internal server error');
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await getServerSession();
+    if (!session?.user) return unauthorizedResponse();
+
+    const limited = enforceApiRateLimit({
+      headers: req.headers,
+      namespace: 'api:v1:routes',
+      userId: session.user.id,
+      action: 'write',
+    });
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
+
+    let id = req.nextUrl.searchParams.get('id');
+
+    if (!id && req.headers.get('content-type')?.includes('application/json')) {
       const body = await req.json();
-      id = body?.id;
+      id = typeof body?.id === 'string' ? body.id : null;
     }
 
-    const routeId = z.string().cuid().parse(id);
+    if (!id) return errorResponse('id is required', 400);
 
-    const existing = await routeRepository.findByIdAdmin(routeId);
-    if (!existing) {
-      return NextResponse.json({ message: "Route not found" }, { status: 404 });
-    }
+    const deleted = await routeService.deleteRoute(id, {
+      user: { id: session.user.id, role: session.user.role },
+    });
 
-    const activeFlights = await routeRepository.countActiveFlights(routeId);
-    if (activeFlights > 0) {
-      return NextResponse.json(
-        { message: "Route has active flights" },
-        { status: 409 },
-      );
+    return successResponse(deleted);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'UnauthorizedError') {
+      return unauthorizedResponse();
     }
-
-    await prisma.route.delete({ where: { id: routeId } });
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ issues: error.issues }, { status: 400 });
+    if (err instanceof Error && err.name === 'RouteNotFoundError') {
+      return errorResponse(err.message, 404);
     }
-    return NextResponse.json({ message: "Failed to delete route" }, { status: 500 });
+    if (err instanceof Error && err.name === 'RouteHasActiveFlightsError') {
+      return errorResponse(err.message, 409);
+    }
+    console.error('[DELETE /api/v1/routes]', err);
+    return errorResponse('Internal server error');
   }
 }
