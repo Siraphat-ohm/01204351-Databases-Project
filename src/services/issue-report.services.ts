@@ -5,8 +5,13 @@ import {
   type CreateIssueReportInput,
   type UpdateIssueReportStatusInput,
 } from '@/types/issue-report.type';
+import type { PaginatedResponse } from '@/types/common';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import { hasAnyRole } from '@/services/_shared/role';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '@/services/_shared/pagination';
 
 export class IssueReportNotFoundError extends Error {
   constructor(id: string) {
@@ -43,9 +48,61 @@ export const issueReportService = {
     return issueReportRepository.findByUserId(session.user.id);
   },
 
+  async findMinePaginated(
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<Awaited<ReturnType<typeof issueReportRepository.findAll>>[number]>> {
+    const { page, limit, skip } = resolvePagination(params);
+
+    const [data, total] = await Promise.all([
+      issueReportRepository.findMany({
+        where: { userId: session.user.id },
+        skip,
+        take: limit,
+      }),
+      issueReportRepository.count({ userId: session.user.id }),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  },
+
   async findAll(session: Session) {
     if (!isAdmin(session)) throw new UnauthorizedError('read-all');
     return issueReportRepository.findAll();
+  },
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<Awaited<ReturnType<typeof issueReportRepository.findAll>>[number]>> {
+    if (!isAdmin(session)) throw new UnauthorizedError('read-all');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const [data, total] = await Promise.all([
+      issueReportRepository.findMany({
+        skip,
+        take: limit,
+      }),
+      issueReportRepository.count(),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   },
 
   async createMine(input: CreateIssueReportInput, session: Session) {
