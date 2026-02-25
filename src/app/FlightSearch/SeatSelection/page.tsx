@@ -32,10 +32,11 @@ const formatDate = (dateString: string) => {
   });
 };
 
-// Updated type: Just First and Last name for individual tickets
+// Updated type: Now includes passenger-specific email
 type PassengerDetails = {
   firstName: string;
   lastName: string;
+  email: string;
 };
 
 export default function SeatSelectionPage() {
@@ -58,7 +59,7 @@ export default function SeatSelectionPage() {
   // Passenger Data State
   const [passengerData, setPassengerData] = useState<Record<string, PassengerDetails>>({});
   
-  // New: Unified Contact Information State
+  // Unified Contact Information State
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
 
@@ -86,66 +87,6 @@ export default function SeatSelectionPage() {
     if (departFlightCode) fetchData();
   }, [departFlightCode]);
 
-  const handleProceedToPayment = async () => {
-    if (isBooking) return;
-    setIsBooking(true);
-    
-    // Construct the precise Payload requested
-    const payload = {
-      userId: session?.user?.id || "", // Ensure we pass the user ID from auth
-      flightId: flight.id,
-      totalPrice: totalPrice,
-      currency: "THB",
-      contactEmail: contactEmail.trim(),
-      contactPhone: contactPhone.trim(),
-      tickets: selectedSeats.map(code => {
-        const { cabinClass, finalPrice } = getSeatDetails(code);
-        return {
-          class: cabinClass,
-          seatNumber: code,
-          price: finalPrice,
-          firstName: passengerData[code]?.firstName.trim(),
-          lastName: passengerData[code]?.lastName.trim()
-        };
-      })
-    };
-
-    try {
-      const res = await fetch('/api/v1/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      let result;
-      const contentType = res.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        result = await res.json();
-      } else {
-        const text = await res.text();
-        throw new Error(text || `Server responded with status ${res.status}`);
-      }
-
-      if (!res.ok) {
-        console.error("Backend Error Details:", JSON.stringify(result, null, 2));
-        throw new Error(result?.error?.message || result?.message || "Failed to create booking");
-      }
-
-      // Extract ID and go to Payment
-      const bookingId = result?.data?.id || result?.id;
-      if (bookingId) {
-        router.push(`/FlightSearch/Payment?bookingId=${bookingId}`);
-      } else {
-        throw new Error("No booking ID returned from server.");
-      }
-    } catch (err: any) {
-      console.error("Booking creation failed", err);
-      alert(err.message || "Failed to create booking. Please try again.");
-    } finally {
-      setIsBooking(false);
-    }
-  };
-
   const getBasePriceForCabin = (cabinName: string) => {
     const cName = cabinName?.toUpperCase();
     const ecoPrice = Number(flight?.basePriceEconomy) || 1500;
@@ -169,10 +110,96 @@ export default function SeatSelectionPage() {
     }
 
     const basePrice = getBasePriceForCabin(cabinClass);
-    const finalPrice = seatObj?.price !== undefined ? Number(seatObj.price) : basePrice + Number(seatObj?.surcharge || 0);
+    const surcharge = Number(seatObj?.surcharge || 0);
+    
+    // Some backend APIs return `price` as final, some as base. 
+    // We determine the true base price to send based on your payload example.
+    const trueBasePrice = seatObj?.price !== undefined ? (Number(seatObj.price) - surcharge) : basePrice;
+    const finalPrice = trueBasePrice + surcharge;
+    
     const isOccupied = seatObj?.status === "OCCUPIED" || seatMap?.occupiedSeats?.includes(seatLabel);
 
-    return { cabinClass, finalPrice, isOccupied };
+    return { cabinClass, trueBasePrice, surcharge, finalPrice, isOccupied };
+  };
+
+  const totalPrice = selectedSeats.reduce((total, code) => total + getSeatDetails(code).finalPrice, 0);
+
+  const handleProceedToPayment = async () => {
+    if (isBooking) return;
+    setIsBooking(true);
+    
+    // Construct the precise Payload exactly as requested
+    const payload = {
+      userId: session?.user?.id || "", 
+      flightId: flight?.id || "",
+      totalPrice: Number(totalPrice),
+      currency: "THB",
+      contactEmail: contactEmail.trim(),
+      contactPhone: contactPhone.trim(),
+      tickets: selectedSeats.map(code => {
+        const { cabinClass, trueBasePrice, surcharge } = getSeatDetails(code);
+        return {
+          class: cabinClass,
+          seatNumber: code,
+          price: Number(trueBasePrice),
+          seatSurcharge: Number(surcharge),
+          firstName: passengerData[code]?.firstName?.trim() || "",
+          lastName: passengerData[code]?.lastName?.trim() || "",
+          email: passengerData[code]?.email?.trim() || "" // Individual passenger email
+        };
+      })
+    };
+
+    try {
+      const res = await fetch('/api/v1/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      let result;
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        result = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(text || `Server responded with status ${res.status}`);
+      }
+
+      // Handle precise backend errors from your API Route
+      if (!res.ok) {
+        console.error("Backend Error Details:", JSON.stringify(result, null, 2));
+
+        // 1. Check for specific API Validation Codes (PRICE_MISMATCH, SEAT_CONFLICT, etc.)
+        if (result.validationCode) {
+           throw new Error(`Booking Error (${result.validationCode}): ${result.error}`);
+        }
+        
+        // 2. Check for Zod Validation Field Errors
+        if (result?.error?.details || result?.details) {
+          const zodErrors = Object.entries(result.error.details || result.details)
+            .map(([field, msg]) => `- ${field}: ${msg}`)
+            .join("\n");
+          throw new Error(`Form Validation Error:\n${zodErrors}`);
+        }
+
+        // 3. Fallback error
+        throw new Error(result?.error?.message || result?.error || result?.message || "Failed to create booking");
+      }
+
+      // Extract ID and go to Payment
+      const bookingId = result?.data?.id || result?.id;
+      if (bookingId) {
+        router.push(`/FlightSearch/Payment?bookingId=${bookingId}`);
+      } else {
+        throw new Error("API returned Success but no booking ID was found.");
+      }
+    } catch (err: any) {
+      console.error("Booking creation failed", err);
+      alert(err.message || "Failed to create booking. Please try again.");
+    } finally {
+      setIsBooking(false);
+    }
   };
 
   const handleSeatClick = (seatCode: string) => {
@@ -188,7 +215,7 @@ export default function SeatSelectionPage() {
       setSelectedSeats(prev => [...prev, seatCode]);
       setPassengerData(prev => ({
         ...prev,
-        [seatCode]: { firstName: "", lastName: "" }
+        [seatCode]: { firstName: "", lastName: "", email: "" }
       }));
     }
   };
@@ -218,13 +245,11 @@ export default function SeatSelectionPage() {
   };
 
   if (loading) return <Center h="100vh"><Loader size="xl" /></Center>;
-
-  const totalPrice = selectedSeats.reduce((total, code) => total + getSeatDetails(code).finalPrice, 0);
   
-  // Validation Check: All passenger names + Contact email & phone must be filled
+  // Validation Check: All passenger names/emails + Contact email & phone must be filled
   const allPassengersFilled = selectedSeats.length === requiredSeats && selectedSeats.every(s => {
     const p = passengerData[s];
-    return p?.firstName?.trim().length > 0 && p?.lastName?.trim().length > 0;
+    return p?.firstName?.trim().length > 0 && p?.lastName?.trim().length > 0 && p?.email?.trim().length > 0;
   });
   const isContactFilled = contactEmail.trim().length > 0 && contactPhone.trim().length > 0;
   const canProceed = allPassengersFilled && isContactFilled;
@@ -339,7 +364,7 @@ export default function SeatSelectionPage() {
                 </Alert>
               ) : (
                 <Stack gap="lg">
-                  {/* Map over individual seats for First/Last Names */}
+                  {/* Map over individual seats for First/Last Names and Email */}
                   {selectedSeats.map(code => {
                     const { cabinClass, finalPrice } = getSeatDetails(code);
                     return (
@@ -358,38 +383,47 @@ export default function SeatSelectionPage() {
                           </Group>
                         </Group>
 
-                        <Group grow>
+                        <Stack gap="xs">
+                          <Group grow>
+                            <TextInput 
+                              placeholder="First Name"
+                              leftSection={<IconUser size={16} />}
+                              value={passengerData[code]?.firstName || ""}
+                              onChange={(e) => updatePassengerField(code, 'firstName', e.target.value)}
+                              required
+                            />
+                            <TextInput 
+                              placeholder="Last Name"
+                              value={passengerData[code]?.lastName || ""}
+                              onChange={(e) => updatePassengerField(code, 'lastName', e.target.value)}
+                              required
+                            />
+                          </Group>
                           <TextInput 
-                            placeholder="First Name"
-                            leftSection={<IconUser size={16} />}
-                            value={passengerData[code]?.firstName || ""}
-                            onChange={(e) => updatePassengerField(code, 'firstName', e.target.value)}
+                            placeholder="Passenger Email"
+                            leftSection={<IconMail size={16} />}
+                            value={passengerData[code]?.email || ""}
+                            onChange={(e) => updatePassengerField(code, 'email', e.target.value)}
                             required
                           />
-                          <TextInput 
-                            placeholder="Last Name"
-                            value={passengerData[code]?.lastName || ""}
-                            onChange={(e) => updatePassengerField(code, 'lastName', e.target.value)}
-                            required
-                          />
-                        </Group>
+                        </Stack>
                       </Paper>
                     );
                   })}
 
                   {/* Single Contact Information Box */}
                   <Paper withBorder p="sm" radius="md" bg="blue.0" style={{ borderColor: 'var(--mantine-color-blue-2)' }}>
-                    <Text fw={700} size="sm" mb="xs" c="blue.9">Contact Information</Text>
+                    <Text fw={700} size="sm" mb="xs" c="blue.9">Booking Contact Information</Text>
                     <Stack gap="xs">
                       <TextInput 
-                        placeholder="Email Address"
+                        placeholder="Primary Email Address"
                         leftSection={<IconMail size={16} />}
                         value={contactEmail}
                         onChange={(e) => setContactEmail(e.target.value)}
                         required
                       />
                       <TextInput 
-                        placeholder="Phone Number"
+                        placeholder="Primary Phone Number"
                         leftSection={<IconPhone size={16} />}
                         value={contactPhone}
                         onChange={(e) => setContactPhone(e.target.value)}
