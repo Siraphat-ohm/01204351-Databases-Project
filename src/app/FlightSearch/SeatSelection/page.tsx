@@ -9,7 +9,7 @@ import {
   TextInput, Alert, Tooltip
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { IconArmchair, IconPlane, IconUserPlus, IconUserMinus, IconCheck, IconAlertCircle, IconClock, IconMail, IconPhone } from "@tabler/icons-react";
+import { IconArmchair, IconPlane, IconUserPlus, IconUserMinus, IconCheck, IconAlertCircle, IconClock, IconMail, IconPhone, IconUser } from "@tabler/icons-react";
 import { Navbar } from "@/components/Navbar";
 import { useAuthSession } from "@/services/auth-client.service";
 
@@ -32,11 +32,10 @@ const formatDate = (dateString: string) => {
   });
 };
 
-// Define a type for our passenger details
+// Updated type: Just First and Last name for individual tickets
 type PassengerDetails = {
-  name: string;
-  email: string;
-  phone: string;
+  firstName: string;
+  lastName: string;
 };
 
 export default function SeatSelectionPage() {
@@ -55,8 +54,13 @@ export default function SeatSelectionPage() {
   const [requiredSeats, setRequiredSeats] = useState(initialSeats > 0 ? initialSeats : 1);
   
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
-  // Store full object instead of just a name string
+  
+  // Passenger Data State
   const [passengerData, setPassengerData] = useState<Record<string, PassengerDetails>>({});
+  
+  // New: Unified Contact Information State
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -85,21 +89,32 @@ export default function SeatSelectionPage() {
   const handleProceedToPayment = async () => {
     if (isBooking) return;
     setIsBooking(true);
+    
+    // Construct the precise Payload requested
+    const payload = {
+      userId: session?.user?.id || "", // Ensure we pass the user ID from auth
+      flightId: flight.id,
+      totalPrice: totalPrice,
+      currency: "THB",
+      contactEmail: contactEmail.trim(),
+      contactPhone: contactPhone.trim(),
+      tickets: selectedSeats.map(code => {
+        const { cabinClass, finalPrice } = getSeatDetails(code);
+        return {
+          class: cabinClass,
+          seatNumber: code,
+          price: finalPrice,
+          firstName: passengerData[code]?.firstName.trim(),
+          lastName: passengerData[code]?.lastName.trim()
+        };
+      })
+    };
+
     try {
-      // Create Booking API Call
       const res = await fetch('/api/v1/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          flightId: flight.id, // using flight.id based on backend typical usage
-          flightCode: departFlightCode,
-          passengers: selectedSeats.map(code => ({
-            seatCode: code,
-            name: passengerData[code]?.name.trim(),
-            email: passengerData[code]?.email.trim(),
-            phone: passengerData[code]?.phone.trim()
-          }))
-        })
+        body: JSON.stringify(payload)
       });
 
       let result;
@@ -112,6 +127,7 @@ export default function SeatSelectionPage() {
       }
 
       if (!res.ok) {
+        console.error("Backend Error Details:", JSON.stringify(result, null, 2));
         throw new Error(result?.error?.message || result?.message || "Failed to create booking");
       }
 
@@ -172,7 +188,7 @@ export default function SeatSelectionPage() {
       setSelectedSeats(prev => [...prev, seatCode]);
       setPassengerData(prev => ({
         ...prev,
-        [seatCode]: { name: "", email: "", phone: "" } // Initialize empty fields
+        [seatCode]: { firstName: "", lastName: "" }
       }));
     }
   };
@@ -191,7 +207,6 @@ export default function SeatSelectionPage() {
     }
   };
 
-  // Update specific field for a passenger
   const updatePassengerField = (seatCode: string, field: keyof PassengerDetails, value: string) => {
     setPassengerData(prev => ({
       ...prev,
@@ -206,11 +221,13 @@ export default function SeatSelectionPage() {
 
   const totalPrice = selectedSeats.reduce((total, code) => total + getSeatDetails(code).finalPrice, 0);
   
-  // Ensure all seats are assigned AND all 3 fields (name, email, phone) have values
-  const allFieldsFilled = selectedSeats.length === requiredSeats && selectedSeats.every(s => {
+  // Validation Check: All passenger names + Contact email & phone must be filled
+  const allPassengersFilled = selectedSeats.length === requiredSeats && selectedSeats.every(s => {
     const p = passengerData[s];
-    return p?.name?.trim().length > 0 && p?.email?.trim().length > 0 && p?.phone?.trim().length > 0;
+    return p?.firstName?.trim().length > 0 && p?.lastName?.trim().length > 0;
   });
+  const isContactFilled = contactEmail.trim().length > 0 && contactPhone.trim().length > 0;
+  const canProceed = allPassengersFilled && isContactFilled;
 
   return (
     <>
@@ -301,7 +318,7 @@ export default function SeatSelectionPage() {
             </Paper>
           </Grid.Col>
 
-          {/* Passenger Sidebar */}
+          {/* Passenger & Contact Sidebar */}
           <Grid.Col span={{ base: 12, md: 5 }}>
             <Paper withBorder p="md" radius="md" pos="sticky" top={20}>
               <Group justify="space-between" mb="md">
@@ -322,6 +339,7 @@ export default function SeatSelectionPage() {
                 </Alert>
               ) : (
                 <Stack gap="lg">
+                  {/* Map over individual seats for First/Last Names */}
                   {selectedSeats.map(code => {
                     const { cabinClass, finalPrice } = getSeatDetails(code);
                     return (
@@ -340,33 +358,45 @@ export default function SeatSelectionPage() {
                           </Group>
                         </Group>
 
-                        <Stack gap="xs">
+                        <Group grow>
                           <TextInput 
-                            placeholder="Full Name (e.g. John Doe)"
-                            value={passengerData[code]?.name || ""}
-                            onChange={(e) => updatePassengerField(code, 'name', e.target.value)}
+                            placeholder="First Name"
+                            leftSection={<IconUser size={16} />}
+                            value={passengerData[code]?.firstName || ""}
+                            onChange={(e) => updatePassengerField(code, 'firstName', e.target.value)}
                             required
                           />
-                          <Group grow>
-                            <TextInput 
-                              placeholder="Email Address"
-                              leftSection={<IconMail size={16} />}
-                              value={passengerData[code]?.email || ""}
-                              onChange={(e) => updatePassengerField(code, 'email', e.target.value)}
-                              required
-                            />
-                            <TextInput 
-                              placeholder="Phone Number"
-                              leftSection={<IconPhone size={16} />}
-                              value={passengerData[code]?.phone || ""}
-                              onChange={(e) => updatePassengerField(code, 'phone', e.target.value)}
-                              required
-                            />
-                          </Group>
-                        </Stack>
+                          <TextInput 
+                            placeholder="Last Name"
+                            value={passengerData[code]?.lastName || ""}
+                            onChange={(e) => updatePassengerField(code, 'lastName', e.target.value)}
+                            required
+                          />
+                        </Group>
                       </Paper>
                     );
                   })}
+
+                  {/* Single Contact Information Box */}
+                  <Paper withBorder p="sm" radius="md" bg="blue.0" style={{ borderColor: 'var(--mantine-color-blue-2)' }}>
+                    <Text fw={700} size="sm" mb="xs" c="blue.9">Contact Information</Text>
+                    <Stack gap="xs">
+                      <TextInput 
+                        placeholder="Email Address"
+                        leftSection={<IconMail size={16} />}
+                        value={contactEmail}
+                        onChange={(e) => setContactEmail(e.target.value)}
+                        required
+                      />
+                      <TextInput 
+                        placeholder="Phone Number"
+                        leftSection={<IconPhone size={16} />}
+                        value={contactPhone}
+                        onChange={(e) => setContactPhone(e.target.value)}
+                        required
+                      />
+                    </Stack>
+                  </Paper>
                 </Stack>
               )}
 
@@ -381,7 +411,7 @@ export default function SeatSelectionPage() {
                 mt="xl" 
                 size="lg" 
                 color="green" 
-                disabled={!allFieldsFilled || isBooking}
+                disabled={!canProceed || isBooking}
                 loading={isBooking}
                 onClick={handleProceedToPayment}
                 leftSection={<IconCheck size={20} />}
