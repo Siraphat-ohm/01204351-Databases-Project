@@ -145,6 +145,25 @@ export const bookingService = {
     return bookingRepository.findByUserId(session.user.id);
   },
 
+  async findByFlightId(flightId: string, session: Session) {
+    checkPermission(session, 'read');
+
+    const bookings = await bookingRepository.findByFlightId(flightId);
+    if (canReadAll(session)) return bookings;
+
+    return bookings.filter((b) => b.userId === session.user.id);
+  },
+
+  async findByFlightCode(flightCode: string, session: Session) {
+    checkPermission(session, 'read');
+
+    const normalizedCode = flightCode.trim().toUpperCase();
+    const bookings = await bookingRepository.findByFlightCode(normalizedCode);
+    if (canReadAll(session)) return bookings;
+
+    return bookings.filter((b) => b.userId === session.user.id);
+  },
+
   async findAll(session: Session) {
     checkPermission(session, 'read-all');
     return bookingRepository.findAll();

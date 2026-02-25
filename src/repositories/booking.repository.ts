@@ -31,6 +31,24 @@ export const bookingRepository = {
       orderBy: { createdAt: 'desc' },
     }),
 
+  findByFlightId: (flightId: string) =>
+    prisma.booking.findMany({
+      where: { flightId },
+      include: bookingAdminInclude,
+      orderBy: { createdAt: 'desc' },
+    }),
+
+  findByFlightCode: (flightCode: string) =>
+    prisma.booking.findMany({
+      where: {
+        flight: {
+          flightCode,
+        },
+      },
+      include: bookingAdminInclude,
+      orderBy: { createdAt: 'desc' },
+    }),
+
   create: (data: CreateBookingInput & { bookingRef: string }) =>
     prisma.booking.create({
       data: {
