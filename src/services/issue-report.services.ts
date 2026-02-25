@@ -6,6 +6,7 @@ import {
   type UpdateIssueReportStatusInput,
 } from '@/types/issue-report.type';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import { hasAnyRole } from '@/services/_shared/role';
 
 export class IssueReportNotFoundError extends Error {
   constructor(id: string) {
@@ -22,7 +23,7 @@ export class UnauthorizedError extends Error {
 }
 
 function isAdmin(session: Session) {
-  return session.user.role === 'ADMIN';
+  return hasAnyRole(session, ['ADMIN']);
 }
 
 export const issueReportService = {

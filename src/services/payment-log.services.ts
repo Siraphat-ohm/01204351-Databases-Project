@@ -7,6 +7,7 @@ import {
   type UpdatePaymentLogInput,
 } from '@/types/payment-log.type';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import { hasAnyRole } from '@/services/_shared/role';
 
 export class PaymentLogNotFoundError extends Error {
   constructor(id: string) {
@@ -30,7 +31,7 @@ export class UnauthorizedError extends Error {
 }
 
 function isAdmin(session: Session) {
-  return session.user.role === 'ADMIN';
+  return hasAnyRole(session, ['ADMIN']);
 }
 
 async function assertCanReadBooking(session: Session, bookingId: string) {

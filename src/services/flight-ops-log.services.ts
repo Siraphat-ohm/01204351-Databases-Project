@@ -7,6 +7,7 @@ import {
   type PatchFlightOpsLogInput,
 } from '@/types/flight-ops-log.type';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import { hasAnyRole } from '@/services/_shared/role';
 
 export class FlightOpsLogNotFoundError extends Error {
   constructor(id: string) {
@@ -30,13 +31,11 @@ export class UnauthorizedError extends Error {
 }
 
 function canRead(session: Session) {
-  return ['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC'].includes(
-    session.user.role,
-  );
+  return hasAnyRole(session, ['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC']);
 }
 
 function canWrite(session: Session) {
-  return ['ADMIN', 'GROUND_STAFF'].includes(session.user.role);
+  return hasAnyRole(session, ['ADMIN', 'GROUND_STAFF']);
 }
 
 export const flightOpsLogService = {

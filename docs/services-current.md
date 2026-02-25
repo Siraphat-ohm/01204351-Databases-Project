@@ -13,7 +13,11 @@ This document summarizes the current `src/services` layer for teammate handoff.
 - Shared service helpers:
   - `src/services/_shared/session.ts` (`ServiceSession`)
   - `src/services/_shared/authorization.ts` (`assertPermission`, `hasPermission`)
+  - `src/services/_shared/role.ts` (`hasAnyRole`, `assertAnyRole`)
   - `src/services/_shared/pagination.ts` (`resolvePagination`)
+
+- API protection helper:
+  - `src/lib/utils/rate-limit.ts` (`checkRateLimit`, `getClientIpFromHeaders`)
 
 ## 2) Session / Auth Model
 
@@ -485,7 +489,18 @@ Common helpers:
 - `validationErrorResponse`
 - `zodFieldErrors` (shared Zod issue mapping)
 
-## 7) Recommended Next Improvements
+## 7) API Protection Notes
+
+- Mongo API routes now enforce both:
+  - session auth (`getServerSession`)
+  - service-level authorization (`UnauthorizedError` with role/ownership checks)
+- Added lightweight in-memory rate limiting on new Mongo endpoints:
+  - `crew-profiles`
+  - `issues`
+  - `payment-logs`
+  - `flight-ops-logs`
+
+## 8) Recommended Next Improvements
 
 - Move in-memory pagination (`route/booking/ticket/payment`) to repository-level `skip/take/count` for large datasets.
 - Consider a shared `DomainUnauthorizedError` base class to reduce repetitive unauthorized classes.

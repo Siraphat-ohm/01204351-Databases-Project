@@ -8,18 +8,37 @@ import {
   validationErrorResponse,
   zodFieldErrors,
 } from '@/lib/utils/api-response';
+import { checkRateLimit, getClientIpFromHeaders } from '@/lib/utils/rate-limit';
 
 function unauthorized() {
   return errorResponse('Unauthorized', 401);
 }
 
+function tooManyRequests(retryAfterMs: number) {
+  return errorResponse(`Too many requests. Retry in ${Math.ceil(retryAfterMs / 1000)}s`, 429);
+}
+
+function enforceRateLimit(req: NextRequest, userId: string, action: 'read' | 'write') {
+  const ip = getClientIpFromHeaders(req.headers);
+  const limited = checkRateLimit({
+    key: `api:v1:crew-profiles:user:${action}:${userId}:${ip}`,
+    limit: action === 'read' ? 120 : 30,
+    windowMs: 60_000,
+  });
+  if (!limited.ok) return tooManyRequests(limited.retryAfterMs);
+  return null;
+}
+
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ userId: string }> },
 ) {
   try {
     const session = await getServerSession();
     if (!session?.user) return unauthorized();
+
+    const rl = enforceRateLimit(req, session.user.id, 'read');
+    if (rl) return rl;
 
     const { userId } = await params;
 
@@ -47,6 +66,9 @@ export async function PATCH(
   try {
     const session = await getServerSession();
     if (!session?.user) return unauthorized();
+
+    const rl = enforceRateLimit(req, session.user.id, 'write');
+    if (rl) return rl;
 
     const { userId } = await params;
     const body = await req.json();

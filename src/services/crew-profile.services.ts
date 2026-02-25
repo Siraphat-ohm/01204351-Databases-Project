@@ -6,6 +6,7 @@ import {
   type PatchCrewProfileInput,
 } from '@/types/crew-profile.type';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import { hasAnyRole } from '@/services/_shared/role';
 
 export class CrewProfileNotFoundError extends Error {
   constructor(userId: string) {
@@ -22,7 +23,7 @@ export class UnauthorizedError extends Error {
 }
 
 function isAdmin(session: Session) {
-  return session.user.role === 'ADMIN';
+  return hasAnyRole(session, ['ADMIN']);
 }
 
 function assertCanRead(session: Session, userId: string) {
