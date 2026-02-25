@@ -6,12 +6,12 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { 
   Container, Grid, Paper, Stack, Title, Text, Group, 
   Button, Badge, Box, Center, Loader, Divider, ActionIcon, 
-  TextInput, Modal, Alert, Tooltip
+  TextInput, Alert, Tooltip
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { IconArmchair, IconPlane, IconUserPlus, IconUserMinus, IconCheck, IconAlertCircle, IconClock } from "@tabler/icons-react";
+import { IconArmchair, IconPlane, IconUserPlus, IconUserMinus, IconCheck, IconAlertCircle, IconClock, IconMail, IconPhone } from "@tabler/icons-react";
 import { Navbar } from "@/components/Navbar";
-import { createBookingAction } from "./actions";
+import { useAuthSession } from "@/services/auth-client.service";
 
 const formatUTCTime = (dateString: string) => {
   if (!dateString) return "...";
@@ -32,12 +32,22 @@ const formatDate = (dateString: string) => {
   });
 };
 
+// Define a type for our passenger details
+type PassengerDetails = {
+  name: string;
+  email: string;
+  phone: string;
+};
+
 export default function SeatSelectionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const departFlightCode = searchParams.get("departFlightCode");
   
+  const { data: session } = useAuthSession();
+
   const [loading, setLoading] = useState(true);
+  const [isBooking, setIsBooking] = useState(false);
   const [flight, setFlight] = useState<any>(null);
   const [seatMap, setSeatMap] = useState<any>(null);
   
@@ -45,9 +55,8 @@ export default function SeatSelectionPage() {
   const [requiredSeats, setRequiredSeats] = useState(initialSeats > 0 ? initialSeats : 1);
   
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
-  const [passengerNames, setPassengerNames] = useState<Record<string, string>>({});
-  const [opened, { open, close }] = useDisclosure(false);
-  const [isBooking, setIsBooking] = useState(false);
+  // Store full object instead of just a name string
+  const [passengerData, setPassengerData] = useState<Record<string, PassengerDetails>>({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -73,28 +82,53 @@ export default function SeatSelectionPage() {
     if (departFlightCode) fetchData();
   }, [departFlightCode]);
 
-const handleProceedToPayment = async () => {
-  setIsBooking(true);
-  try {
-    // Call the Server Action directly - No 404 possible here!
-    const result = await createBookingAction(
-      flight.id, // Ensure you use the internal ID from flight object
-      selectedSeats.map(code => ({
-        seatCode: code,
-        name: passengerNames[code].trim()
-      }))
-    );
+  const handleProceedToPayment = async () => {
+    if (isBooking) return;
+    setIsBooking(true);
+    try {
+      // Create Booking API Call
+      const res = await fetch('/api/v1/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          flightId: flight.id, // using flight.id based on backend typical usage
+          flightCode: departFlightCode,
+          passengers: selectedSeats.map(code => ({
+            seatCode: code,
+            name: passengerData[code]?.name.trim(),
+            email: passengerData[code]?.email.trim(),
+            phone: passengerData[code]?.phone.trim()
+          }))
+        })
+      });
 
-    if (result.bookingId) {
-      router.push(`/FlightSearch/Payment?bookingId=${result.bookingId}`);
+      let result;
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        result = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(text || `Server responded with status ${res.status}`);
+      }
+
+      if (!res.ok) {
+        throw new Error(result?.error?.message || result?.message || "Failed to create booking");
+      }
+
+      // Extract ID and go to Payment
+      const bookingId = result?.data?.id || result?.id;
+      if (bookingId) {
+        router.push(`/FlightSearch/Payment?bookingId=${bookingId}`);
+      } else {
+        throw new Error("No booking ID returned from server.");
+      }
+    } catch (err: any) {
+      console.error("Booking creation failed", err);
+      alert(err.message || "Failed to create booking. Please try again.");
+    } finally {
+      setIsBooking(false);
     }
-  } catch (err: any) {
-    console.error("Service Error:", err);
-    alert(err.message);
-  } finally {
-    setIsBooking(false);
-  }
-};
+  };
 
   const getBasePriceForCabin = (cabinName: string) => {
     const cName = cabinName?.toUpperCase();
@@ -131,11 +165,15 @@ const handleProceedToPayment = async () => {
 
     if (selectedSeats.includes(seatCode)) {
       setSelectedSeats(prev => prev.filter(s => s !== seatCode));
-      const newNames = { ...passengerNames };
-      delete newNames[seatCode];
-      setPassengerNames(newNames);
+      const newData = { ...passengerData };
+      delete newData[seatCode];
+      setPassengerData(newData);
     } else if (selectedSeats.length < requiredSeats) {
       setSelectedSeats(prev => [...prev, seatCode]);
+      setPassengerData(prev => ({
+        ...prev,
+        [seatCode]: { name: "", email: "", phone: "" } // Initialize empty fields
+      }));
     }
   };
 
@@ -145,33 +183,48 @@ const handleProceedToPayment = async () => {
       if (selectedSeats.length > newCount) {
         const seatToRemove = selectedSeats[selectedSeats.length - 1];
         setSelectedSeats(prev => prev.slice(0, -1));
-        const newNames = { ...passengerNames };
-        delete newNames[seatToRemove];
-        setPassengerNames(newNames);
+        const newData = { ...passengerData };
+        delete newData[seatToRemove];
+        setPassengerData(newData);
       }
       setRequiredSeats(newCount);
     }
   };
 
+  // Update specific field for a passenger
+  const updatePassengerField = (seatCode: string, field: keyof PassengerDetails, value: string) => {
+    setPassengerData(prev => ({
+      ...prev,
+      [seatCode]: {
+        ...prev[seatCode],
+        [field]: value
+      }
+    }));
+  };
+
   if (loading) return <Center h="100vh"><Loader size="xl" /></Center>;
 
   const totalPrice = selectedSeats.reduce((total, code) => total + getSeatDetails(code).finalPrice, 0);
-  const allNamesFilled = selectedSeats.length === requiredSeats && selectedSeats.every(s => passengerNames[s]?.trim().length > 0);
+  
+  // Ensure all seats are assigned AND all 3 fields (name, email, phone) have values
+  const allFieldsFilled = selectedSeats.length === requiredSeats && selectedSeats.every(s => {
+    const p = passengerData[s];
+    return p?.name?.trim().length > 0 && p?.email?.trim().length > 0 && p?.phone?.trim().length > 0;
+  });
 
   return (
     <>
       <Navbar />
       <Container size="xl" py="xl">
-        {/* ENHANCED HEADER: Flight Times & Pricing Guide */}
         <Paper withBorder p="xl" radius="md" mb="xl" shadow="xs">
           <Grid align="center">
             <Grid.Col span={{ base: 12, md: 5 }}>
               <Group justify="space-between" wrap="nowrap">
                 <Box>
                   <Text size="xs" c="dimmed" fw={700} tt="uppercase">Departure</Text>
-                  <Text fw={900} size="xl">{flight.route.origin.iataCode}</Text>
-                  <Text size="sm" fw={500}>{formatUTCTime(flight.departureTime)}</Text>
-                  <Text size="xs" c="dimmed">{formatDate(flight.departureTime)}</Text>
+                  <Text fw={900} size="xl">{flight?.route?.origin?.iataCode}</Text>
+                  <Text size="sm" fw={500}>{formatUTCTime(flight?.departureTime)}</Text>
+                  <Text size="xs" c="dimmed">{formatDate(flight?.departureTime)}</Text>
                 </Box>
                 
                 <Stack align="center" gap={0} flex={1}>
@@ -181,9 +234,9 @@ const handleProceedToPayment = async () => {
 
                 <Box ta="right">
                   <Text size="xs" c="dimmed" fw={700} tt="uppercase">Arrival</Text>
-                  <Text fw={900} size="xl">{flight.route.destination.iataCode}</Text>
-                  <Text size="sm" fw={500}>{formatUTCTime(flight.arrivalTime)}</Text>
-                  <Text size="xs" c="dimmed">{formatDate(flight.arrivalTime)}</Text>
+                  <Text fw={900} size="xl">{flight?.route?.destination?.iataCode}</Text>
+                  <Text size="sm" fw={500}>{formatUTCTime(flight?.arrivalTime)}</Text>
+                  <Text size="xs" c="dimmed">{formatDate(flight?.arrivalTime)}</Text>
                 </Box>
               </Group>
             </Grid.Col>
@@ -268,28 +321,50 @@ const handleProceedToPayment = async () => {
                   Please select {requiredSeats} seat{requiredSeats > 1 ? 's' : ''} from the map.
                 </Alert>
               ) : (
-                <Stack gap="md">
+                <Stack gap="lg">
                   {selectedSeats.map(code => {
                     const { cabinClass, finalPrice } = getSeatDetails(code);
                     return (
-                      <Box key={code}>
-                        <Group justify="space-between" mb={4}>
-                          <Badge size="xs" variant="filled" color={cabinClass === "FIRST" ? "gold" : cabinClass === "BUSINESS" ? "indigo" : "blue"}>
-                            {cabinClass}
-                          </Badge>
-                          <Text size="xs" fw={700} c="dimmed">THB {finalPrice.toLocaleString()}</Text>
-                        </Group>
-                        <TextInput 
-                          placeholder={`Name for Seat ${code}`}
-                          value={passengerNames[code] || ""}
-                          onChange={(e) => setPassengerNames({...passengerNames, [code]: e.target.value})}
-                          rightSection={
-                            <ActionIcon color="gray" variant="subtle" onClick={() => handleSeatClick(code)}>
+                      <Paper withBorder p="sm" radius="md" key={code} bg="gray.0">
+                        <Group justify="space-between" mb="sm">
+                          <Group gap="xs">
+                            <Badge size="md" variant="filled" color={cabinClass === "FIRST" ? "gold" : cabinClass === "BUSINESS" ? "indigo" : "blue"}>
+                              Seat {code} ({cabinClass})
+                            </Badge>
+                          </Group>
+                          <Group gap="sm">
+                            <Text size="sm" fw={700} c="blue.9">THB {finalPrice.toLocaleString()}</Text>
+                            <ActionIcon color="red" variant="subtle" size="sm" onClick={() => handleSeatClick(code)}>
                               ✕
                             </ActionIcon>
-                          }
-                        />
-                      </Box>
+                          </Group>
+                        </Group>
+
+                        <Stack gap="xs">
+                          <TextInput 
+                            placeholder="Full Name (e.g. John Doe)"
+                            value={passengerData[code]?.name || ""}
+                            onChange={(e) => updatePassengerField(code, 'name', e.target.value)}
+                            required
+                          />
+                          <Group grow>
+                            <TextInput 
+                              placeholder="Email Address"
+                              leftSection={<IconMail size={16} />}
+                              value={passengerData[code]?.email || ""}
+                              onChange={(e) => updatePassengerField(code, 'email', e.target.value)}
+                              required
+                            />
+                            <TextInput 
+                              placeholder="Phone Number"
+                              leftSection={<IconPhone size={16} />}
+                              value={passengerData[code]?.phone || ""}
+                              onChange={(e) => updatePassengerField(code, 'phone', e.target.value)}
+                              required
+                            />
+                          </Group>
+                        </Stack>
+                      </Paper>
                     );
                   })}
                 </Stack>
@@ -301,18 +376,18 @@ const handleProceedToPayment = async () => {
                 <Text fw={900} size="xl" c="blue.9">THB {totalPrice.toLocaleString()}</Text>
               </Group>
 
-                <Button 
+              <Button 
                 fullWidth 
                 mt="xl" 
                 size="lg" 
                 color="green" 
-                // Disable if names aren't filled OR if currently booking
-                disabled={!allNamesFilled || isBooking} 
+                disabled={!allFieldsFilled || isBooking}
                 loading={isBooking}
                 onClick={handleProceedToPayment}
-                >
+                leftSection={<IconCheck size={20} />}
+              >
                 Proceed to Payment
-                </Button>
+              </Button>
             </Paper>
           </Grid.Col>
         </Grid>
@@ -336,4 +411,3 @@ function SeatButton({ label, isOccupied, isSelected, price, onClick }: any) {
     </Tooltip>
   );
 }
-

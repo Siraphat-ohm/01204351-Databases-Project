@@ -8,14 +8,14 @@ import {
 } from "@mantine/core";
 import { IconCreditCard, IconLock, IconAlertCircle, IconCheck, IconReceipt2 } from "@tabler/icons-react";
 import { Navbar } from "@/components/Navbar";
-
-// Import our Server Actions directly!
-import { getBookingSummaryAction, processPaymentAction } from "./actions";
+import { useAuthSession } from "@/services/auth-client.service"; // Using your exact auth client
 
 export default function PaymentPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const bookingId = searchParams.get("bookingId");
+
+  const { data: session, isPending } = useAuthSession(); // Ensure session is loaded
 
   const [initializing, setInitializing] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -23,7 +23,7 @@ export default function PaymentPage() {
   const [paymentMethod, setPaymentMethod] = useState("CREDIT_CARD");
   const [error, setError] = useState<string | null>(null);
 
-  // Load the booking details when the page opens
+  // 1. Fetch Booking Details on Load
   useEffect(() => {
     const fetchDetails = async () => {
       if (!bookingId) {
@@ -31,21 +31,32 @@ export default function PaymentPage() {
         setInitializing(false);
         return;
       }
-      
+
       try {
-        // Call the server action directly to bypass API routes
-        const data = await getBookingSummaryAction(bookingId);
-        setBookingData(data);
+        // Fetch the booking to get the total amount
+        const res = await fetch(`/api/v1/bookings/${bookingId}`);
+        const result = await res.json();
+
+        if (!res.ok) {
+          throw new Error(result.error?.message || result.message || "Could not find booking");
+        }
+        
+        // Handle your API's successResponse wrapper
+        setBookingData(result.data || result);
       } catch (err: any) {
-        setError(err.message || "Could not retrieve booking information.");
+        setError(err.message);
       } finally {
         setInitializing(false);
       }
     };
-    
-    fetchDetails();
-  }, [bookingId]);
 
+    // Wait until auth is resolved before fetching
+    if (!isPending) {
+      fetchDetails();
+    }
+  }, [bookingId, isPending]);
+
+  // 2. Handle the Payment Process (Matches your API exactly)
   const handleConfirmPayment = async () => {
     if (!bookingId || !bookingData) return;
     
@@ -53,19 +64,76 @@ export default function PaymentPage() {
     setError(null);
     
     try {
-      // Process the payment using the server action
-      await processPaymentAction(bookingId, paymentMethod, bookingData.totalPrice);
+      // STEP A: Create Payment (Calls your exact POST /api/v1/payments)
+      const createRes = await fetch(`/api/v1/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId: bookingId,
+          amount: bookingData.totalPrice,
+          currency: "THB",
+          method: paymentMethod
+        })
+      });
+      
+      const createdResult = await createRes.json();
+      
+      if (!createRes.ok) {
+        throw new Error(createdResult.error?.message || createdResult.message || "Failed to initialize payment.");
+      }
+      
+      // Extract the newly created payment ID from the successResponse
+      const paymentId = createdResult.data?.id || createdResult.id;
 
-      // Redirect to confirmation page on success
+      // STEP B: Confirm Payment (Calls your exact PATCH /api/v1/payments/[id])
+      const patchRes = await fetch(`/api/v1/payments/${paymentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "mark-success", // Required by your PATCH route exactly
+          paidAt: new Date().toISOString(),
+          transactionId: `TXN-${Math.random().toString(36).slice(2, 10).toUpperCase()}`
+        })
+      });
+
+      const patchResult = await patchRes.json();
+      
+      if (!patchRes.ok) {
+        throw new Error(patchResult.error?.message || patchResult.message || "Payment processing failed.");
+      }
+
+      // Success! Redirect to confirmation
       router.push(`/FlightSearch/Confirmation?bookingId=${bookingId}`);
+
     } catch (err: any) {
+      console.error("Payment Flow Error:", err);
       setError(err.message || "Transaction declined. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (initializing) return <Center h="100vh"><Loader size="xl" /></Center>;
+  if (isPending || initializing) {
+    return (
+      <Center h="100vh" flex={1}>
+        <Stack align="center">
+          <Loader size="xl" />
+          <Text c="dimmed">Preparing secure payment gateway...</Text>
+        </Stack>
+      </Center>
+    );
+  }
+
+  // Security fallback if somehow unauthenticated
+  if (!session?.user) {
+    return (
+      <Center h="100vh">
+        <Alert color="red" title="Unauthorized">
+          You must be logged in to view this payment page.
+        </Alert>
+      </Center>
+    );
+  }
 
   return (
     <>
@@ -77,11 +145,10 @@ export default function PaymentPage() {
             <Text c="dimmed">Complete your payment to secure your seats.</Text>
           </Box>
 
-          {/* Booking Summary Card */}
           <Paper withBorder p="lg" radius="md">
             <Group justify="space-between" mb="xs">
               <Text fw={700}>Booking Reference</Text>
-              <Badge variant="outline" color="blue">
+              <Badge variant="outline" color="blue" size="lg">
                 {bookingData?.bookingRef || "PENDING"}
               </Badge>
             </Group>
@@ -94,7 +161,6 @@ export default function PaymentPage() {
             </Group>
           </Paper>
 
-          {/* Payment Method Selection */}
           <Paper withBorder p="xl" radius="md" shadow="sm">
             <Stack gap="md">
               <Group gap="xs">
@@ -137,7 +203,7 @@ export default function PaymentPage() {
                 Confirm & Pay THB {bookingData?.totalPrice?.toLocaleString() || "0"}
               </Button>
               
-              <Button variant="subtle" color="gray" onClick={() => router.back()}>
+              <Button variant="subtle" color="gray" onClick={() => router.back()} disabled={loading}>
                 Cancel & Return
               </Button>
             </Stack>
