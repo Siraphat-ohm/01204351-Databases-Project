@@ -394,6 +394,8 @@ Methods:
 - `findById(id, session)`
 - `findByBookingRef(bookingRef, session)`
 - `findMine(session)`
+- `findByFlightId(flightId, session)`
+- `findByFlightCode(flightCode, session)`
 - `findAll(session)`
 - `findAllPaginated(session, params)`
 - `createBooking(input, session)`
@@ -414,6 +416,8 @@ Errors:
 Notes:
 
 - `findAllPaginated` currently slices in-memory from `findAll()` result.
+- `findByFlightCode` normalizes input with `trim().toUpperCase()`.
+- Non-admin users only receive their own bookings for `findByFlightId`/`findByFlightCode`.
 
 ### 4.8 `ticketService`
 
@@ -424,6 +428,8 @@ Methods:
 - `findById(id, session)`
 - `findMine(session)`
 - `findByBookingId(bookingId, session)`
+- `findByFlightId(flightId, session)`
+- `findByFlightCode(flightCode, session)`
 - `findAll(session)`
 - `findAllPaginated(session, params)`
 - `checkInTicket(id, input, session)`
@@ -438,6 +444,8 @@ Errors:
 Notes:
 
 - `findAllPaginated` currently slices in-memory from `findAll()` result.
+- `findByFlightCode` normalizes input with `trim().toUpperCase()`.
+- Non-admin users only receive their own tickets for `findByFlightId`/`findByFlightCode`.
 
 ### 4.9 `paymentService`
 

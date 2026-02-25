@@ -93,6 +93,25 @@ export const ticketService = {
     return tickets;
   },
 
+  async findByFlightId(flightId: string, session: Session) {
+    checkPermission(session, 'read');
+
+    const tickets = await ticketRepository.findByFlightId(flightId);
+    if (canReadAll(session)) return tickets;
+
+    return tickets.filter((t) => t.booking.userId === session.user.id);
+  },
+
+  async findByFlightCode(flightCode: string, session: Session) {
+    checkPermission(session, 'read');
+
+    const normalizedCode = flightCode.trim().toUpperCase();
+    const tickets = await ticketRepository.findByFlightCode(normalizedCode);
+    if (canReadAll(session)) return tickets;
+
+    return tickets.filter((t) => t.booking.userId === session.user.id);
+  },
+
   async findAll(session: Session) {
     checkPermission(session, 'read-all');
     return ticketRepository.findAll();

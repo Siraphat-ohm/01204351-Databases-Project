@@ -33,6 +33,24 @@ export const ticketRepository = {
       orderBy: { id: 'asc' },
     }),
 
+  findByFlightId: (flightId: string) =>
+    prisma.ticket.findMany({
+      where: { flightId },
+      include: ticketAdminInclude,
+      orderBy: { id: 'asc' },
+    }),
+
+  findByFlightCode: (flightCode: string) =>
+    prisma.ticket.findMany({
+      where: {
+        flight: {
+          flightCode,
+        },
+      },
+      include: ticketAdminInclude,
+      orderBy: { id: 'asc' },
+    }),
+
   findSeatAssignment: (flightId: string, seatNumber: string) =>
     prisma.ticket.findFirst({
       where: {
