@@ -474,6 +474,19 @@ Notes:
 - `findByFlightCode` normalizes input with `trim().toUpperCase()`.
 - Non-admin users only receive their own bookings for `findByFlightId`/`findByFlightCode`.
 
+API routes:
+
+- `GET /api/v1/bookings`
+  - supports filters: `bookingRef`, `flightId`, `flightCode`, `mine`
+  - supports `page` + `limit` for read-all roles when no filter is set
+  - non read-all roles default to own bookings when no filter is set
+- `POST /api/v1/bookings`
+- `GET /api/v1/bookings/[id]`
+- `PATCH /api/v1/bookings/[id]`
+  - action-based: `cancel`, `change-flight`, `accept-reaccommodation`, `cancel-reaccommodation`
+- `DELETE /api/v1/bookings/[id]`
+  - alias of cancel booking
+
 ### 4.8 `ticketService`
 
 File: `src/services/ticket.services.ts`
@@ -544,6 +557,39 @@ Errors:
 Notes:
 
 - `findAllPaginated` uses repository-level `skip/take` plus `count()`.
+
+API routes:
+
+- `GET /api/v1/payments`
+  - supports `bookingId` filter
+  - supports `mine`
+  - supports `page` + `limit` for read-all roles when no filter is set
+- `POST /api/v1/payments`
+- `GET /api/v1/payments/[id]`
+- `PATCH /api/v1/payments/[id]`
+  - action-based: `mark-success`, `mark-failed`, `refund`
+
+### 4.9.1 Action Contract Cheatsheet
+
+Booking action endpoint: `PATCH /api/v1/bookings/[id]`
+
+- `cancel`
+  - body: `{ "action": "cancel" }`
+- `change-flight`
+  - body: `{ "action": "change-flight", "newFlightId": "<cuid>", "reason"?: "FLIGHT_CANCELLED|MAJOR_DELAY|ROUTE_DISRUPTION|AIRCRAFT_DOWNSIZE", "keepSeatAssignments"?: boolean, "totalPrice"?: number, "currency"?: string }`
+- `accept-reaccommodation`
+  - body: `{ "action": "accept-reaccommodation", "newFlightId": "<cuid>", "totalPrice"?: number, "currency"?: string }`
+- `cancel-reaccommodation`
+  - body: `{ "action": "cancel-reaccommodation", "reason"?: string }`
+
+Payment action endpoint: `PATCH /api/v1/payments/[id]`
+
+- `mark-success`
+  - body: `{ "action": "mark-success", "stripeChargeId"?: string }`
+- `mark-failed`
+  - body: `{ "action": "mark-failed", "failureCode"?: string, "failureMessage"?: string }`
+- `refund`
+  - body: `{ "action": "refund", "amount"?: number, "reason"?: string }`
 
 ## 5) Current Public Flight APIs
 
