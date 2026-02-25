@@ -5,23 +5,17 @@ import { getServerSession } from '@/services/auth.services';
 import {
   successResponse,
   errorResponse,
+  unauthorizedResponse,
+  tooManyRequestsResponse,
   validationErrorResponse,
   zodFieldErrors,
 } from '@/lib/utils/api-response';
 import { enforceApiRateLimit } from '@/lib/utils/rate-limit';
 
-function unauthorized() {
-  return errorResponse('Unauthorized', 401);
-}
-
-function tooManyRequests(retryAfterMs: number) {
-  return errorResponse(`Too many requests. Retry in ${Math.ceil(retryAfterMs / 1000)}s`, 429);
-}
-
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession();
-    if (!session?.user) return unauthorized();
+    if (!session?.user) return unauthorizedResponse();
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
@@ -29,7 +23,7 @@ export async function GET(req: NextRequest) {
       userId: session.user.id,
       action: 'read',
     });
-    if (!limited.ok) return tooManyRequests(limited.retryAfterMs);
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
     const page = Number(req.nextUrl.searchParams.get('page') ?? 1);
     const limit = Number(req.nextUrl.searchParams.get('limit') ?? 20);
@@ -44,7 +38,7 @@ export async function GET(req: NextRequest) {
     return successResponse(result);
   } catch (err) {
     if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorized();
+      return unauthorizedResponse();
     }
     console.error('[GET /api/v1/issues]', err);
     return errorResponse('Internal server error');
@@ -54,7 +48,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession();
-    if (!session?.user) return unauthorized();
+    if (!session?.user) return unauthorizedResponse();
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
@@ -62,7 +56,7 @@ export async function POST(req: NextRequest) {
       userId: session.user.id,
       action: 'write',
     });
-    if (!limited.ok) return tooManyRequests(limited.retryAfterMs);
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
     const body = await req.json();
     const created = await issueReportService.createMine(body, {

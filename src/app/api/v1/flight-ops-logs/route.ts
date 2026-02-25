@@ -5,23 +5,17 @@ import { getServerSession } from '@/services/auth.services';
 import {
   successResponse,
   errorResponse,
+  unauthorizedResponse,
+  tooManyRequestsResponse,
   validationErrorResponse,
   zodFieldErrors,
 } from '@/lib/utils/api-response';
 import { enforceApiRateLimit } from '@/lib/utils/rate-limit';
 
-function unauthorized() {
-  return errorResponse('Unauthorized', 401);
-}
-
-function tooManyRequests(retryAfterMs: number) {
-  return errorResponse(`Too many requests. Retry in ${Math.ceil(retryAfterMs / 1000)}s`, 429);
-}
-
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession();
-    if (!session?.user) return unauthorized();
+    if (!session?.user) return unauthorizedResponse();
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
@@ -29,7 +23,7 @@ export async function GET(req: NextRequest) {
       userId: session.user.id,
       action: 'read',
     });
-    if (!limited.ok) return tooManyRequests(limited.retryAfterMs);
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
     const flightId = req.nextUrl.searchParams.get('flightId');
     const page = Number(req.nextUrl.searchParams.get('page') ?? 1);
@@ -45,7 +39,7 @@ export async function GET(req: NextRequest) {
     return successResponse(result);
   } catch (err) {
     if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorized();
+      return unauthorizedResponse();
     }
     if (
       err instanceof Error &&
@@ -61,7 +55,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const session = await getServerSession();
-    if (!session?.user) return unauthorized();
+    if (!session?.user) return unauthorizedResponse();
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
@@ -69,7 +63,7 @@ export async function PUT(req: NextRequest) {
       userId: session.user.id,
       action: 'write',
     });
-    if (!limited.ok) return tooManyRequests(limited.retryAfterMs);
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
     const flightId = req.nextUrl.searchParams.get('flightId');
     if (!flightId) return errorResponse('flightId query is required', 400);
@@ -85,7 +79,7 @@ export async function PUT(req: NextRequest) {
       return validationErrorResponse(zodFieldErrors(err));
     }
     if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorized();
+      return unauthorizedResponse();
     }
     if (err instanceof Error && err.name === 'FlightNotFoundError') {
       return errorResponse(err.message, 404);

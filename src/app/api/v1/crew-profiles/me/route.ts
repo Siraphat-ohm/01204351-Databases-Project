@@ -5,23 +5,17 @@ import { getServerSession } from '@/services/auth.services';
 import {
   successResponse,
   errorResponse,
+  unauthorizedResponse,
+  tooManyRequestsResponse,
   validationErrorResponse,
   zodFieldErrors,
 } from '@/lib/utils/api-response';
 import { enforceApiRateLimit } from '@/lib/utils/rate-limit';
 
-function unauthorized() {
-  return errorResponse('Unauthorized', 401);
-}
-
-function tooManyRequests(retryAfterMs: number) {
-  return errorResponse(`Too many requests. Retry in ${Math.ceil(retryAfterMs / 1000)}s`, 429);
-}
-
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession();
-    if (!session?.user) return unauthorized();
+    if (!session?.user) return unauthorizedResponse();
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
@@ -29,7 +23,7 @@ export async function GET(req: NextRequest) {
       userId: session.user.id,
       action: 'read',
     });
-    if (!limited.ok) return tooManyRequests(limited.retryAfterMs);
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
     const result = await crewProfileService.findMyProfile({
       user: { id: session.user.id, role: session.user.role },
@@ -48,7 +42,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const session = await getServerSession();
-    if (!session?.user) return unauthorized();
+    if (!session?.user) return unauthorizedResponse();
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
@@ -56,7 +50,7 @@ export async function PUT(req: NextRequest) {
       userId: session.user.id,
       action: 'write',
     });
-    if (!limited.ok) return tooManyRequests(limited.retryAfterMs);
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
     const body = await req.json();
     const result = await crewProfileService.upsertMyProfile(body, {

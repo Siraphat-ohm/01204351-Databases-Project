@@ -5,18 +5,12 @@ import { getServerSession } from '@/services/auth.services';
 import {
   successResponse,
   errorResponse,
+  unauthorizedResponse,
+  tooManyRequestsResponse,
   validationErrorResponse,
   zodFieldErrors,
 } from '@/lib/utils/api-response';
 import { enforceApiRateLimit } from '@/lib/utils/rate-limit';
-
-function unauthorized() {
-  return errorResponse('Unauthorized', 401);
-}
-
-function tooManyRequests(retryAfterMs: number) {
-  return errorResponse(`Too many requests. Retry in ${Math.ceil(retryAfterMs / 1000)}s`, 429);
-}
 
 export async function GET(
   req: NextRequest,
@@ -24,7 +18,7 @@ export async function GET(
 ) {
   try {
     const session = await getServerSession();
-    if (!session?.user) return unauthorized();
+    if (!session?.user) return unauthorizedResponse();
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
@@ -32,7 +26,7 @@ export async function GET(
       userId: session.user.id,
       action: 'read',
     });
-    if (!limited.ok) return tooManyRequests(limited.retryAfterMs);
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
     const { id } = await params;
     const row = await issueReportService.findById(id, {
@@ -45,7 +39,7 @@ export async function GET(
       return errorResponse(err.message, 404);
     }
     if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorized();
+      return unauthorizedResponse();
     }
     console.error('[GET /api/v1/issues/[id]]', err);
     return errorResponse('Internal server error');
@@ -58,7 +52,7 @@ export async function PATCH(
 ) {
   try {
     const session = await getServerSession();
-    if (!session?.user) return unauthorized();
+    if (!session?.user) return unauthorizedResponse();
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
@@ -66,7 +60,7 @@ export async function PATCH(
       userId: session.user.id,
       action: 'write',
     });
-    if (!limited.ok) return tooManyRequests(limited.retryAfterMs);
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
     const { id } = await params;
     const body = await req.json();
@@ -84,7 +78,7 @@ export async function PATCH(
       return errorResponse(err.message, 404);
     }
     if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorized();
+      return unauthorizedResponse();
     }
     console.error('[PATCH /api/v1/issues/[id]]', err);
     return errorResponse('Internal server error');
