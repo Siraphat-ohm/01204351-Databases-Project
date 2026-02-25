@@ -65,10 +65,12 @@ export async function PATCH(
 
     const { userId } = await params;
     const body = await req.json();
+    const serviceSession = { user: { id: session.user.id, role: session.user.role } };
 
-    const result = await crewProfileService.patchByUserId(userId, body, {
-      user: { id: session.user.id, role: session.user.role },
-    });
+    const result =
+      session.user.role === 'ADMIN'
+        ? await crewProfileService.updateByUserId(userId, body, serviceSession)
+        : await crewProfileService.patchByUserId(userId, body, serviceSession);
 
     return successResponse(result);
   } catch (err) {
@@ -82,6 +84,40 @@ export async function PATCH(
       return unauthorizedResponse();
     }
     console.error('[PATCH /api/v1/crew-profiles/[userId]]', err);
+    return errorResponse('Internal server error');
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ userId: string }> },
+) {
+  try {
+    const session = await getServerSession();
+    if (!session?.user) return unauthorizedResponse();
+
+    const limited = enforceApiRateLimit({
+      headers: req.headers,
+      namespace: 'api:v1:crew-profiles:user',
+      userId: session.user.id,
+      action: 'write',
+    });
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
+
+    const { userId } = await params;
+    const result = await crewProfileService.deleteByUserId(userId, {
+      user: { id: session.user.id, role: session.user.role },
+    });
+
+    return successResponse(result);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'CrewProfileNotFoundError') {
+      return errorResponse(err.message, 404);
+    }
+    if (err instanceof Error && err.name === 'UnauthorizedError') {
+      return unauthorizedResponse();
+    }
+    console.error('[DELETE /api/v1/crew-profiles/[userId]]', err);
     return errorResponse('Internal server error');
   }
 }

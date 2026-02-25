@@ -206,22 +206,37 @@ Files:
 
 Methods:
 
+- `findAll(session)` (admin)
+- `findAllPaginated(session, params)` (admin)
 - `findByUserId(userId, session)`
 - `findMyProfile(session)`
 - `upsertMyProfile(input, session)`
 - `patchByUserId(userId, input, session)`
+- `create(input, session)` (admin)
+- `updateByUserId(userId, input, session)` (admin)
+- `deleteByUserId(userId, session)` (admin)
 
 Errors:
 
 - `CrewProfileNotFoundError`
+- `CrewProfileConflictError`
 - `UnauthorizedError`
 
 API routes:
 
+- `GET /api/v1/crew-profiles`
+  - supports `page` + `limit`
+  - admin only
+- `POST /api/v1/crew-profiles`
+  - admin only
 - `GET /api/v1/crew-profiles/me`
 - `PUT /api/v1/crew-profiles/me`
 - `GET /api/v1/crew-profiles/[userId]`
 - `PATCH /api/v1/crew-profiles/[userId]`
+  - admin uses generic update
+  - non-admin can patch own profile only
+- `DELETE /api/v1/crew-profiles/[userId]`
+  - admin only
 
 ### 4.3.2 `issueReportService` (Mongo)
 
