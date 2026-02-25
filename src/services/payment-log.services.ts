@@ -115,4 +115,13 @@ export const paymentLogService = {
 
     return updated;
   },
+
+  async deleteById(id: string, session: Session) {
+    if (!isAdmin(session)) throw new UnauthorizedError('delete');
+
+    const deleted = await paymentLogRepository.deleteById(id);
+    if (!deleted) throw new PaymentLogNotFoundError(id);
+
+    return deleted;
+  },
 };

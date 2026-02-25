@@ -78,4 +78,9 @@ export const flightOpsLogRepository = {
       { new: true },
     ).lean();
   },
+
+  async deleteById(id: string) {
+    await connectMongo();
+    return FlightOpsLog.findByIdAndDelete(id).lean();
+  },
 };

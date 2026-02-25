@@ -114,11 +114,16 @@ export const paymentService = {
     checkPermission(session, 'read-all');
 
     const { page, limit, skip } = resolvePagination(params);
-    const rows = await paymentRepository.findAll();
-    const total = rows.length;
+    const [data, total] = await Promise.all([
+      paymentRepository.findMany({
+        skip,
+        take: limit,
+      }),
+      paymentRepository.count(),
+    ]);
 
     return {
-      data: rows.slice(skip, skip + limit),
+      data,
       meta: {
         page,
         limit,

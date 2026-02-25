@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ZodError } from 'zod';
-import { flightOpsLogService } from '@/services/flight-ops-log.services';
+import { ticketService } from '@/services/ticket.services';
 import { getServerSession } from '@/services/auth.services';
 import {
   successResponse,
@@ -12,6 +12,10 @@ import {
 } from '@/lib/utils/api-response';
 import { enforceApiRateLimit } from '@/lib/utils/rate-limit';
 
+function canReadAll(role: string) {
+  return ['ADMIN', 'GROUND_STAFF', 'CABIN_CREW', 'PILOT'].includes(role);
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession();
@@ -19,61 +23,71 @@ export async function GET(req: NextRequest) {
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
-      namespace: 'api:v1:flight-ops-logs',
+      namespace: 'api:v1:tickets',
       userId: session.user.id,
       action: 'read',
     });
     if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
+    const bookingId = req.nextUrl.searchParams.get('bookingId');
     const flightId = req.nextUrl.searchParams.get('flightId');
+    const flightCode = req.nextUrl.searchParams.get('flightCode');
+    const mine = req.nextUrl.searchParams.get('mine') === 'true';
     const page = Number(req.nextUrl.searchParams.get('page') ?? 1);
     const limit = Number(req.nextUrl.searchParams.get('limit') ?? 20);
-    const s = { user: { id: session.user.id, role: session.user.role } };
 
-    if (flightId) {
-      const row = await flightOpsLogService.findByFlightId(flightId, s);
-      return successResponse(row);
+    const serviceSession = { user: { id: session.user.id, role: session.user.role } };
+
+    if (bookingId) {
+      const rows = await ticketService.findByBookingId(bookingId, serviceSession);
+      return successResponse(rows);
     }
 
-    const result = await flightOpsLogService.findAllPaginated(s, { page, limit });
+    if (flightId) {
+      const rows = await ticketService.findByFlightId(flightId, serviceSession);
+      return successResponse(rows);
+    }
+
+    if (flightCode) {
+      const rows = await ticketService.findByFlightCode(flightCode, serviceSession);
+      return successResponse(rows);
+    }
+
+    if (mine || !canReadAll(session.user.role)) {
+      const rows = await ticketService.findMine(serviceSession);
+      return successResponse(rows);
+    }
+
+    const result = await ticketService.findAllPaginated(serviceSession, { page, limit });
     return successResponse(result);
   } catch (err) {
     if (err instanceof Error && err.name === 'UnauthorizedError') {
       return unauthorizedResponse();
     }
-    if (
-      err instanceof Error &&
-      (err.name === 'FlightOpsLogNotFoundError' || err.name === 'FlightNotFoundError')
-    ) {
-      return errorResponse(err.message, 404);
-    }
-    console.error('[GET /api/v1/flight-ops-logs]', err);
+    console.error('[GET /api/v1/tickets]', err);
     return errorResponse('Internal server error');
   }
 }
 
-export async function PUT(req: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession();
     if (!session?.user) return unauthorizedResponse();
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
-      namespace: 'api:v1:flight-ops-logs',
+      namespace: 'api:v1:tickets',
       userId: session.user.id,
       action: 'write',
     });
     if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
-    const flightId = req.nextUrl.searchParams.get('flightId');
-    if (!flightId) return errorResponse('flightId query is required', 400);
-
     const body = await req.json();
-    const row = await flightOpsLogService.upsertByFlightId(flightId, body, {
+    const created = await ticketService.createTicket(body, {
       user: { id: session.user.id, role: session.user.role },
     });
 
-    return successResponse(row);
+    return successResponse(created, 201);
   } catch (err) {
     if (err instanceof ZodError) {
       return validationErrorResponse(zodFieldErrors(err));
@@ -81,10 +95,10 @@ export async function PUT(req: NextRequest) {
     if (err instanceof Error && err.name === 'UnauthorizedError') {
       return unauthorizedResponse();
     }
-    if (err instanceof Error && err.name === 'FlightNotFoundError') {
-      return errorResponse(err.message, 404);
+    if (err instanceof Error && err.name === 'TicketConflictError') {
+      return errorResponse(err.message, 409);
     }
-    console.error('[PUT /api/v1/flight-ops-logs]', err);
+    console.error('[POST /api/v1/tickets]', err);
     return errorResponse('Internal server error');
   }
 }

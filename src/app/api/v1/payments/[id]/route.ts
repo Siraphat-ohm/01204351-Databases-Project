@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ZodError } from 'zod';
-import { paymentLogService } from '@/services/payment-log.services';
+import { paymentService } from '@/services/payment.services';
 import { getServerSession } from '@/services/auth.services';
 import {
   successResponse,
@@ -12,6 +12,8 @@ import {
 } from '@/lib/utils/api-response';
 import { enforceApiRateLimit } from '@/lib/utils/rate-limit';
 
+type Action = 'mark-success' | 'mark-failed' | 'refund';
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -22,29 +24,26 @@ export async function GET(
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
-      namespace: 'api:v1:payment-logs:id',
+      namespace: 'api:v1:payments:id',
       userId: session.user.id,
       action: 'read',
     });
     if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
     const { id } = await params;
-    const row = await paymentLogService.findById(id, {
+    const row = await paymentService.findById(id, {
       user: { id: session.user.id, role: session.user.role },
     });
 
     return successResponse(row);
   } catch (err) {
-    if (err instanceof Error && err.name === 'PaymentLogNotFoundError') {
+    if (err instanceof Error && err.name === 'PaymentNotFoundError') {
       return errorResponse(err.message, 404);
     }
     if (err instanceof Error && err.name === 'UnauthorizedError') {
       return unauthorizedResponse();
     }
-    if (err instanceof Error && err.name === 'BookingNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
-    console.error('[GET /api/v1/payment-logs/[id]]', err);
+    console.error('[GET /api/v1/payments/[id]]', err);
     return errorResponse('Internal server error');
   }
 }
@@ -59,7 +58,7 @@ export async function PATCH(
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
-      namespace: 'api:v1:payment-logs:id',
+      namespace: 'api:v1:payments:id',
       userId: session.user.id,
       action: 'write',
     });
@@ -67,57 +66,40 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await req.json();
+    const action = (typeof body?.action === 'string' ? body.action : '').toLowerCase() as Action;
 
-    const row = await paymentLogService.updateById(id, body, {
-      user: { id: session.user.id, role: session.user.role },
-    });
+    const serviceSession = { user: { id: session.user.id, role: session.user.role } };
 
-    return successResponse(row);
+    if (action === 'mark-success') {
+      const row = await paymentService.markPaymentSuccess(id, body, serviceSession);
+      return successResponse(row);
+    }
+
+    if (action === 'mark-failed') {
+      const row = await paymentService.markPaymentFailed(id, body, serviceSession);
+      return successResponse(row);
+    }
+
+    if (action === 'refund') {
+      const row = await paymentService.refundPayment(id, body, serviceSession);
+      return successResponse(row);
+    }
+
+    return errorResponse('Unsupported action. Use: mark-success | mark-failed | refund', 400);
   } catch (err) {
     if (err instanceof ZodError) {
       return validationErrorResponse(zodFieldErrors(err));
     }
-    if (err instanceof Error && err.name === 'PaymentLogNotFoundError') {
+    if (err instanceof Error && err.name === 'PaymentNotFoundError') {
       return errorResponse(err.message, 404);
     }
     if (err instanceof Error && err.name === 'UnauthorizedError') {
       return unauthorizedResponse();
     }
-    console.error('[PATCH /api/v1/payment-logs/[id]]', err);
-    return errorResponse('Internal server error');
-  }
-}
-
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const session = await getServerSession();
-    if (!session?.user) return unauthorizedResponse();
-
-    const limited = enforceApiRateLimit({
-      headers: req.headers,
-      namespace: 'api:v1:payment-logs:id',
-      userId: session.user.id,
-      action: 'write',
-    });
-    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
-
-    const { id } = await params;
-    const row = await paymentLogService.deleteById(id, {
-      user: { id: session.user.id, role: session.user.role },
-    });
-
-    return successResponse(row);
-  } catch (err) {
-    if (err instanceof Error && err.name === 'PaymentLogNotFoundError') {
-      return errorResponse(err.message, 404);
+    if (err instanceof Error && err.name === 'PaymentConflictError') {
+      return errorResponse(err.message, 409);
     }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    console.error('[DELETE /api/v1/payment-logs/[id]]', err);
+    console.error('[PATCH /api/v1/payments/[id]]', err);
     return errorResponse('Internal server error');
   }
 }

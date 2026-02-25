@@ -176,11 +176,16 @@ export const bookingService = {
     checkPermission(session, 'read-all');
 
     const { page, limit, skip } = resolvePagination(params);
-    const rows = await bookingRepository.findAll();
-    const total = rows.length;
+    const [data, total] = await Promise.all([
+      bookingRepository.findMany({
+        skip,
+        take: limit,
+      }),
+      bookingRepository.count(),
+    ]);
 
     return {
-      data: rows.slice(skip, skip + limit),
+      data,
       meta: {
         page,
         limit,

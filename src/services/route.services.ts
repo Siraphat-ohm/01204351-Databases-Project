@@ -113,11 +113,54 @@ export const routeService = {
     checkPermission(session, 'read');
 
     const { page, limit, skip } = resolvePagination(params);
-    const rows = await routeRepository.findAll();
-    const total = rows.length;
+    const [data, total] = await Promise.all([
+      routeRepository.findMany({
+        skip,
+        take: limit,
+      }),
+      routeRepository.count(),
+    ]);
 
     return {
-      data: rows.slice(skip, skip + limit),
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  },
+
+  async searchPaginated(
+    search: string,
+    session: Session,
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<RouteListItem>> {
+    checkPermission(session, 'read');
+
+    const keyword = search.trim();
+    const where = keyword
+      ? {
+          OR: [
+            { origin: { name: { contains: keyword, mode: 'insensitive' as const } } },
+            { destination: { name: { contains: keyword, mode: 'insensitive' as const } } },
+          ],
+        }
+      : undefined;
+
+    const { page, limit, skip } = resolvePagination(params);
+    const [data, total] = await Promise.all([
+      routeRepository.findMany({
+        where,
+        skip,
+        take: limit,
+      }),
+      routeRepository.count(where),
+    ]);
+
+    return {
+      data,
       meta: {
         page,
         limit,

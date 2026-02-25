@@ -3,7 +3,14 @@ import {
   bookingAdminInclude,
   type CreateBookingInput,
 } from '@/types/booking.type';
+import type { Prisma } from '@/generated/prisma/client';
 import { BookingStatus } from '@/generated/prisma/client';
+
+type BookingFindManyArgs = {
+  where?: Prisma.BookingWhereInput;
+  skip?: number;
+  take?: number;
+};
 
 export const bookingRepository = {
   findById: (id: string) =>
@@ -18,11 +25,26 @@ export const bookingRepository = {
       include: bookingAdminInclude,
     }),
 
-  findAll: () =>
+  findAll: (args?: BookingFindManyArgs) =>
     prisma.booking.findMany({
+      where: args?.where,
+      skip: args?.skip,
+      take: args?.take,
       include: bookingAdminInclude,
       orderBy: { createdAt: 'desc' },
     }),
+
+  findMany: (args: BookingFindManyArgs) =>
+    prisma.booking.findMany({
+      where: args.where,
+      skip: args.skip,
+      take: args.take,
+      include: bookingAdminInclude,
+      orderBy: { createdAt: 'desc' },
+    }),
+
+  count: (where?: Prisma.BookingWhereInput) =>
+    prisma.booking.count({ where }),
 
   findByUserId: (userId: string) =>
     prisma.booking.findMany({

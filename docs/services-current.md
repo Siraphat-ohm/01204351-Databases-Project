@@ -1,6 +1,6 @@
 # YokAirlines Service Layer – Current Documentation
 
-_Last updated: 2026-02-21_
+_Last updated: 2026-02-25_
 
 This document summarizes the current `src/services` layer for teammate handoff.
 
@@ -17,7 +17,7 @@ This document summarizes the current `src/services` layer for teammate handoff.
   - `src/services/_shared/pagination.ts` (`resolvePagination`)
 
 - API protection helper:
-  - `src/lib/utils/rate-limit.ts` (`checkRateLimit`, `getClientIpFromHeaders`)
+  - `src/lib/utils/rate-limit.ts` (`checkRateLimit`, `getClientIpFromHeaders`, `enforceApiRateLimit`)
 
 ## 2) Session / Auth Model
 
@@ -164,6 +164,7 @@ Methods:
 - `findByIataCode(iataCode, session)`
 - `findAll(session)`
 - `findAllPaginated(session, params)`
+- `searchPaginated(search, session, params)`
 - `createAirport(input, session)`
 - `updateAirport(id, input, session)`
 - `deleteAirport(id, session)`
@@ -174,6 +175,13 @@ Errors:
 - `AirportConflictError`
 - `AirportInUseError`
 - `UnauthorizedError`
+
+API routes:
+
+- `GET /api/v1/airports`
+  - supports `search`
+  - supports `page` + `limit`
+  - also supports legacy `skip` + `take`
 
 ### 4.3 `staffService`
 
@@ -206,22 +214,37 @@ Files:
 
 Methods:
 
+- `findAll(session)` (admin)
+- `findAllPaginated(session, params)` (admin)
 - `findByUserId(userId, session)`
 - `findMyProfile(session)`
 - `upsertMyProfile(input, session)`
 - `patchByUserId(userId, input, session)`
+- `create(input, session)` (admin)
+- `updateByUserId(userId, input, session)` (admin)
+- `deleteByUserId(userId, session)` (admin)
 
 Errors:
 
 - `CrewProfileNotFoundError`
+- `CrewProfileConflictError`
 - `UnauthorizedError`
 
 API routes:
 
+- `GET /api/v1/crew-profiles`
+  - supports `page` + `limit`
+  - admin only
+- `POST /api/v1/crew-profiles`
+  - admin only
 - `GET /api/v1/crew-profiles/me`
 - `PUT /api/v1/crew-profiles/me`
 - `GET /api/v1/crew-profiles/[userId]`
 - `PATCH /api/v1/crew-profiles/[userId]`
+  - admin uses generic update
+  - non-admin can patch own profile only
+- `DELETE /api/v1/crew-profiles/[userId]`
+  - admin only
 
 ### 4.3.2 `issueReportService` (Mongo)
 
@@ -240,7 +263,10 @@ Methods:
 - `findMinePaginated(session, params)`
 - `findAllPaginated(session, params)` (admin)
 - `createMine(input, session)`
+- `create(input, session)` (admin)
 - `updateStatus(id, input, session)` (admin)
+- `updateById(id, input, session)` (admin)
+- `deleteById(id, session)` (admin)
 
 Errors:
 
@@ -254,8 +280,10 @@ API routes:
   - admin gets all issues (paginated)
   - non-admin gets own issues (paginated)
 - `POST /api/v1/issues`
+  - admin can create for any user by passing `userId`
 - `GET /api/v1/issues/[id]`
 - `PATCH /api/v1/issues/[id]`
+- `DELETE /api/v1/issues/[id]`
 
 ### 4.3.3 `paymentLogService` (Mongo)
 
@@ -274,6 +302,7 @@ Methods:
 - `findAllPaginated(session, params)` (admin)
 - `create(input, session)` (admin)
 - `updateById(id, input, session)` (admin)
+- `deleteById(id, session)` (admin)
 
 Errors:
 
@@ -289,6 +318,7 @@ API routes:
 - `POST /api/v1/payment-logs`
 - `GET /api/v1/payment-logs/[id]`
 - `PATCH /api/v1/payment-logs/[id]`
+- `DELETE /api/v1/payment-logs/[id]`
 
 ### 4.3.4 `flightOpsLogService` (Mongo)
 
@@ -307,6 +337,7 @@ Methods:
 - `findAllPaginated(session, params)`
 - `upsertByFlightId(flightId, input, session)`
 - `patchById(id, input, session)`
+- `deleteById(id, session)`
 
 Errors:
 
@@ -321,6 +352,7 @@ API routes:
 - `PUT /api/v1/flight-ops-logs?flightId=...`
 - `GET /api/v1/flight-ops-logs/[id]`
 - `PATCH /api/v1/flight-ops-logs/[id]`
+- `DELETE /api/v1/flight-ops-logs/[id]`
 
 ### 4.4 `routeService`
 
@@ -334,6 +366,7 @@ Methods:
 - `getDestinationsFromOrigin(originCode, session)`
 - `findAll(session)`
 - `findAllPaginated(session, params)`
+- `searchPaginated(search, session, params)`
 - `createRoute(input, session)`
 - `updateRoute(id, input, session)`
 - `deleteRoute(id, session)`
@@ -347,7 +380,19 @@ Errors:
 
 Notes:
 
-- Pagination currently slices in-memory from `findAll()` result.
+- Pagination uses repository-level `skip/take` plus `count()`.
+
+API routes:
+
+- `GET /api/v1/routes`
+  - supports `search`
+  - supports `page` + `limit`
+  - also supports legacy `skip` + `take`
+- `POST /api/v1/routes`
+- `PATCH /api/v1/routes`
+  - expects `id` in body
+- `DELETE /api/v1/routes`
+  - accepts `id` via query or JSON body
 
 ### 4.5 `flightService`
 
@@ -425,9 +470,22 @@ Errors:
 
 Notes:
 
-- `findAllPaginated` currently slices in-memory from `findAll()` result.
+- `findAllPaginated` uses repository-level `skip/take` plus `count()`.
 - `findByFlightCode` normalizes input with `trim().toUpperCase()`.
 - Non-admin users only receive their own bookings for `findByFlightId`/`findByFlightCode`.
+
+API routes:
+
+- `GET /api/v1/bookings`
+  - supports filters: `bookingRef`, `flightId`, `flightCode`, `mine`
+  - supports `page` + `limit` for read-all roles when no filter is set
+  - non read-all roles default to own bookings when no filter is set
+- `POST /api/v1/bookings`
+- `GET /api/v1/bookings/[id]`
+- `PATCH /api/v1/bookings/[id]`
+  - action-based: `cancel`, `change-flight`, `accept-reaccommodation`, `cancel-reaccommodation`
+- `DELETE /api/v1/bookings/[id]`
+  - alias of cancel booking
 
 ### 4.8 `ticketService`
 
@@ -435,6 +493,7 @@ File: `src/services/ticket.services.ts`
 
 Methods:
 
+- `createTicket(input, session)`
 - `findById(id, session)`
 - `findMine(session)`
 - `findByBookingId(bookingId, session)`
@@ -442,7 +501,9 @@ Methods:
 - `findByFlightCode(flightCode, session)`
 - `findAll(session)`
 - `findAllPaginated(session, params)`
+- `updateTicket(id, input, session)`
 - `checkInTicket(id, input, session)`
+- `deleteTicket(id, session)`
 
 Errors:
 
@@ -453,9 +514,21 @@ Errors:
 
 Notes:
 
-- `findAllPaginated` currently slices in-memory from `findAll()` result.
+- `findAllPaginated` uses repository-level `skip/take` plus `count()`.
 - `findByFlightCode` normalizes input with `trim().toUpperCase()`.
 - Non-admin users only receive their own tickets for `findByFlightId`/`findByFlightCode`.
+
+API routes:
+
+- `GET /api/v1/tickets`
+  - supports filters: `bookingId`, `flightId`, `flightCode`, `mine`
+  - supports `page` + `limit` for read-all roles when no filter is set
+  - non read-all roles default to own tickets when no filter is set
+- `POST /api/v1/tickets`
+- `GET /api/v1/tickets/[id]`
+- `PATCH /api/v1/tickets/[id]`
+- `DELETE /api/v1/tickets/[id]`
+- `PATCH /api/v1/tickets/[id]/check-in`
 
 ### 4.9 `paymentService`
 
@@ -483,7 +556,40 @@ Errors:
 
 Notes:
 
-- `findAllPaginated` currently slices in-memory from `findAll()` result.
+- `findAllPaginated` uses repository-level `skip/take` plus `count()`.
+
+API routes:
+
+- `GET /api/v1/payments`
+  - supports `bookingId` filter
+  - supports `mine`
+  - supports `page` + `limit` for read-all roles when no filter is set
+- `POST /api/v1/payments`
+- `GET /api/v1/payments/[id]`
+- `PATCH /api/v1/payments/[id]`
+  - action-based: `mark-success`, `mark-failed`, `refund`
+
+### 4.9.1 Action Contract Cheatsheet
+
+Booking action endpoint: `PATCH /api/v1/bookings/[id]`
+
+- `cancel`
+  - body: `{ "action": "cancel" }`
+- `change-flight`
+  - body: `{ "action": "change-flight", "newFlightId": "<cuid>", "reason"?: "FLIGHT_CANCELLED|MAJOR_DELAY|ROUTE_DISRUPTION|AIRCRAFT_DOWNSIZE", "keepSeatAssignments"?: boolean, "totalPrice"?: number, "currency"?: string }`
+- `accept-reaccommodation`
+  - body: `{ "action": "accept-reaccommodation", "newFlightId": "<cuid>", "totalPrice"?: number, "currency"?: string }`
+- `cancel-reaccommodation`
+  - body: `{ "action": "cancel-reaccommodation", "reason"?: string }`
+
+Payment action endpoint: `PATCH /api/v1/payments/[id]`
+
+- `mark-success`
+  - body: `{ "action": "mark-success", "stripeChargeId"?: string }`
+- `mark-failed`
+  - body: `{ "action": "mark-failed", "failureCode"?: string, "failureMessage"?: string }`
+- `refund`
+  - body: `{ "action": "refund", "amount"?: number, "reason"?: string }`
 
 ## 5) Current Public Flight APIs
 
@@ -503,6 +609,8 @@ Common helpers:
 
 - `successResponse`
 - `errorResponse`
+- `unauthorizedResponse`
+- `tooManyRequestsResponse`
 - `notFoundResponse`
 - `validationErrorResponse`
 - `zodFieldErrors` (shared Zod issue mapping)
@@ -518,9 +626,67 @@ Common helpers:
   - `payment-logs`
   - `flight-ops-logs`
 
-## 8) Recommended Next Improvements
+## 8) API Classification (contract boundary)
 
-- Move in-memory pagination (`route/booking/ticket/payment`) to repository-level `skip/take/count` for large datasets.
+Tag meaning:
+
+- `public-contract`: keep versioned and stable for external/mobile/integration clients
+- `internal-admin`: optional API; can be replaced by server-component/server-action direct service calls
+
+`public-contract`:
+
+- `GET /api/v1/flights`
+- `GET /api/v1/flights/[code]`
+- `GET /api/v1/flights/[code]/seats`
+- `GET /api/v1/bookings`
+- `POST /api/v1/bookings`
+- `GET /api/v1/bookings/[id]`
+- `PATCH /api/v1/bookings/[id]`
+- `DELETE /api/v1/bookings/[id]`
+- `GET /api/v1/tickets`
+- `POST /api/v1/tickets`
+- `GET /api/v1/tickets/[id]`
+- `PATCH /api/v1/tickets/[id]`
+- `DELETE /api/v1/tickets/[id]`
+- `PATCH /api/v1/tickets/[id]/check-in`
+- `GET /api/v1/payments`
+- `POST /api/v1/payments`
+- `GET /api/v1/payments/[id]`
+- `PATCH /api/v1/payments/[id]`
+- `GET /api/openapi`
+
+`internal-admin`:
+
+- `GET /api/v1/airports`
+- `GET /api/v1/routes`
+- `POST /api/v1/routes`
+- `PATCH /api/v1/routes`
+- `DELETE /api/v1/routes`
+- `GET /api/v1/crew-profiles`
+- `POST /api/v1/crew-profiles`
+- `GET /api/v1/crew-profiles/me`
+- `PUT /api/v1/crew-profiles/me`
+- `GET /api/v1/crew-profiles/[userId]`
+- `PATCH /api/v1/crew-profiles/[userId]`
+- `DELETE /api/v1/crew-profiles/[userId]`
+- `GET /api/v1/issues`
+- `POST /api/v1/issues`
+- `GET /api/v1/issues/[id]`
+- `PATCH /api/v1/issues/[id]`
+- `DELETE /api/v1/issues/[id]`
+- `GET /api/v1/payment-logs`
+- `POST /api/v1/payment-logs`
+- `GET /api/v1/payment-logs/[id]`
+- `PATCH /api/v1/payment-logs/[id]`
+- `DELETE /api/v1/payment-logs/[id]`
+- `GET /api/v1/flight-ops-logs`
+- `PUT /api/v1/flight-ops-logs?flightId=...`
+- `GET /api/v1/flight-ops-logs/[id]`
+- `PATCH /api/v1/flight-ops-logs/[id]`
+- `DELETE /api/v1/flight-ops-logs/[id]`
+
+## 9) Recommended Next Improvements
+
 - Consider a shared `DomainUnauthorizedError` base class to reduce repetitive unauthorized classes.
 - Add service-level tests for:
   - permission denied
