@@ -1,6 +1,6 @@
 # YokAirlines Service Layer – Current Documentation
 
-_Last updated: 2026-02-21_
+_Last updated: 2026-02-25_
 
 This document summarizes the current `src/services` layer for teammate handoff.
 
@@ -17,7 +17,7 @@ This document summarizes the current `src/services` layer for teammate handoff.
   - `src/services/_shared/pagination.ts` (`resolvePagination`)
 
 - API protection helper:
-  - `src/lib/utils/rate-limit.ts` (`checkRateLimit`, `getClientIpFromHeaders`)
+  - `src/lib/utils/rate-limit.ts` (`checkRateLimit`, `getClientIpFromHeaders`, `enforceApiRateLimit`)
 
 ## 2) Session / Auth Model
 
@@ -503,6 +503,8 @@ Common helpers:
 
 - `successResponse`
 - `errorResponse`
+- `unauthorizedResponse`
+- `tooManyRequestsResponse`
 - `notFoundResponse`
 - `validationErrorResponse`
 - `zodFieldErrors` (shared Zod issue mapping)
