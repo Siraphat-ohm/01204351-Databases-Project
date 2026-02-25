@@ -15,6 +15,16 @@ type SeedDeps = {
 };
 
 export async function seedSqlData(prisma: PrismaClient, deps: SeedDeps) {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (error: any) {
+    const code = error?.code ? ` (code: ${error.code})` : "";
+    throw new Error(
+      `PostgreSQL connection failed${code}. Check DATABASE_URL and ensure Postgres is running (e.g. docker compose up -d postgres).`,
+      { cause: error },
+    );
+  }
+
   console.log("🧹 Clearing existing data...");
   try {
     await (prisma as any).activeEmergencyTask.deleteMany();
