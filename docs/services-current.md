@@ -482,6 +482,18 @@ Notes:
 - `findByFlightCode` normalizes input with `trim().toUpperCase()`.
 - Non-admin users only receive their own tickets for `findByFlightId`/`findByFlightCode`.
 
+API routes:
+
+- `GET /api/v1/tickets`
+  - supports filters: `bookingId`, `flightId`, `flightCode`, `mine`
+  - supports `page` + `limit` for read-all roles when no filter is set
+  - non read-all roles default to own tickets when no filter is set
+- `POST /api/v1/tickets`
+- `GET /api/v1/tickets/[id]`
+- `PATCH /api/v1/tickets/[id]`
+- `DELETE /api/v1/tickets/[id]`
+- `PATCH /api/v1/tickets/[id]/check-in`
+
 ### 4.9 `paymentService`
 
 File: `src/services/payment.services.ts`
