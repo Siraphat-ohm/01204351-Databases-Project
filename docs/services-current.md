@@ -470,6 +470,8 @@ Errors:
 - `BookingChangeNotAllowedError`
 - `BookingReaccommodationError`
 - `BookingSeatConflictError`
+- `BookingPassengerLimitError`
+- `BookingPriceMismatchError`
 - `UnauthorizedError`
 
 Notes:
@@ -491,6 +493,13 @@ API routes:
   - optional `guestName` used for generated guest user profile
   - when body includes non-empty `tickets[]`, booking + all tickets are created together in one transaction
   - validates duplicate seats in request and already-assigned seats on the flight
+  - enforces max passengers per booking (`9`)
+  - enforces `totalPrice = sum(ticket.price + ticket.seatSurcharge)`
+  - conflict responses may include `validationCode`:
+    - `BOOKING_CONFLICT`
+    - `SEAT_CONFLICT`
+    - `PASSENGER_LIMIT`
+    - `PRICE_MISMATCH`
 - `GET /api/v1/bookings/[id]`
 - `PATCH /api/v1/bookings/[id]`
   - action-based: `cancel`, `change-flight`, `accept-reaccommodation`, `cancel-reaccommodation`

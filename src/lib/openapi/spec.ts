@@ -39,7 +39,7 @@ export const openApiDocument = {
         tags: ['Bookings'],
         summary: 'Create booking',
         description:
-          'Authenticated users can create with userId. Guests (no session) can create with contactEmail and optional guestName.',
+          'Authenticated users can create with userId. Guests (no session) can create with contactEmail and optional guestName. If tickets[] is provided, max 9 passengers are allowed and totalPrice must equal sum(ticket.price + ticket.seatSurcharge).',
         requestBody: {
           required: true,
           content: {
