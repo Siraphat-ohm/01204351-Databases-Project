@@ -626,9 +626,67 @@ Common helpers:
   - `payment-logs`
   - `flight-ops-logs`
 
-## 8) Recommended Next Improvements
+## 8) API Classification (contract boundary)
 
-- Move in-memory pagination (`route/booking/ticket/payment`) to repository-level `skip/take/count` for large datasets.
+Tag meaning:
+
+- `public-contract`: keep versioned and stable for external/mobile/integration clients
+- `internal-admin`: optional API; can be replaced by server-component/server-action direct service calls
+
+`public-contract`:
+
+- `GET /api/v1/flights`
+- `GET /api/v1/flights/[code]`
+- `GET /api/v1/flights/[code]/seats`
+- `GET /api/v1/bookings`
+- `POST /api/v1/bookings`
+- `GET /api/v1/bookings/[id]`
+- `PATCH /api/v1/bookings/[id]`
+- `DELETE /api/v1/bookings/[id]`
+- `GET /api/v1/tickets`
+- `POST /api/v1/tickets`
+- `GET /api/v1/tickets/[id]`
+- `PATCH /api/v1/tickets/[id]`
+- `DELETE /api/v1/tickets/[id]`
+- `PATCH /api/v1/tickets/[id]/check-in`
+- `GET /api/v1/payments`
+- `POST /api/v1/payments`
+- `GET /api/v1/payments/[id]`
+- `PATCH /api/v1/payments/[id]`
+- `GET /api/openapi`
+
+`internal-admin`:
+
+- `GET /api/v1/airports`
+- `GET /api/v1/routes`
+- `POST /api/v1/routes`
+- `PATCH /api/v1/routes`
+- `DELETE /api/v1/routes`
+- `GET /api/v1/crew-profiles`
+- `POST /api/v1/crew-profiles`
+- `GET /api/v1/crew-profiles/me`
+- `PUT /api/v1/crew-profiles/me`
+- `GET /api/v1/crew-profiles/[userId]`
+- `PATCH /api/v1/crew-profiles/[userId]`
+- `DELETE /api/v1/crew-profiles/[userId]`
+- `GET /api/v1/issues`
+- `POST /api/v1/issues`
+- `GET /api/v1/issues/[id]`
+- `PATCH /api/v1/issues/[id]`
+- `DELETE /api/v1/issues/[id]`
+- `GET /api/v1/payment-logs`
+- `POST /api/v1/payment-logs`
+- `GET /api/v1/payment-logs/[id]`
+- `PATCH /api/v1/payment-logs/[id]`
+- `DELETE /api/v1/payment-logs/[id]`
+- `GET /api/v1/flight-ops-logs`
+- `PUT /api/v1/flight-ops-logs?flightId=...`
+- `GET /api/v1/flight-ops-logs/[id]`
+- `PATCH /api/v1/flight-ops-logs/[id]`
+- `DELETE /api/v1/flight-ops-logs/[id]`
+
+## 9) Recommended Next Improvements
+
 - Consider a shared `DomainUnauthorizedError` base class to reduce repetitive unauthorized classes.
 - Add service-level tests for:
   - permission denied
