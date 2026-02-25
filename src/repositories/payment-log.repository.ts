@@ -16,9 +16,37 @@ export const paymentLogRepository = {
     return PaymentLog.find({ bookingId }).sort({ createdAt: -1 }).lean();
   },
 
-  async findAll() {
+  async findAll(args?: {
+    where?: Record<string, unknown>;
+    skip?: number;
+    take?: number;
+  }) {
     await connectMongo();
-    return PaymentLog.find({}).sort({ createdAt: -1 }).lean();
+
+    const query = PaymentLog.find(args?.where ?? {}).sort({ createdAt: -1 });
+    if (args?.skip !== undefined) query.skip(args.skip);
+    if (args?.take !== undefined) query.limit(args.take);
+
+    return query.lean();
+  },
+
+  async findMany(args: {
+    where?: Record<string, unknown>;
+    skip?: number;
+    take?: number;
+  }) {
+    await connectMongo();
+
+    const query = PaymentLog.find(args.where ?? {}).sort({ createdAt: -1 });
+    if (args.skip !== undefined) query.skip(args.skip);
+    if (args.take !== undefined) query.limit(args.take);
+
+    return query.lean();
+  },
+
+  async count(where?: Record<string, unknown>) {
+    await connectMongo();
+    return PaymentLog.countDocuments(where ?? {});
   },
 
   async create(input: CreatePaymentLogInput) {

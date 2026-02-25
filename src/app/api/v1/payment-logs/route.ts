@@ -38,6 +38,8 @@ export async function GET(req: NextRequest) {
     if (rl) return rl;
 
     const bookingId = req.nextUrl.searchParams.get('bookingId');
+    const page = Number(req.nextUrl.searchParams.get('page') ?? 1);
+    const limit = Number(req.nextUrl.searchParams.get('limit') ?? 20);
     const serviceSession = { user: { id: session.user.id, role: session.user.role } };
 
     if (bookingId) {
@@ -45,8 +47,8 @@ export async function GET(req: NextRequest) {
       return successResponse(rows);
     }
 
-    const rows = await paymentLogService.findAll(serviceSession);
-    return successResponse(rows);
+    const result = await paymentLogService.findAllPaginated(serviceSession, { page, limit });
+    return successResponse(result);
   } catch (err) {
     if (err instanceof Error && err.name === 'UnauthorizedError') {
       return unauthorized();

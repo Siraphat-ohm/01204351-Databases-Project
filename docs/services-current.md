@@ -266,6 +266,7 @@ Methods:
 - `findById(id, session)`
 - `findByBookingId(bookingId, session)`
 - `findAll(session)` (admin)
+- `findAllPaginated(session, params)` (admin)
 - `create(input, session)` (admin)
 - `updateById(id, input, session)` (admin)
 
@@ -278,6 +279,8 @@ Errors:
 API routes:
 
 - `GET /api/v1/payment-logs`
+  - supports `page` + `limit` when listing all logs (admin)
+  - `bookingId=...` returns logs for one booking (no pagination)
 - `POST /api/v1/payment-logs`
 - `GET /api/v1/payment-logs/[id]`
 - `PATCH /api/v1/payment-logs/[id]`
