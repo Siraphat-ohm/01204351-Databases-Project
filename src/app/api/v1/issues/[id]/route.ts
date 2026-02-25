@@ -65,7 +65,7 @@ export async function PATCH(
     const { id } = await params;
     const body = await req.json();
 
-    const row = await issueReportService.updateStatus(id, body, {
+    const row = await issueReportService.updateById(id, body, {
       user: { id: session.user.id, role: session.user.role },
     });
 
@@ -81,6 +81,40 @@ export async function PATCH(
       return unauthorizedResponse();
     }
     console.error('[PATCH /api/v1/issues/[id]]', err);
+    return errorResponse('Internal server error');
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const session = await getServerSession();
+    if (!session?.user) return unauthorizedResponse();
+
+    const limited = enforceApiRateLimit({
+      headers: req.headers,
+      namespace: 'api:v1:issues:id',
+      userId: session.user.id,
+      action: 'write',
+    });
+    if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
+
+    const { id } = await params;
+    const row = await issueReportService.deleteById(id, {
+      user: { id: session.user.id, role: session.user.role },
+    });
+
+    return successResponse(row);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'IssueReportNotFoundError') {
+      return errorResponse(err.message, 404);
+    }
+    if (err instanceof Error && err.name === 'UnauthorizedError') {
+      return unauthorizedResponse();
+    }
+    console.error('[DELETE /api/v1/issues/[id]]', err);
     return errorResponse('Internal server error');
   }
 }

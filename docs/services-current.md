@@ -240,7 +240,10 @@ Methods:
 - `findMinePaginated(session, params)`
 - `findAllPaginated(session, params)` (admin)
 - `createMine(input, session)`
+- `create(input, session)` (admin)
 - `updateStatus(id, input, session)` (admin)
+- `updateById(id, input, session)` (admin)
+- `deleteById(id, session)` (admin)
 
 Errors:
 
@@ -254,8 +257,10 @@ API routes:
   - admin gets all issues (paginated)
   - non-admin gets own issues (paginated)
 - `POST /api/v1/issues`
+  - admin can create for any user by passing `userId`
 - `GET /api/v1/issues/[id]`
 - `PATCH /api/v1/issues/[id]`
+- `DELETE /api/v1/issues/[id]`
 
 ### 4.3.3 `paymentLogService` (Mongo)
 

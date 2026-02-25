@@ -1,8 +1,12 @@
 import { issueReportRepository } from '@/repositories/issue-report.repository';
 import {
+  createIssueReportAdminSchema,
   createIssueReportSchema,
+  updateIssueReportSchema,
   updateIssueReportStatusSchema,
+  type CreateIssueReportAdminInput,
   type CreateIssueReportInput,
+  type UpdateIssueReportInput,
   type UpdateIssueReportStatusInput,
 } from '@/types/issue-report.type';
 import type { PaginatedResponse } from '@/types/common';
@@ -110,6 +114,13 @@ export const issueReportService = {
     return issueReportRepository.createForUser(session.user.id, data);
   },
 
+  async create(input: CreateIssueReportAdminInput, session: Session) {
+    if (!isAdmin(session)) throw new UnauthorizedError('create');
+
+    const data = createIssueReportAdminSchema.parse(input);
+    return issueReportRepository.create(data);
+  },
+
   async updateStatus(id: string, input: UpdateIssueReportStatusInput, session: Session) {
     if (!isAdmin(session)) throw new UnauthorizedError('update-status');
 
@@ -121,5 +132,26 @@ export const issueReportService = {
 
     if (!updated) throw new IssueReportNotFoundError(id);
     return updated;
+  },
+
+  async updateById(id: string, input: UpdateIssueReportInput, session: Session) {
+    if (!isAdmin(session)) throw new UnauthorizedError('update');
+
+    const data = updateIssueReportSchema.parse(input);
+    const updated = await issueReportRepository.updateById(id, {
+      ...data,
+      resolvedBy: session.user.id,
+    });
+
+    if (!updated) throw new IssueReportNotFoundError(id);
+    return updated;
+  },
+
+  async deleteById(id: string, session: Session) {
+    if (!isAdmin(session)) throw new UnauthorizedError('delete');
+
+    const deleted = await issueReportRepository.deleteById(id);
+    if (!deleted) throw new IssueReportNotFoundError(id);
+    return deleted;
   },
 };

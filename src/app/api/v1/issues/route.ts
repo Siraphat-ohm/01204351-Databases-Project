@@ -59,9 +59,12 @@ export async function POST(req: NextRequest) {
     if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
     const body = await req.json();
-    const created = await issueReportService.createMine(body, {
-      user: { id: session.user.id, role: session.user.role },
-    });
+    const serviceSession = { user: { id: session.user.id, role: session.user.role } };
+
+    const created =
+      session.user.role === 'ADMIN'
+        ? await issueReportService.create(body, serviceSession)
+        : await issueReportService.createMine(body, serviceSession);
 
     return successResponse(created, 201);
   } catch (err) {
