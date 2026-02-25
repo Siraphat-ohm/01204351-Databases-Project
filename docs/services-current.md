@@ -13,7 +13,11 @@ This document summarizes the current `src/services` layer for teammate handoff.
 - Shared service helpers:
   - `src/services/_shared/session.ts` (`ServiceSession`)
   - `src/services/_shared/authorization.ts` (`assertPermission`, `hasPermission`)
+  - `src/services/_shared/role.ts` (`hasAnyRole`, `assertAnyRole`)
   - `src/services/_shared/pagination.ts` (`resolvePagination`)
+
+- API protection helper:
+  - `src/lib/utils/rate-limit.ts` (`checkRateLimit`, `getClientIpFromHeaders`)
 
 ## 2) Session / Auth Model
 
@@ -190,6 +194,123 @@ Errors:
 - `StaffConflictError`
 - `StaffInUseError`
 - `UnauthorizedError`
+
+### 4.3.1 `crewProfileService` (Mongo)
+
+Files:
+
+- `src/services/crew-profile.services.ts`
+- `src/repositories/crew-profile.repository.ts`
+- `src/types/crew-profile.type.ts`
+- `src/models/CrewProfile.ts`
+
+Methods:
+
+- `findByUserId(userId, session)`
+- `findMyProfile(session)`
+- `upsertMyProfile(input, session)`
+- `patchByUserId(userId, input, session)`
+
+Errors:
+
+- `CrewProfileNotFoundError`
+- `UnauthorizedError`
+
+API routes:
+
+- `GET /api/v1/crew-profiles/me`
+- `PUT /api/v1/crew-profiles/me`
+- `GET /api/v1/crew-profiles/[userId]`
+- `PATCH /api/v1/crew-profiles/[userId]`
+
+### 4.3.2 `issueReportService` (Mongo)
+
+Files:
+
+- `src/services/issue-report.services.ts`
+- `src/repositories/issue-report.repository.ts`
+- `src/types/issue-report.type.ts`
+- `src/models/IssueReport.ts`
+
+Methods:
+
+- `findById(id, session)`
+- `findMine(session)`
+- `findAll(session)` (admin)
+- `createMine(input, session)`
+- `updateStatus(id, input, session)` (admin)
+
+Errors:
+
+- `IssueReportNotFoundError`
+- `UnauthorizedError`
+
+API routes:
+
+- `GET /api/v1/issues`
+- `POST /api/v1/issues`
+- `GET /api/v1/issues/[id]`
+- `PATCH /api/v1/issues/[id]`
+
+### 4.3.3 `paymentLogService` (Mongo)
+
+Files:
+
+- `src/services/payment-log.services.ts`
+- `src/repositories/payment-log.repository.ts`
+- `src/types/payment-log.type.ts`
+- `src/models/PaymentLog.ts`
+
+Methods:
+
+- `findById(id, session)`
+- `findByBookingId(bookingId, session)`
+- `findAll(session)` (admin)
+- `create(input, session)` (admin)
+- `updateById(id, input, session)` (admin)
+
+Errors:
+
+- `PaymentLogNotFoundError`
+- `BookingNotFoundError`
+- `UnauthorizedError`
+
+API routes:
+
+- `GET /api/v1/payment-logs`
+- `POST /api/v1/payment-logs`
+- `GET /api/v1/payment-logs/[id]`
+- `PATCH /api/v1/payment-logs/[id]`
+
+### 4.3.4 `flightOpsLogService` (Mongo)
+
+Files:
+
+- `src/services/flight-ops-log.services.ts`
+- `src/repositories/flight-ops-log.repository.ts`
+- `src/types/flight-ops-log.type.ts`
+- `src/models/FlightOpsLog.ts`
+
+Methods:
+
+- `findById(id, session)`
+- `findByFlightId(flightId, session)`
+- `findAll(session)`
+- `upsertByFlightId(flightId, input, session)`
+- `patchById(id, input, session)`
+
+Errors:
+
+- `FlightOpsLogNotFoundError`
+- `FlightNotFoundError`
+- `UnauthorizedError`
+
+API routes:
+
+- `GET /api/v1/flight-ops-logs`
+- `PUT /api/v1/flight-ops-logs?flightId=...`
+- `GET /api/v1/flight-ops-logs/[id]`
+- `PATCH /api/v1/flight-ops-logs/[id]`
 
 ### 4.4 `routeService`
 
@@ -368,7 +489,18 @@ Common helpers:
 - `validationErrorResponse`
 - `zodFieldErrors` (shared Zod issue mapping)
 
-## 7) Recommended Next Improvements
+## 7) API Protection Notes
+
+- Mongo API routes now enforce both:
+  - session auth (`getServerSession`)
+  - service-level authorization (`UnauthorizedError` with role/ownership checks)
+- Added lightweight in-memory rate limiting on new Mongo endpoints:
+  - `crew-profiles`
+  - `issues`
+  - `payment-logs`
+  - `flight-ops-logs`
+
+## 8) Recommended Next Improvements
 
 - Move in-memory pagination (`route/booking/ticket/payment`) to repository-level `skip/take/count` for large datasets.
 - Consider a shared `DomainUnauthorizedError` base class to reduce repetitive unauthorized classes.
