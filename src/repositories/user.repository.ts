@@ -23,7 +23,8 @@ export const userRepository = {
     prisma.user.findMany({
       ...(args ?? {}),
       select: userAdminSelect,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' },{ id: 'asc' }],
+      
     }),
 
   count: (where?: Prisma.UserWhereInput) =>

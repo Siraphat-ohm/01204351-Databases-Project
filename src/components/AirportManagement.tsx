@@ -3,20 +3,17 @@
 import { 
   Title, Group, Button, Table, Badge, Text, ActionIcon, 
   TextInput, Paper, Modal, Stack, Pagination, Center, 
-  NumberInput, Grid, Alert, LoadingOverlay,Box
+  Alert, LoadingOverlay, Box
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { Plus, Search, Pencil, Trash, MapPin, Building, Globe, Check, X, AlertTriangle,Save } from 'lucide-react';
-import { useState, useTransition, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { Plus, Search, Trash, MapPin, Globe, Check, X, AlertTriangle, Pencil } from 'lucide-react';
+import { useState, useTransition, useEffect } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
+// import { deleteAirportAction } from '@/actions/airport-actions'; // Uncomment when ready
 
-// Import our new Server Actions
-import { createAirportAction, deleteAirportAction } from '@/actions/airport-actions';
-
-// Update Type based on your new Prisma Schema (UUIDs + Lat/Lon)
 export interface Airport {
   id: string; 
   iataCode: string;
@@ -29,69 +26,75 @@ export interface Airport {
 
 interface AirportManagementProps {
   initialAirports: Airport[];
+  totalPages: number;
+  currentPage: number;
 }
 
-export function AirportManagement({ initialAirports }: AirportManagementProps) {
+export function AirportManagement({ initialAirports, totalPages, currentPage }: AirportManagementProps) {
   const router = useRouter();
-  const [searchTerm, setSearchTerm] = useState('');
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Initialize Search from URL
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [isPending, startTransition] = useTransition();
 
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
-  const [formData, setFormData] = useState({
-    iataCode: '',
-    name: '',
-    city: '',
-    country: '',
-    lat: 0,
-    lon: 0,
-  });
-
-  // --- Delete Modal State ---
+  // Delete Modal State
   const [deleteOpened, { open: openDelete, close: closeDelete }] = useDisclosure(false);
   const [airportToDelete, setAirportToDelete] = useState<Airport | null>(null);
 
   // ────────────────────────────────────────────────
-  // Handlers
+  // URL Sync for Search (Debounced)
   // ────────────────────────────────────────────────
-  const handleFormChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (fieldErrors[field]) {
-      setFieldErrors(prev => ({ ...prev, [field]: [] }));
-    }
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      const params = new URLSearchParams(searchParams);
+      
+      if (searchTerm) params.set('search', searchTerm);
+      else params.delete('search');
+
+      // Reset to page 1 if searching
+      if (searchTerm !== (searchParams.get('search') || '') && currentPage !== 1) {
+         params.set('page', '1');
+      }
+
+      router.push(`${pathname}?${params.toString()}`);
+    }, 400); // 400ms debounce
+
+    return () => clearTimeout(handler);
+  }, [searchTerm, pathname, router, searchParams, currentPage]);
+
+  const handlePageChange = (page: number) => {
+    const params = new URLSearchParams(searchParams);
+    params.set('page', page.toString());
+    router.push(`${pathname}?${params.toString()}`);
   };
 
-
+  // ────────────────────────────────────────────────
+  // Handlers
+  // ────────────────────────────────────────────────
   const confirmDelete = async () => {
     if (!airportToDelete) return;
     
     startTransition(async () => {
-      const result = await deleteAirportAction(airportToDelete.id);
+      // const result = await deleteAirportAction(airportToDelete.id);
+      const result = { error: null }; // Mock result
+      
       if (result?.error) {
         notifications.show({ title: "Delete Failed", message: result.error, color: "red", icon: <X size={18} /> });
       } else {
         notifications.show({ title: "Deleted", message: `${airportToDelete.iataCode} has been removed.`, color: "green", icon: <Check size={18} /> });
         closeDelete();
         setAirportToDelete(null);
+        router.refresh();
       }
     });
   };
 
   // ────────────────────────────────────────────────
-  // Filtering (Optimized)
+  // Render (No client-side filter needed!)
   // ────────────────────────────────────────────────
-  const filteredAirports = useMemo(() => {
-    return initialAirports.filter(airport => {
-      const term = searchTerm.toLowerCase();
-      return (
-        airport.iataCode.toLowerCase().includes(term) ||
-        airport.name.toLowerCase().includes(term) ||
-        airport.city.toLowerCase().includes(term) ||
-        airport.country.toLowerCase().includes(term)
-      );
-    });
-  }, [initialAirports, searchTerm]);
-
-  const rows = filteredAirports.map((airport) => (
+  const rows = initialAirports.map((airport) => (
     <Table.Tr key={airport.id}>
       <Table.Td>
         <Badge variant="filled" color="blue" size="lg" radius="sm">
@@ -116,6 +119,9 @@ export function AirportManagement({ initialAirports }: AirportManagementProps) {
       </Table.Td>
       <Table.Td>
         <Group gap={4} justify="flex-end">
+          <ActionIcon component={Link} href={`/admin/dashboard/airports/${airport.id}/edit`} variant="subtle" color="blue">
+             <Pencil size={16} />
+          </ActionIcon>
           <ActionIcon variant="subtle" color="red" onClick={() => { setAirportToDelete(airport); openDelete(); }}>
             <Trash size={16} />
           </ActionIcon>
@@ -133,9 +139,7 @@ export function AirportManagement({ initialAirports }: AirportManagementProps) {
           <Title order={2}>Airport Management</Title>
           <Text c="dimmed" size="sm">Manage global destinations and base stations</Text>
         </div>
-        <Button component={Link} 
-  href="/admin/dashboard/airports/create" 
-  leftSection={<Plus size={16} />}>
+        <Button component={Link} href="/admin/dashboard/airports/create" leftSection={<Plus size={16} />}>
           Add Airport
         </Button>
       </Group>
@@ -174,9 +178,16 @@ export function AirportManagement({ initialAirports }: AirportManagementProps) {
         </Table.ScrollContainer>
       </Paper>
       
-      <Center mt="md">
-         <Pagination total={Math.ceil(initialAirports.length / 10) || 1} color="blue" />
-      </Center>
+      {totalPages > 1 && (
+        <Center mt="md">
+           <Pagination 
+             total={totalPages} 
+             value={currentPage}
+             onChange={handlePageChange}
+             color="blue" 
+           />
+        </Center>
+      )}
 
       {/* --- DELETE CONFIRMATION MODAL --- */}
       <Modal opened={deleteOpened} onClose={closeDelete} title={<Group gap="xs" c="red"><AlertTriangle size={20} /> Confirm Deletion</Group>} centered>

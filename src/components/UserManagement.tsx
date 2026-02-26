@@ -2,14 +2,17 @@
 
 import { 
   Title, Group, Button, Table, Badge, Text, ActionIcon, 
-  TextInput, Paper, Select, Pagination, Center, Avatar, Tooltip 
+  TextInput, Paper, Select, Pagination, Center, Avatar, Tooltip,
+  Modal, Stack, Alert
 } from '@mantine/core';
-import { Search, Filter, Plus, Pencil, Trash, ShieldCheck, MapPin } from 'lucide-react';
-import { useState } from 'react';
+import { useDisclosure } from '@mantine/hooks';
+import { Search, Filter, Plus, Trash, ShieldCheck, MapPin, Check } from 'lucide-react';
+import { useState, useTransition } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
-// ✅ IMPORT YOUR REAL TYPES HERE
 import { UserAdmin } from '@/types/user.type'; 
+import { Role } from '@/generated/prisma/client';
+import { adminUpdateUserRoleAction } from '@/actions/user-actions'; // Adjust path
 
 interface UserManagementProps {
   initialUsers: UserAdmin[];
@@ -22,11 +25,51 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Local state for client-side filtering of the CURRENT page
+  // Local state for client-side filtering
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
 
-  // Helper: Role Colors
+  // --- ROLE EDIT MODAL STATE ---
+  const [opened, { open, close }] = useDisclosure(false);
+  const [editingUser, setEditingUser] = useState<UserAdmin | null>(null);
+  const [editRole, setEditRole] = useState<string>('');
+  
+  const [isPending, startTransition] = useTransition();
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
+  // Handlers
+  const handleEditRoleClick = (user: UserAdmin) => {
+    setEditingUser(user);
+    setEditRole(user.role);
+    setUpdateError(null);
+    open();
+  };
+
+  const handleSaveRole = () => {
+    if (!editingUser) return;
+
+    startTransition(async () => {
+      const result = await adminUpdateUserRoleAction(
+        editingUser.id,
+        { role: editRole as Role }
+      );
+
+      if (result?.error) {
+        setUpdateError(result.error);
+      } else {
+        close();
+        router.refresh(); // Triggers a re-fetch of the server component
+      }
+    });
+  };
+
+  const handlePageChange = (page: number) => {
+    const params = new URLSearchParams(searchParams);
+    params.set('page', page.toString());
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
+  // Helpers
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'ADMIN': return 'red';
@@ -38,44 +81,31 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
     }
   };
 
-  // Helper: Formatted Name (Fall back to email prefix if name is missing)
   const getDisplayName = (user: UserAdmin) => {
     if (user.name) return user.name;
     return user.email.split('@')[0];
   };
 
-  // Pagination Handler
-  const handlePageChange = (page: number) => {
-    const params = new URLSearchParams(searchParams);
-    params.set('page', page.toString());
-    router.push(`${pathname}?${params.toString()}`);
-  };
-
-  // Filter Logic (Client-side on current page data)
+  // Filter Logic
   const filteredUsers = initialUsers.filter(user => {
     const searchLower = searchTerm.toLowerCase();
-    
     const matchesSearch = 
       (user.name || '').toLowerCase().includes(searchLower) ||
       user.email.toLowerCase().includes(searchLower) ||
       (user.staffProfile?.employeeId || '').toLowerCase().includes(searchLower);
     
     const matchesRole = roleFilter ? user.role === roleFilter : true;
-
     return matchesSearch && matchesRole;
   });
 
   const rows = filteredUsers.map((user) => {
     const displayName = getDisplayName(user);
-    
-    // Determine the relevant location (baseAirport or station)
     const location = user.staffProfile?.baseAirport || user.staffProfile?.station;
 
     return (
       <Table.Tr key={user.id}>
         <Table.Td>
           <Group gap="sm">
-            {/* ✅ Uses Real Image if available, otherwise uses initials */}
             <Avatar radius="xl" color="blue" src={user.image || null} alt={displayName}>
               {displayName.charAt(0).toUpperCase()}
             </Avatar>
@@ -124,13 +154,8 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
         <Table.Td>
           <Group gap={4} justify="flex-end">
             <Tooltip label="Manage Role">
-              <ActionIcon variant="subtle" color="blue">
+              <ActionIcon variant="subtle" color="blue" onClick={() => handleEditRoleClick(user)}>
                 <ShieldCheck size={16} />
-              </ActionIcon>
-            </Tooltip>
-            <Tooltip label="Edit Profile">
-              <ActionIcon variant="subtle" color="gray">
-                <Pencil size={16} />
               </ActionIcon>
             </Tooltip>
             <Tooltip label="Deactivate">
@@ -205,7 +230,6 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
         </Table.ScrollContainer>
       </Paper>
       
-      {/* Real Pagination */}
       {totalPages > 1 && (
         <Center mt="md">
            <Pagination 
@@ -216,6 +240,49 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
            />
         </Center>
       )}
+
+      {/* --- ROLE EDIT MODAL --- */}
+      <Modal 
+        opened={opened} 
+        onClose={close} 
+        title={<Group gap="xs"><ShieldCheck size={20} /><Text fw={700} size="lg">Manage User Role</Text></Group>}
+      >
+        {editingUser && (
+          <Stack>
+            {updateError && (
+              <Alert color="red" title="Error">
+                {updateError}
+              </Alert>
+            )}
+
+            <Paper p="sm" bg="gray.0" radius="md" mb="xs">
+              <Text size="xs" c="dimmed" fw={600}>USER DETAILS</Text>
+              <Text size="sm" fw={500}>{getDisplayName(editingUser)}</Text>
+              <Text size="sm" c="dimmed">{editingUser.email}</Text>
+            </Paper>
+
+            <Select
+              label="System Role"
+              description="Warning: Changing a user's role alters their dashboard access."
+              data={['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC', 'PASSENGER']}
+              value={editRole}
+              onChange={(val) => setEditRole(val || '')}
+              allowDeselect={false}
+              disabled={isPending}
+            />
+
+            <Button 
+              mt="md" 
+              fullWidth 
+              onClick={handleSaveRole} 
+              loading={isPending}
+              leftSection={!isPending && <Check size={16} />}
+            >
+              Update Role
+            </Button>
+          </Stack>
+        )}
+      </Modal>
     </>
   );
 }
