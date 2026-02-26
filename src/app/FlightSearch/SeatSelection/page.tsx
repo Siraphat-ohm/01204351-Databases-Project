@@ -95,8 +95,12 @@ export default function SeatSelectionPage() {
     return ecoPrice;
   };
 
-  const getSeatDetails = (seatLabel: string) => {
-    const seatObj = seatMap?.seats?.find((s: any) => s.label === seatLabel || s.code === seatLabel);
+const getSeatDetails = (seatLabel: string) => {
+    // 🚨 THE FIX: Added '.layout.' before '.seats' to match your JSON structure!
+    const seatObj = seatMap?.layout?.seats?.find((s: any) => 
+      s.label === seatLabel
+    );
+    
     const rowNum = parseInt(seatLabel.match(/\d+/)?.[0] || "0", 10);
     
     let cabinClass = "ECONOMY";
@@ -111,20 +115,19 @@ export default function SeatSelectionPage() {
 
     const basePrice = getBasePriceForCabin(cabinClass);
     const surcharge = Number(seatObj?.surcharge || 0);
-    
-    // Some backend APIs return `price` as final, some as base. 
-    // We determine the true base price to send based on your payload example.
+    // Fallback safely if seatObj is missing
     const trueBasePrice = seatObj?.price !== undefined ? (Number(seatObj.price) - surcharge) : basePrice;
     const finalPrice = trueBasePrice + surcharge;
     
-    const isOccupied = seatObj?.status === "OCCUPIED" || seatMap?.occupiedSeats?.includes(seatLabel);
+    // Now that we are looking in the right place, this will correctly spot "OCCUPIED"
+    const isOccupied = seatObj?.status === "OCCUPIED";
 
     return { cabinClass, trueBasePrice, surcharge, finalPrice, isOccupied };
   };
 
   const totalPrice = selectedSeats.reduce((total, code) => total + getSeatDetails(code).finalPrice, 0);
 
-  const handleProceedToPayment = async () => {
+const handleProceedToPayment = async () => {
     if (isBooking) return;
     setIsBooking(true);
     
@@ -138,14 +141,20 @@ export default function SeatSelectionPage() {
       contactPhone: contactPhone.trim(),
       tickets: selectedSeats.map(code => {
         const { cabinClass, trueBasePrice, surcharge } = getSeatDetails(code);
+        
+        // 🚨 FIX: Map the UI cabin class to the strict backend Zod Enum
+        let backendClass = "ECONOMY";
+        if (cabinClass.toUpperCase().includes("FIRST")) backendClass = "FIRST_CLASS";
+        else if (cabinClass.toUpperCase().includes("BUSINESS")) backendClass = "BUSINESS";
+        
         return {
-          class: cabinClass,
+          class: backendClass, // Sending the mapped strict string
           seatNumber: code,
           price: Number(trueBasePrice),
           seatSurcharge: Number(surcharge),
           firstName: passengerData[code]?.firstName?.trim() || "",
           lastName: passengerData[code]?.lastName?.trim() || "",
-          email: passengerData[code]?.email?.trim() || "" // Individual passenger email
+          email: passengerData[code]?.email?.trim() || ""
         };
       })
     };
@@ -462,13 +471,30 @@ export default function SeatSelectionPage() {
 
 function SeatButton({ label, isOccupied, isSelected, price, onClick }: any) {
   return (
-    <Tooltip label={isOccupied ? "Occupied" : `Seat ${label} - THB ${price.toLocaleString()}`}>
+    <Tooltip label={isOccupied ? `Seat ${label} - Occupied` : `Seat ${label} - THB ${price.toLocaleString()}`}>
       <ActionIcon 
         size={40} 
-        variant={isSelected ? "filled" : isOccupied ? "light" : "outline"}
-        color={isSelected ? "blue" : isOccupied ? "red" : "gray"}
-        disabled={isOccupied}
-        onClick={onClick}
+        // We handle the click block manually instead of using `disabled` so Mantine doesn't wash out our dark colors
+        onClick={() => !isOccupied && onClick()} 
+        style={{
+          // Selected: Solid Blue | Occupied: Dark Grey | Available: Light Grey
+          backgroundColor: isSelected 
+            ? 'var(--mantine-color-blue-filled)' 
+            : isOccupied 
+              ? 'var(--mantine-color-dark-5)' // Dark seat for occupied
+              : 'var(--mantine-color-gray-1)', // Light seat for available
+          
+          // Icon Color Inside the Button
+          color: isSelected 
+            ? 'white' 
+            : isOccupied 
+              ? 'var(--mantine-color-dark-2)' // Dimmed icon inside the dark seat
+              : 'var(--mantine-color-blue-6)', // Blue icon for available
+              
+          border: isSelected || isOccupied ? 'none' : '1px solid var(--mantine-color-gray-4)',
+          cursor: isOccupied ? 'not-allowed' : 'pointer',
+          opacity: isOccupied ? 0.9 : 1
+        }}
       >
         <IconArmchair size={20} />
       </ActionIcon>

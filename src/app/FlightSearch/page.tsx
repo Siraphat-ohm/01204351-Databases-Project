@@ -195,25 +195,28 @@ useEffect(() => {
       await Promise.all(
         dateRange.map(async (dateStr) => {
           try {
-            const res = await fetch(
-              `/api/v1/flights?originIataCode=${currentFrom}&destinationIataCode=${currentTo}&departureDate=${dateStr}&limit=5`
-            );
-            if (!res.ok) throw new Error();
-            
-            const json = await res.json(); // Consumed ONLY ONCE here
-            
-            if (json.data && json.data.length > 0) {
-              const cabinKey = cabin?.toLowerCase();
-              const pricesFound = json.data.map((f: any) => {
-                if (cabinKey === 'business') return parseFloat(f.basePriceBusiness);
-                if (cabinKey.includes('first')) return parseFloat(f.basePriceFirst);
-                return parseFloat(f.basePriceEconomy);
-              }).filter((p: number) => !isNaN(p));
+         const res = await fetch(
+          `/api/v1/flights?originIataCode=${currentFrom}&destinationIataCode=${currentTo}&departureDate=${dateStr}&limit=5`
+          );
+          if (!res.ok) throw new Error();
 
-              priceMap[dateStr] = pricesFound.length > 0 ? Math.min(...pricesFound) : null;
-            } else {
-              priceMap[dateStr] = null;
-            }
+          const json = await res.json(); 
+
+          // 🚨 FIX: Safely extract flight data here too
+          const flightData = json.data || (Array.isArray(json) ? json : []);
+
+          if (flightData && flightData.length > 0) {
+          const cabinKey = cabin?.toLowerCase();
+          const pricesFound = flightData.map((f: any) => {
+          if (cabinKey === 'business') return parseFloat(f.basePriceBusiness);
+          if (cabinKey.includes('first')) return parseFloat(f.basePriceFirst);
+          return parseFloat(f.basePriceEconomy);
+          }).filter((p: number) => !isNaN(p));
+
+          priceMap[dateStr] = pricesFound.length > 0 ? Math.min(...pricesFound) : null;
+          } else {
+          priceMap[dateStr] = null;
+          }
           } catch {
             priceMap[dateStr] = null;
           }
@@ -251,7 +254,7 @@ useEffect(() => {
 }, [session]); // Triggers as soon as session is truthy
 
   // 2. Fetch Main Flight Results & Sync URL
-  useEffect(() => {
+useEffect(() => {
     const fetchFlights = async () => {
       setLoading(true);
       try {
@@ -266,18 +269,21 @@ useEffect(() => {
           return;
         }
 
-     const apiParams = new URLSearchParams();
-      // MATCHING YOUR API: originIataCode, destinationIataCode, departureDate
-      apiParams.append("originIataCode", currentOrigin);
-      apiParams.append("destinationIataCode", currentDest);
-      
-      const dateStr = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
-      apiParams.append("departureDate", dateStr);
-      apiParams.append("limit", "20");
+        const apiParams = new URLSearchParams();
+        apiParams.append("originIataCode", currentOrigin);
+        apiParams.append("destinationIataCode", currentDest);
+        
+        const dateStr = currentDate.toISOString().split('T')[0]; 
+        apiParams.append("departureDate", dateStr);
+        apiParams.append("limit", "20");
 
         const response = await fetch(`/api/v1/flights?${apiParams.toString()}`);
         const json = await response.json();
-        setFlights(Array.isArray(json.data) ? json.data : []);
+        
+        // 🚨 FIX: Safely handle both { data: [...] } and raw [...] arrays
+        const flightData = json.data || (Array.isArray(json) ? json : []);
+        setFlights(Array.isArray(flightData) ? flightData : []);
+        
       } catch (error) {
         setFlights([]);
       } finally {
@@ -303,27 +309,31 @@ useEffect(() => {
     router.replace(`/FlightSearch?${urlParams.toString()}`, { scroll: false });
   },[from, to, departure, returnDate, isSelectingReturn, adults, children])
 
-  const sortedFlights = useMemo(() => {
-  return [...flights].sort((a, b) => {
-    // 1. Get numeric timestamps for comparison
-    const timeA = new Date(a.departureTime).getTime();
-    const timeB = new Date(b.departureTime).getTime();
+ const sortedFlights = useMemo(() => {
+    return [...flights].sort((a, b) => {
+      const timeA = new Date(a.departureTime).getTime();
+      const timeB = new Date(b.departureTime).getTime();
 
-    if (sortBy === "price") {
-      const priceA = Number(a.basePrice);
-      const priceB = Number(b.basePrice);
-      
-      // If prices are different, sort by price
-      if (priceA !== priceB) return priceA - priceB;
-      
-      // If prices are identical, tie-break with earliest time
-      return timeA - timeB;
-    } else {
-      // "Earliest" logic: Pure chronological order
-      return timeA - timeB;
-    }
-  });
-}, [flights, sortBy]);
+      if (sortBy === "price") {
+        // 🚨 FIX: Dynamically grab the correct price based on cabin state
+        const cabinKey = cabin?.toLowerCase() || 'economy';
+        const getPrice = (f: any) => {
+          if (cabinKey === 'business') return Number(f.basePriceBusiness);
+          if (cabinKey.includes('first')) return Number(f.basePriceFirst);
+          return Number(f.basePriceEconomy);
+        };
+
+        const priceA = getPrice(a);
+        const priceB = getPrice(b);
+        
+        if (priceA !== priceB) return priceA - priceB;
+        return timeA - timeB;
+      } else {
+        // "Earliest" logic
+        return timeA - timeB;
+      }
+    });
+  }, [flights, sortBy, cabin]);
 
 // Inside your FlightSearch.tsx handleSelect or Button onClick
 const handleSelect = (flight: any) => {

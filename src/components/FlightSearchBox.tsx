@@ -36,6 +36,7 @@ export function FlightSearchBox() {
       try {
         const res = await fetch(`/api/v1/airports?search=${encodeURIComponent(searchValue)}`);
         const data = await res.json();
+        console.log(data);
         
         // Map Prisma data to Mantine Select format
         const formatted = data.map((ap: any) => ({

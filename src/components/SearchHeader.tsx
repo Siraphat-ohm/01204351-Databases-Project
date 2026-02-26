@@ -60,6 +60,7 @@ export function SearchHeader({
       try {
         const res = await fetch(`/api/v1/airports?search=${encodeURIComponent(query)}`);
         const data = await res.json();
+        console.log(data);
         const formatted = data.map((ap: any) => ({
           value: ap.iataCode,
           label: `${ap.city} (${ap.iataCode}) - ${ap.name}`
