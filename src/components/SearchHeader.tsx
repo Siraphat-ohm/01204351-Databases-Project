@@ -124,7 +124,7 @@ useEffect(() => {
             />
             <Group gap="xl" style={{ flex: 1.5 }}>
               <NumberInput
-                label="Adults"
+                label="Passengers"
                 value={searchData.adults}
                 onChange={(val) => onAdultsChange(Number(val))}
                 min={1}

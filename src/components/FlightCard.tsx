@@ -115,7 +115,7 @@ export function FlightCard({
         <GridCol span={{ base: 12, sm: 4 }} style={{ borderLeft: "1px solid #f1f3f5" }}>
           <Stack gap={4} align="flex-end">
             <Group gap={8} justify="flex-end">
-              <Text size="xs" c="dimmed">Adults x{adults}</Text>
+              <Text size="xs" c="dimmed">Passenger x 1</Text>
               <Text fw={700} c="blue.9" fz="xl">
                 THB {adultPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </Text>

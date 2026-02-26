@@ -188,7 +188,7 @@ export function FlightSearchBox() {
           <Popover.Dropdown>
             <Stack gap="sm">
               <Group justify="space-between">
-                <Text size="sm" fw={500}>Adults</Text>
+                <Text size="sm" fw={500}>Passengers</Text>
                   <NumberInput value={adults} onChange={setAdults} min={1} max={9} size="xs" />
 
               </Group>
