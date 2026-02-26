@@ -25,6 +25,10 @@ export default function PaymentPage() {
 
   // 1. Fetch Booking Details on Load
   useEffect(() => {
+        if (!session) {
+      router.replace(`/login`);
+      return;
+    }
     const fetchDetails = async () => {
       if (!bookingId) {
         setError("No booking ID provided.");

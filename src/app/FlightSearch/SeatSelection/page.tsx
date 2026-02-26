@@ -44,7 +44,7 @@ export default function SeatSelectionPage() {
   const searchParams = useSearchParams();
   const departFlightCode = searchParams.get("departFlightCode");
   
-  const { data: session } = useAuthSession();
+const { data: session } = useAuthSession();
 
   const [loading, setLoading] = useState(true);
   const [isBooking, setIsBooking] = useState(false);
@@ -64,6 +64,10 @@ export default function SeatSelectionPage() {
   const [contactPhone, setContactPhone] = useState("");
 
   useEffect(() => {
+    if (!session) {
+      router.replace(`/login`);
+      return;
+    }
     const fetchData = async () => {
       setLoading(true);
       try {
