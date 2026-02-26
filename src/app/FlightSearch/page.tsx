@@ -31,7 +31,7 @@ function SearchResults() {
   const searchParams = useSearchParams();
   const router = useRouter();
 const [adults, setAdults] = useState(() => parseInt(searchParams.get('adults') || '1'));
-const [children, setChildren] = useState(() => parseInt(searchParams.get('children') || '0'));  
+
 const formatLocalTime = (dateString: string) => {
   const date = new Date(dateString);
   // Returns time in HH:MM AM/PM format ignoring local timezone shift
@@ -48,10 +48,10 @@ useEffect(() => {
 
   
   // Only push an update if the URL is MISSING the passenger info
-  if (!params.has('adults') || !params.has('children')) {
+  if (!params.has('adults')) {
     const newParams = new URLSearchParams(searchParams.toString());
     newParams.set('adults', adults.toString());
-    newParams.set('children', children.toString());
+
     router.replace(`?${newParams.toString()}`, { scroll: false });
   }
 }, []); // Run once on mount
@@ -103,7 +103,7 @@ useEffect(() => {
   type: tripType,
   cabin: cabin,
   adults: adults,
-  children: children,
+ 
 });
 
 
@@ -116,9 +116,9 @@ useEffect(() => {
     type: tripType,
     cabin,
     adults,
-    children,
+
   });
-}, [from, to, departure, returnDate, tripType, cabin, adults, children]);
+}, [from, to, departure, returnDate, tripType, cabin, adults]);
   // --- Helpers ---
   const formatDuration = (totalMins: number) => {
     const hours = Math.floor(totalMins / 60);
@@ -158,7 +158,7 @@ const handleFinalSearch = () => {
   setTripType(localSearch.type);
   setCabin(localSearch.cabin);
   setAdults(localSearch.adults);
-  setChildren(localSearch.children);
+
 
   // If they were in the middle of a selection and changed parameters, reset them
   setSelectedDeparture(null);
@@ -302,12 +302,12 @@ useEffect(() => {
 
 
     urlParams.append("adults", adults.toString());
-  urlParams.append("children", children.toString());
+
     urlParams.append("departure", getSafeISO(departure));
     urlParams.append("return", getSafeISO(returnDate));
 
     router.replace(`/FlightSearch?${urlParams.toString()}`, { scroll: false });
-  },[from, to, departure, returnDate, isSelectingReturn, adults, children])
+  },[from, to, departure, returnDate, isSelectingReturn, adults])
 
  const sortedFlights = useMemo(() => {
     return [...flights].sort((a, b) => {
@@ -384,7 +384,7 @@ const proceedToSeats = (currentFlight: any, departureFlight: any) => {
   }
   
   params.append('adults', adults.toString());
-  params.append('children', children.toString());
+
   
   router.push(`/FlightSearch/SeatSelection?${params.toString()}`);
 };
@@ -415,7 +415,7 @@ const availableFlights = useMemo(() => {
   onTypeChange={(val) => setLocalSearch((prev) => ({ ...prev, type: val }))}
   onCabinChange={(val) => setLocalSearch((prev) => ({ ...prev, cabin: val }))}
   onAdultsChange={(val) => setLocalSearch((prev) => ({ ...prev, adults: val }))}
-  onChildrenChange={(val) => setLocalSearch((prev) => ({ ...prev, children: val }))}
+
   onSearch={() => {
     // 1. Properly convert strings to Date objects before updating "Live" state
     const newDeparture = ensureDate(localSearch.departure);
@@ -423,7 +423,7 @@ const availableFlights = useMemo(() => {
 
     // 2. Update Live States
     setAdults(localSearch.adults);
-    setChildren(localSearch.children);
+
     setFrom(localSearch.from);
     setTo(localSearch.to);
     setDeparture(newDeparture);
@@ -572,7 +572,7 @@ const availableFlights = useMemo(() => {
         flight={flight}
         cabin={cabin}
         adults={adults}
-        children={children}
+
         isSelectingReturn={isSelectingReturn}
         tripType={tripType}
         onSelect={handleSelect}

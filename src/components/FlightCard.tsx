@@ -7,7 +7,7 @@ interface FlightCardProps {
   flight: any;
   cabin: string;
   adults: number;
-  children: number;
+
   isSelectingReturn: boolean;
   tripType: string;
   onSelect: (flight: any) => void;
@@ -19,7 +19,7 @@ export function FlightCard({
   flight,
   cabin,
   adults,
-  children,
+
   isSelectingReturn,
   tripType,
   onSelect,
@@ -42,8 +42,8 @@ export function FlightCard({
   const isSoldOut = !availability || availability.available === 0;
 
   const adultPrice = parseFloat(rawPrice) || 0;
-  const childPrice = Math.round(adultPrice * 0.8);
-  const total = adultPrice * adults + childPrice * children;
+
+  const total = adultPrice * adults ;
 
   return (
     <Card
@@ -120,14 +120,9 @@ export function FlightCard({
                 THB {adultPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </Text>
             </Group>
-            {children > 0 && (
-              <Group gap={8} justify="flex-end" mt={-4}>
-                <Text size="xs" c="dimmed">Child x{children}</Text>
-                <Text size="xs" fw={600}>THB {childPrice.toLocaleString()}</Text>
-              </Group>
-            )}
+         
             <Divider w="100%" my={4} />
-            <Text size="xs" c="dimmed" tt="uppercase">Total for {adults + children} Pax</Text>
+            <Text size="xs" c="dimmed" tt="uppercase">Total for {adults} Pax</Text>
             <Text fz="xl" fw={900} c="dark">THB {total.toLocaleString()}</Text>
             
             {!isSoldOut && availability.available < 10 && (

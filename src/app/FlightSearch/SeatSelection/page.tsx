@@ -51,7 +51,7 @@ export default function SeatSelectionPage() {
   const [flight, setFlight] = useState<any>(null);
   const [seatMap, setSeatMap] = useState<any>(null);
   
-  const initialSeats = parseInt(searchParams.get("adults") || "1") + parseInt(searchParams.get("children") || "0");
+  const initialSeats = parseInt(searchParams.get("adults") || "1");
   const [requiredSeats, setRequiredSeats] = useState(initialSeats > 0 ? initialSeats : 1);
   
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);

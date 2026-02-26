@@ -24,7 +24,7 @@ interface SearchHeaderProps {
   onTypeChange: (val: string) => void;
   onCabinChange: (val: string) => void;
   onAdultsChange: (val: number) => void;
-  onChildrenChange: (val: number) => void;
+
   onSearch: () => void;
 }
 
@@ -37,7 +37,6 @@ export function SearchHeader({
   onTypeChange, 
   onCabinChange,
   onAdultsChange,
-  onChildrenChange,
   onSearch
 }: SearchHeaderProps) {
   const [options, setOptions] = useState<{ value: string; label: string }[]>(() => {
@@ -132,14 +131,7 @@ useEffect(() => {
                 max={9}
                 style={{ width: 70 }}
               />
-              <NumberInput
-                label="Children"
-                value={searchData.children}
-                onChange={(val) => onChildrenChange(Number(val))}
-                min={0}
-                max={9}
-                style={{ width: 70 }}
-              />
+             
             </Group>
           </Group>
 
