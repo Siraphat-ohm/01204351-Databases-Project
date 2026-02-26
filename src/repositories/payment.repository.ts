@@ -65,6 +65,21 @@ export const paymentRepository = {
   count: (where?: Prisma.TransactionWhereInput) =>
     prisma.transaction.count({ where }),
 
+  create: (input: CreatePaymentInput) =>
+    prisma.transaction.create({
+      data: {
+        bookingId: input.bookingId,
+        amount: input.amount,
+        currency: input.currency,
+        status: TransactionStatus.PENDING,
+        type: TransactionType.PAYMENT,
+        paymentMethodType: input.paymentMethodType,
+        paymentMethodRef: input.paymentMethodRef,
+        stripePaymentIntentId: input.stripePaymentIntentId,
+      },
+      include: paymentAdminInclude,
+    }),
+
   createPayment: (input: CreatePaymentInput) =>
     prisma.transaction.create({
       data: {
@@ -77,6 +92,12 @@ export const paymentRepository = {
         paymentMethodRef: input.paymentMethodRef,
         stripePaymentIntentId: input.stripePaymentIntentId,
       },
+      include: paymentAdminInclude,
+    }),
+
+  delete: (id: string) =>
+    prisma.transaction.delete({
+      where: { id },
       include: paymentAdminInclude,
     }),
 

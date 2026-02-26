@@ -1,19 +1,19 @@
-import { NextRequest } from 'next/server';
-import { airportService } from '@/services/airport.services';
-import { getServerSession } from '@/services/auth.services';
+import { NextRequest } from "next/server";
+import { airportService } from "@/services/airport.services";
+import { getServerSession } from "@/services/auth.services";
 import {
   successResponse,
   errorResponse,
   unauthorizedResponse,
   tooManyRequestsResponse,
-} from '@/lib/utils/api-response';
-import { enforceApiRateLimit } from '@/lib/utils/rate-limit';
+} from "@/lib/utils/api-response";
+import { enforceApiRateLimit } from "@/lib/utils/rate-limit";
 
 function resolvePageLimit(req: NextRequest) {
-  const pageParam = req.nextUrl.searchParams.get('page');
-  const limitParam = req.nextUrl.searchParams.get('limit');
-  const skipParam = req.nextUrl.searchParams.get('skip');
-  const takeParam = req.nextUrl.searchParams.get('take');
+  const pageParam = req.nextUrl.searchParams.get("page");
+  const limitParam = req.nextUrl.searchParams.get("limit");
+  const skipParam = req.nextUrl.searchParams.get("skip");
+  const takeParam = req.nextUrl.searchParams.get("take");
 
   if (skipParam !== null || takeParam !== null) {
     const skip = Number(skipParam ?? 0);
@@ -31,31 +31,41 @@ function resolvePageLimit(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession();
-    if (!session?.user) return unauthorizedResponse();
+    const search = req.nextUrl.searchParams.get("search") ?? "";
+    const { page, limit } = resolvePageLimit(req);
+
+    const clientIp =
+      req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+      req.headers.get("x-real-ip") ||
+      "unknown";
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
-      namespace: 'api:v1:airports',
-      userId: session.user.id,
-      action: 'read',
+      namespace: "api:v1:airports",
+      userId: clientIp,
+      action: "read",
     });
     if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
-    const search = req.nextUrl.searchParams.get('search') ?? '';
-    const { page, limit } = resolvePageLimit(req);
-    const result = await airportService.searchPaginated(
-      search,
-      { user: { id: session.user.id, role: session.user.role } },
-      { page, limit },
-    );
+    const session = await getServerSession();
+    const publicSession = {
+      user: {
+        id: session?.user?.id ?? "public",
+        role: session?.user?.role ?? "PASSENGER",
+      },
+    };
 
-    return successResponse(result);
+    const result = await airportService.searchPaginated(search, publicSession, {
+      page,
+      limit,
+    });
+
+    return successResponse(result["data"]);
   } catch (err) {
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
+    if (err instanceof Error && err.name === "UnauthorizedError") {
       return unauthorizedResponse();
     }
-    console.error('[GET /api/v1/airports]', err);
-    return errorResponse('Internal server error');
+    console.error("[GET /api/v1/airports]", err);
+    return errorResponse("Internal server error");
   }
 }
