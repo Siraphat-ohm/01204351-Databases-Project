@@ -30,6 +30,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <h1>$2b$12$aRZQ0gFNm10mOZ2vJ9KFmeEODGlpLUMhQw9sSByDHIptI6xrbTECe</h1>
         <MantineProvider>{children}</MantineProvider>
       </body>
     </html>
