@@ -57,4 +57,10 @@ export const userRepository = {
         name: true,
       },
     }),
+
+  delete: (id: string) =>
+    prisma.user.delete({
+      where: { id },
+      select: userAdminSelect,
+    }),
 };

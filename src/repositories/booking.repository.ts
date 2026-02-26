@@ -135,6 +135,19 @@ export const bookingRepository = {
       });
     }),
 
+  update: (id: string, data: Partial<CreateBookingInput>) =>
+    prisma.booking.update({
+      where: { id },
+      data,
+      include: bookingAdminInclude,
+    }),
+
+  delete: (id: string) =>
+    prisma.booking.delete({
+      where: { id },
+      include: bookingAdminInclude,
+    }),
+
   updateStatus: (id: string, status: BookingStatus) =>
     prisma.booking.update({
       where: { id },
