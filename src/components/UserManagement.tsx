@@ -7,12 +7,12 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Search, Filter, Plus, Trash, ShieldCheck, MapPin, Check } from 'lucide-react';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
 import { UserAdmin } from '@/types/user.type'; 
 import { Role } from '@/generated/prisma/client';
-import { adminUpdateUserRoleAction } from '@/actions/user-actions'; // Adjust path
+import { adminUpdateUserRoleAction } from '@/actions/user-actions';
 
 interface UserManagementProps {
   initialUsers: UserAdmin[];
@@ -25,9 +25,15 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Local state for client-side filtering
-  const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string | null>(null);
+  // Initialize Search & Filter from URL
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [roleFilter, setRoleFilter] = useState<string | null>(searchParams.get('role') || null);
+
+  // Sync state if the user uses the browser's Back/Forward buttons
+  useEffect(() => {
+    setSearchTerm(searchParams.get('search') || '');
+    setRoleFilter(searchParams.get('role') || null);
+  }, [searchParams]);
 
   // --- ROLE EDIT MODAL STATE ---
   const [opened, { open, close }] = useDisclosure(false);
@@ -37,7 +43,34 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
   const [isPending, startTransition] = useTransition();
   const [updateError, setUpdateError] = useState<string | null>(null);
 
-  // Handlers
+  // ────────────────────────────────────────────────
+  // EXPLICIT SEARCH HANDLER
+  // ────────────────────────────────────────────────
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault(); 
+    
+    const params = new URLSearchParams(searchParams);
+    
+    if (searchTerm.trim()) params.set('search', searchTerm.trim());
+    else params.delete('search');
+
+    if (roleFilter) params.set('role', roleFilter);
+    else params.delete('role');
+
+    params.set('page', '1'); // Always reset to page 1 on a new search
+
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
+  const handlePageChange = (page: number) => {
+    const params = new URLSearchParams(searchParams);
+    params.set('page', page.toString());
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
+  // ────────────────────────────────────────────────
+  // ROLE EDIT HANDLERS
+  // ────────────────────────────────────────────────
   const handleEditRoleClick = (user: UserAdmin) => {
     setEditingUser(user);
     setEditRole(user.role);
@@ -58,15 +91,9 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
         setUpdateError(result.error);
       } else {
         close();
-        router.refresh(); // Triggers a re-fetch of the server component
+        router.refresh(); 
       }
     });
-  };
-
-  const handlePageChange = (page: number) => {
-    const params = new URLSearchParams(searchParams);
-    params.set('page', page.toString());
-    router.push(`${pathname}?${params.toString()}`);
   };
 
   // Helpers
@@ -86,19 +113,10 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
     return user.email.split('@')[0];
   };
 
-  // Filter Logic
-  const filteredUsers = initialUsers.filter(user => {
-    const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = 
-      (user.name || '').toLowerCase().includes(searchLower) ||
-      user.email.toLowerCase().includes(searchLower) ||
-      (user.staffProfile?.employeeId || '').toLowerCase().includes(searchLower);
-    
-    const matchesRole = roleFilter ? user.role === roleFilter : true;
-    return matchesSearch && matchesRole;
-  });
-
-  const rows = filteredUsers.map((user) => {
+  // ────────────────────────────────────────────────
+  // RENDER ROWS (Directly from Server Payload)
+  // ────────────────────────────────────────────────
+  const rows = initialUsers.map((user) => {
     const displayName = getDisplayName(user);
     const location = user.staffProfile?.baseAirport || user.staffProfile?.station;
 
@@ -181,26 +199,48 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
         </Button>
       </Group>
 
-      {/* Filters */}
+      {/* ────────────────────────────────────────────────
+          SEARCH BAR (Submit via Form)
+          ──────────────────────────────────────────────── */}
       <Paper shadow="xs" p="md" mb="lg" withBorder>
-        <Group>
-          <TextInput 
-            placeholder="Search Name, Email, or Employee ID..." 
-            leftSection={<Search size={16} />} 
-            style={{ flex: 1 }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.currentTarget.value)}
-          />
-          <Select 
-            placeholder="Filter Role"
-            data={['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC', 'PASSENGER']}
-            value={roleFilter}
-            onChange={setRoleFilter}
-            clearable
-            leftSection={<Filter size={16} />}
-            style={{ width: 200 }}
-          />
-        </Group>
+        <form onSubmit={handleSearch}>
+          <Group align="flex-end">
+            <TextInput 
+              label="Search"
+              placeholder="Name, Email, or Employee ID... (Press Enter)" 
+              leftSection={<Search size={16} />} 
+              style={{ flex: 1 }}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.currentTarget.value)}
+            />
+            <Select 
+              label="Role"
+              placeholder="All Roles"
+              data={['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC', 'PASSENGER']}
+              value={roleFilter}
+              onChange={setRoleFilter}
+              clearable
+              leftSection={<Filter size={16} />}
+              style={{ width: 200 }}
+            />
+            <Button type="submit" color="blue">
+              Apply Filters
+            </Button>
+            
+            {(searchParams.get('search') || searchParams.get('role')) && (
+              <Button 
+                variant="default" 
+                onClick={() => {
+                  setSearchTerm('');
+                  setRoleFilter(null);
+                  router.push(pathname); 
+                }}
+              >
+                Clear
+              </Button>
+            )}
+          </Group>
+        </form>
       </Paper>
 
       {/* Table */}
@@ -242,10 +282,11 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
       )}
 
       {/* --- ROLE EDIT MODAL --- */}
-      <Modal 
+      <Modal
         opened={opened} 
         onClose={close} 
         title={<Group gap="xs"><ShieldCheck size={20} /><Text fw={700} size="lg">Manage User Role</Text></Group>}
+        centered
       >
         {editingUser && (
           <Stack>

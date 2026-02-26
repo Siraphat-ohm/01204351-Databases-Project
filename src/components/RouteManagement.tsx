@@ -2,15 +2,18 @@
 
 import { 
   Title, Group, Button, Table, Badge, Text, ActionIcon, 
-  TextInput, Paper, Modal, Stack, Pagination, Center, Box, Alert, LoadingOverlay, Grid
+  TextInput, Paper, Modal, Stack, Pagination, Center, Box, Alert, LoadingOverlay
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { Plus, Search, Trash, Check, X, AlertTriangle, ArrowRight, Gauge, Clock, MapPin, Filter } from 'lucide-react';
-import { useState, useTransition, useMemo } from 'react';
+import { Plus, Trash, Check, X, AlertTriangle, ArrowRight, Gauge, Clock, MapPin, Search } from 'lucide-react';
+import { useState, useTransition, useEffect } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 import { deleteRouteAction } from '@/actions/route-actions';
+
+import { Mosaic } from 'react-loading-indicators'; // Custom loading indicator
 
 export interface RouteAdmin {
   id: string;
@@ -23,24 +26,83 @@ export interface RouteAdmin {
 
 interface RouteManagementProps {
   initialRoutes: RouteAdmin[];
+  totalPages: number;
+  currentPage: number;
 }
 
-export function RouteManagement({ initialRoutes }: RouteManagementProps) {
-  // Replace single search with Origin and Destination states
-  const [originSearch, setOriginSearch] = useState('');
-  const [destSearch, setDestSearch] = useState('');
+export function RouteManagement({ initialRoutes, totalPages, currentPage }: RouteManagementProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [originSearch, setOriginSearch] = useState(searchParams.get('origin') || '');
+  const [destSearch, setDestSearch] = useState(searchParams.get('destination') || '');
   
+  useEffect(() => {
+    setOriginSearch(searchParams.get('origin') || '');
+    setDestSearch(searchParams.get('destination') || '');
+  }, [searchParams]);
+
+  // This handles the loading state for Deletes, Searches, AND Pagination
   const [isPending, startTransition] = useTransition();
 
   const [deleteOpened, { open: openDelete, close: closeDelete }] = useDisclosure(false);
   const [routeToDelete, setRouteToDelete] = useState<RouteAdmin | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // ────────────────────────────────────────────────
+  // EXPLICIT SEARCH HANDLER (Wrapped in Transition)
+  // ────────────────────────────────────────────────
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault(); 
+    
+    // 🌟 NEW: Wrap router.push in startTransition to trigger the loading overlay
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams);
+      
+      if (originSearch.trim()) params.set('origin', originSearch.trim());
+      else params.delete('origin');
+
+      if (destSearch.trim()) params.set('destination', destSearch.trim());
+      else params.delete('destination');
+
+      params.set('page', '1'); 
+
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  };
+
+  const handlePageChange = (page: number) => {
+    // 🌟 NEW: Trigger loading state during pagination
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams);
+      params.set('page', page.toString());
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  };
+
+  const clearFilters = () => {
+    setOriginSearch('');
+    setDestSearch('');
+    startTransition(() => {
+      router.push(pathname);
+    });
+  };
+
+  // ────────────────────────────────────────────────
+  // DELETE HANDLERS
+  // ────────────────────────────────────────────────
   const confirmDelete = async () => {
     if (!routeToDelete) return;
+    
+    setDeleteError(null);
+
     startTransition(async () => {
       const result = await deleteRouteAction(routeToDelete.id);
+      
       if (result?.error) {
-        notifications.show({ title: "Delete Failed", message: result.error, color: "red", icon: <X size={18} /> });
+        setDeleteError(result.error);
+        notifications.show({ title: "Delete Failed", message: "See details in the modal.", color: "red", icon: <X size={18} /> });
       } else {
         notifications.show({ title: "Deleted", message: `Route deleted successfully.`, color: "green", icon: <Check size={18} /> });
         closeDelete();
@@ -49,33 +111,14 @@ export function RouteManagement({ initialRoutes }: RouteManagementProps) {
     });
   };
 
-  // Update filter logic to handle both origin and destination independently (AND condition)
-  const filteredRoutes = useMemo(() => {
-    return initialRoutes.filter(route => {
-      const oTerm = originSearch.toLowerCase();
-      const dTerm = destSearch.toLowerCase();
-
-      // Check if origin matches (if search is empty, it's an automatic match)
-      const matchesOrigin = !oTerm || 
-        route.origin.iataCode.toLowerCase().includes(oTerm) ||
-        route.origin.city.toLowerCase().includes(oTerm);
-
-      // Check if destination matches
-      const matchesDest = !dTerm || 
-        route.destination.iataCode.toLowerCase().includes(dTerm) ||
-        route.destination.city.toLowerCase().includes(dTerm);
-
-      // Must match BOTH conditions
-      return matchesOrigin && matchesDest;
-    });
-  }, [initialRoutes, originSearch, destSearch]);
-
-  const clearFilters = () => {
-    setOriginSearch('');
-    setDestSearch('');
+  const handleCloseDeleteModal = () => {
+    if (isPending) return;
+    closeDelete();
+    setRouteToDelete(null);
+    setDeleteError(null);
   };
 
-  const rows = filteredRoutes.map((route) => (
+  const rows = initialRoutes.map((route) => (
     <Table.Tr key={route.id}>
       <Table.Td>
         <Group gap="sm" wrap="nowrap" align="center">
@@ -109,7 +152,11 @@ export function RouteManagement({ initialRoutes }: RouteManagementProps) {
       </Table.Td>
       <Table.Td>
         <Group gap={4} justify="flex-end">
-          <ActionIcon variant="subtle" color="red" onClick={() => { setRouteToDelete(route); openDelete(); }}>
+          <ActionIcon variant="subtle" color="red" onClick={() => { 
+            setRouteToDelete(route); 
+            setDeleteError(null); 
+            openDelete(); 
+          }}>
             <Trash size={16} />
           </ActionIcon>
         </Group>
@@ -118,9 +165,7 @@ export function RouteManagement({ initialRoutes }: RouteManagementProps) {
   ));
 
   return (
-    <Box pos="relative">
-      <LoadingOverlay visible={isPending} overlayProps={{ radius: "sm", blur: 2 }} />
-
+    <Box>
       <Group justify="space-between" mb="lg">
         <div>
           <Title order={2}>Route Management</Title>
@@ -131,34 +176,48 @@ export function RouteManagement({ initialRoutes }: RouteManagementProps) {
         </Button>
       </Group>
 
-      {/* UPDATED SEARCH BAR */}
       <Paper shadow="xs" p="md" mb="lg" withBorder>
-        <Group align="flex-end">
-          <TextInput 
-            label="Origin"
-            placeholder="Search IATA or City..." 
-            leftSection={<MapPin size={16} />} 
-            value={originSearch}
-            onChange={(e) => setOriginSearch(e.currentTarget.value)}
-            style={{ flex: 1 }}
-          />
-          <TextInput 
-            label="Destination"
-            placeholder="Search IATA or City..." 
-            leftSection={<MapPin size={16} />} 
-            value={destSearch}
-            onChange={(e) => setDestSearch(e.currentTarget.value)}
-            style={{ flex: 1 }}
-          />
-          {(originSearch || destSearch) && (
-            <Button variant="light" color="gray" onClick={clearFilters}>
-              Clear
+        <form onSubmit={handleSearch}>
+          <Group align="flex-end">
+            <TextInput 
+              label="Origin"
+              placeholder="Search IATA or City... (Press Enter)" 
+              leftSection={<MapPin size={16} />} 
+              value={originSearch}
+              onChange={(e) => setOriginSearch(e.currentTarget.value)}
+              style={{ flex: 1 }}
+              disabled={isPending}
+            />
+            <TextInput 
+              label="Destination"
+              placeholder="Search IATA or City... (Press Enter)" 
+              leftSection={<MapPin size={16} />} 
+              value={destSearch}
+              onChange={(e) => setDestSearch(e.currentTarget.value)}
+              style={{ flex: 1 }}
+              disabled={isPending}
+            />
+            <Button type="submit" color="blue" leftSection={<Search size={16} />} loading={isPending}>
+              Search
             </Button>
-          )}
-        </Group>
+            {(searchParams.get('origin') || searchParams.get('destination')) && (
+              <Button variant="light" color="gray" onClick={clearFilters} disabled={isPending}>
+                Clear
+              </Button>
+            )}
+          </Group>
+        </form>
       </Paper>
 
-      <Paper shadow="xs" withBorder>
+      {/* 🌟 NEW: Scoped the LoadingOverlay to the Table container with a modern animation */}
+      <Paper shadow="xs" withBorder pos="relative">
+        <LoadingOverlay 
+          visible={isPending} 
+          zIndex={1000} 
+          overlayProps={{ radius: 'sm', blur: 1, backgroundOpacity: 0.1 }} 
+          // Injecting the custom Mosaic indicator here
+          loaderProps={<Mosaic color="#339af0" size="small" />} 
+        />
         <Table.ScrollContainer minWidth={700}>
           <Table verticalSpacing="sm" striped highlightOnHover>
             <Table.Thead bg="gray.0">
@@ -183,12 +242,33 @@ export function RouteManagement({ initialRoutes }: RouteManagementProps) {
         </Table.ScrollContainer>
       </Paper>
       
-      <Center mt="md">
-         <Pagination total={Math.ceil(filteredRoutes.length / 10) || 1} color="blue" />
-      </Center>
+      {totalPages > 1 && (
+        <Center mt="md">
+           <Pagination 
+             total={totalPages} 
+             value={currentPage} 
+             onChange={handlePageChange}
+             color="blue"
+             disabled={isPending}
+           />
+        </Center>
+      )}
 
-      <Modal opened={deleteOpened} onClose={closeDelete} title={<Group gap="xs" c="red"><AlertTriangle size={20} /> Confirm Deletion</Group>} centered>
+      {/* ──── DELETE CONFIRMATION MODAL ───── */}
+      <Modal 
+        opened={deleteOpened} 
+        onClose={handleCloseDeleteModal} 
+        title={<Group gap="xs" c="red"><AlertTriangle size={20} /> Confirm Deletion</Group>} 
+        centered
+        closeButtonProps={{ disabled: isPending }}
+      >
         <Stack>
+          {deleteError && (
+            <Alert color="red" title="Cannot Delete Route" icon={<X size={16} />}>
+              {deleteError}
+            </Alert>
+          )}
+
           <Text size="sm">
             Are you sure you want to delete the route <strong>{routeToDelete?.origin.iataCode} → {routeToDelete?.destination.iataCode}</strong>?
           </Text>
@@ -196,7 +276,7 @@ export function RouteManagement({ initialRoutes }: RouteManagementProps) {
             If there are currently active flights scheduled on this route, deletion will be blocked by the server.
           </Alert>
           <Group justify="flex-end" mt="md">
-            <Button variant="default" onClick={closeDelete} disabled={isPending}>Cancel</Button>
+            <Button variant="default" onClick={handleCloseDeleteModal} disabled={isPending}>Cancel</Button>
             <Button color="red" onClick={confirmDelete} loading={isPending} leftSection={!isPending && <Trash size={16} />}>
               Delete Route
             </Button>

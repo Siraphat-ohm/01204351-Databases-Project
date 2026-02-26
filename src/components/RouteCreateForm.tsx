@@ -2,7 +2,7 @@
 
 import { 
   Button, Group, Title, Paper, Container, 
-  NumberInput, Grid, Stack, Divider, LoadingOverlay, Select, Checkbox, Text
+  NumberInput, Grid, Stack, Divider, LoadingOverlay, Select, Checkbox, Text, Alert
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState, useTransition, useMemo } from 'react';
@@ -40,7 +40,10 @@ const calculateHaversineDistance = (lat1: number, lon1: number, lat2: number, lo
 export function RouteCreateForm({ airports }: RouteCreateFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  
+  // Enhanced Error State
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     originAirportId: '',
@@ -57,8 +60,14 @@ export function RouteCreateForm({ airports }: RouteCreateFormProps) {
     }));
   }, [airports]);
 
+  // Instant Client-Side Validation
+  const isSameAirport = formData.originAirportId && formData.destAirportId && formData.originAirportId === formData.destAirportId;
+
   const handleFormChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    
+    if (globalError) setGlobalError(null);
+    
     if (fieldErrors[field]) {
       setFieldErrors(prev => {
         const newErrs = { ...prev };
@@ -69,6 +78,8 @@ export function RouteCreateForm({ airports }: RouteCreateFormProps) {
   };
 
   const handleAutoCalculate = () => {
+    if (isSameAirport) return; 
+
     const origin = airports.find(a => a.id === formData.originAirportId);
     const dest = airports.find(a => a.id === formData.destAirportId);
 
@@ -83,19 +94,13 @@ export function RouteCreateForm({ airports }: RouteCreateFormProps) {
     }
 
     if (origin.lat == null || origin.lon == null || dest.lat == null || dest.lon == null) {
-      notifications.show({
-        title: "Missing Coordinates",
-        message: "One or both airports do not have valid latitude/longitude data.",
-        color: "red",
-        icon: <X size={18} />
-      });
+      setGlobalError(`Missing coordinate data for calculation. ${origin.iataCode} or ${dest.iataCode} needs to be updated in the Airports tab.`);
       return;
     }
 
     const rawDistance = calculateHaversineDistance(origin.lat, origin.lon, dest.lat, dest.lon);
     const roundedDistance = Math.ceil(rawDistance);
 
-    // Using ~800 km/h cruising speed + 30 mins taxi overhead
     const flightTimeMins = (rawDistance / 800) * 60;
     const roundedDuration = Math.ceil(flightTimeMins + 30);
 
@@ -104,6 +109,13 @@ export function RouteCreateForm({ airports }: RouteCreateFormProps) {
       distanceKm: roundedDistance,
       durationMins: roundedDuration
     }));
+    
+    setFieldErrors(prev => {
+        const newErrs = { ...prev };
+        delete newErrs.distanceKm;
+        delete newErrs.durationMins;
+        return newErrs;
+    });
 
     notifications.show({
       title: "Calculated Successfully",
@@ -113,9 +125,15 @@ export function RouteCreateForm({ airports }: RouteCreateFormProps) {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.SubmitEvent) => {
     e.preventDefault();
     setFieldErrors({});
+    setGlobalError(null);
+
+    if (isSameAirport) {
+        setGlobalError("Origin and Destination airports cannot be the same.");
+        return;
+    }
 
     startTransition(async () => {
       const payload = {
@@ -126,11 +144,32 @@ export function RouteCreateForm({ airports }: RouteCreateFormProps) {
       const result = await createRouteAction(payload);
       
       if (result?.error) {
-        if (result.fieldErrors) setFieldErrors(result.fieldErrors);
-        notifications.show({ title: "Failed to Create", message: result.error, color: "red", icon: <X size={18} /> });
+        if (result.fieldErrors) {
+            setFieldErrors(result.fieldErrors);
+        } else {
+            let normalizedError = result.error;
+            airports.forEach(airport => {
+              normalizedError = normalizedError.split(airport.id).join(`${airport.iataCode} (${airport.city})`);
+            });
+            setGlobalError(normalizedError);
+        }
+        
+        notifications.show({ title: "Failed to Create", message: "Please check the form for errors.", color: "red", icon: <X size={18} /> });
       } else {
-        notifications.show({ title: "Success", message: "Route created successfully", color: "green", icon: <Check size={18} /> });
-        // The server action will automatically redirect us back to /admin/dashboard/routes
+        // 🌟 SUCCESS BLOCK UPDATED HERE 🌟
+        
+        // 1. Show the nice green notification
+        notifications.show({ 
+          title: "Success", 
+          message: formData.createReturn 
+            ? "Route and return route created successfully!" 
+            : "Route created successfully!", 
+          color: "green", 
+          icon: <Check size={18} /> 
+        });
+
+        // 2. Automatically navigate the user back to the Routes table
+        router.push('/admin/dashboard/routes'); 
       }
     });
   };
@@ -156,6 +195,19 @@ export function RouteCreateForm({ airports }: RouteCreateFormProps) {
         
         <form onSubmit={handleSubmit}>
           <Stack gap="md">
+            
+            {globalError && (
+               <Alert icon={<AlertTriangle size={16} />} title="Error" color="red" variant="light">
+                 {globalError}
+               </Alert>
+            )}
+
+            {isSameAirport && (
+               <Alert icon={<AlertTriangle size={16} />} color="orange" variant="light">
+                 Origin and Destination cannot be the same airport. Please change one.
+               </Alert>
+            )}
+
             <Grid>
               <Grid.Col span={6}>
                 <Select 
@@ -193,7 +245,7 @@ export function RouteCreateForm({ airports }: RouteCreateFormProps) {
                 size="xs" 
                 leftSection={<Calculator size={14} />}
                 onClick={handleAutoCalculate}
-                disabled={!formData.originAirportId || !formData.destAirportId}
+                disabled={!!(!formData.originAirportId || !formData.destAirportId || isSameAirport)}
               >
                 Auto-Calculate using Coordinates
               </Button>
@@ -203,6 +255,7 @@ export function RouteCreateForm({ airports }: RouteCreateFormProps) {
               <Grid.Col span={6}>
                 <NumberInput 
                   label="Distance (km)" 
+                  description="Distance between airports"
                   placeholder="e.g. 1200"
                   min={1}
                   required
@@ -239,8 +292,13 @@ export function RouteCreateForm({ airports }: RouteCreateFormProps) {
 
             <Group justify="flex-end">
               <Button variant="default" onClick={() => router.back()} disabled={isPending}>Cancel</Button>
-              <Button type="submit" loading={isPending} leftSection={<Save size={18} />}>
-                Save Route Pair
+              <Button 
+                type="submit" 
+                loading={isPending} 
+                leftSection={<Save size={18} />}
+                disabled={!!isSameAirport}
+              >
+                Save Route
               </Button>
             </Group>
           </Stack>
