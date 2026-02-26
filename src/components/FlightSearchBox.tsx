@@ -19,7 +19,7 @@ export function FlightSearchBox() {
   const [departureDate, setDepartureDate] = useState<Date | null>(null);
   const [returnDate, setReturnDate] = useState<Date | null>(null);
   const [adults, setAdults] = useState<number | string>(1);
-  const [children, setChildren] = useState<number | string>(0);
+
   const [errors, setErrors] = useState<{ [key: string]: boolean }>({});
   const [airportOptions, setAirportOptions] = useState<{ value: string; label: string }[]>([]);
   const [loading, setLoading] = useState(false);
@@ -36,6 +36,7 @@ export function FlightSearchBox() {
       try {
         const res = await fetch(`/api/v1/airports?search=${encodeURIComponent(searchValue)}`);
         const data = await res.json();
+        console.log(data);
         
         // Map Prisma data to Mantine Select format
         const formatted = data.map((ap: any) => ({
@@ -102,7 +103,7 @@ export function FlightSearchBox() {
     departure: safeISO(departureDate), 
     return: safeISO(returnDate),
     adults: adults.toString(),   // Added
-    children: children.toString(), // Added
+
     cabin: 'economy'
   });
 
@@ -181,23 +182,18 @@ export function FlightSearchBox() {
         <Popover width={300} trapFocus position="bottom" withArrow shadow="md">
           <Popover.Target>
             <Button variant="outline" leftSection={<IconUsers size={16} />} color="gray" fullWidth>
-              Passengers: {Number(adults) + Number(children)}
+              Passengers: {Number(adults)}
             </Button>
           </Popover.Target>
           <Popover.Dropdown>
             <Stack gap="sm">
               <Group justify="space-between">
-                <Text size="sm" fw={500}>Adults</Text>
+                <Text size="sm" fw={500}>Passengers</Text>
                   <NumberInput value={adults} onChange={setAdults} min={1} max={9} size="xs" />
 
               </Group>
 
-              <Group justify="space-between">
 
-                <Text size="sm" fw={500}>Children</Text>
-
-                <NumberInput value={children} onChange={setChildren} min={0} max={9} size="xs" />
-              </Group>
             </Stack>
           </Popover.Dropdown>
         </Popover>

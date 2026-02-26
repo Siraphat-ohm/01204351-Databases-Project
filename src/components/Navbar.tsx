@@ -1,7 +1,7 @@
 "use client";
 
 import { Group, Button, Text, Menu, Avatar, rem, UnstyledButton } from "@mantine/core";
-import { IconLogout, IconChevronDown } from "@tabler/icons-react";
+import { IconLogout, IconChevronDown, IconTicket } from "@tabler/icons-react"; // Added IconTicket
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuthSession, signOutCurrentUser } from "@/services/auth-client.service";
 
@@ -11,21 +11,15 @@ export function Navbar() {
   const searchParams = useSearchParams();
   const { data: session } = useAuthSession();
 
-  // Helper to capture current URL and send to login
   const handleLoginRedirect = () => {
-    // pathname (e.g. /FlightSearch) + searchParams (e.g. ?origin=BKK...)
     const currentFullUrl = pathname + (searchParams.toString() ? `?${searchParams.toString()}` : "");
-    
-    // Redirect with encoded callback
     router.push(`/login?callbackURL=${encodeURIComponent(currentFullUrl)}`);
   };
 
   const handleLogout = async () => {
     await signOutCurrentUser();
-    router.refresh(); // Update session state across the app
+    router.refresh();
   };
-
-  
 
   return (
     <nav style={{ height: rem(60), padding: '0 30px', borderBottom: '1px solid #eee', backgroundColor: 'white' }}>
@@ -36,7 +30,6 @@ export function Navbar() {
 
         <Group>
           {session ? (
-            /* --- LOGGED IN STATE --- */
             <Menu shadow="md" width={200}>
               <Menu.Target>
                 <UnstyledButton>
@@ -51,6 +44,16 @@ export function Navbar() {
               </Menu.Target>
 
               <Menu.Dropdown>
+                {/* --- ADDED MY TICKETS ITEM --- */}
+                <Menu.Item 
+                  leftSection={<IconTicket size={14} />}
+                  onClick={() => router.push('/history')}
+                >
+                  My Tickets
+                </Menu.Item>
+
+                <Menu.Divider />
+
                 <Menu.Item 
                   color="red" 
                   leftSection={<IconLogout size={14} />}
@@ -61,7 +64,6 @@ export function Navbar() {
               </Menu.Dropdown>
             </Menu>
           ) : (
-            /* --- LOGGED OUT STATE --- */
             <Button variant="filled" onClick={handleLoginRedirect}>
               Login
             </Button>

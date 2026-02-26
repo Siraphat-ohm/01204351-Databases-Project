@@ -23,6 +23,7 @@ import {
 import { Navbar } from "@/components/Navbar";
 import { SearchHeader } from "@/components/SearchHeader";
 import { PriceStrip } from "@/components/PriceStrip";
+import { FlightCard } from "@/components/FlightCard";
 import { IconPlaneDeparture } from "@tabler/icons-react";
 
 function SearchResults() {
@@ -30,7 +31,7 @@ function SearchResults() {
   const searchParams = useSearchParams();
   const router = useRouter();
 const [adults, setAdults] = useState(() => parseInt(searchParams.get('adults') || '1'));
-const [children, setChildren] = useState(() => parseInt(searchParams.get('children') || '0'));  
+
 const formatLocalTime = (dateString: string) => {
   const date = new Date(dateString);
   // Returns time in HH:MM AM/PM format ignoring local timezone shift
@@ -47,10 +48,10 @@ useEffect(() => {
 
   
   // Only push an update if the URL is MISSING the passenger info
-  if (!params.has('adults') || !params.has('children')) {
+  if (!params.has('adults')) {
     const newParams = new URLSearchParams(searchParams.toString());
     newParams.set('adults', adults.toString());
-    newParams.set('children', children.toString());
+
     router.replace(`?${newParams.toString()}`, { scroll: false });
   }
 }, []); // Run once on mount
@@ -102,7 +103,7 @@ useEffect(() => {
   type: tripType,
   cabin: cabin,
   adults: adults,
-  children: children,
+ 
 });
 
 
@@ -115,9 +116,9 @@ useEffect(() => {
     type: tripType,
     cabin,
     adults,
-    children,
+
   });
-}, [from, to, departure, returnDate, tripType, cabin, adults, children]);
+}, [from, to, departure, returnDate, tripType, cabin, adults]);
   // --- Helpers ---
   const formatDuration = (totalMins: number) => {
     const hours = Math.floor(totalMins / 60);
@@ -146,6 +147,25 @@ useEffect(() => {
 
   // 1. Fetch Price History (PriceStrip Trend)
 // 1. Fetch Price History (PriceStrip Trend)
+
+
+const handleFinalSearch = () => {
+  // Sync Draft -> Live
+  setFrom(localSearch.from);
+  setTo(localSearch.to);
+  setDeparture(ensureDate(localSearch.departure));
+  setReturnDate(ensureDate(localSearch.return));
+  setTripType(localSearch.type);
+  setCabin(localSearch.cabin);
+  setAdults(localSearch.adults);
+
+
+  // If they were in the middle of a selection and changed parameters, reset them
+  setSelectedDeparture(null);
+  setIsSelectingReturn(false);
+  
+  // The useEffect with [from, to, departure...] will now automatically fire
+};
 useEffect(() => {
   if (!from || !to) return;
 
@@ -175,25 +195,28 @@ useEffect(() => {
       await Promise.all(
         dateRange.map(async (dateStr) => {
           try {
-            const res = await fetch(
-              `/api/v1/flights?originIataCode=${currentFrom}&destinationIataCode=${currentTo}&departureDate=${dateStr}&limit=5`
-            );
-            if (!res.ok) throw new Error();
-            
-            const json = await res.json(); // Consumed ONLY ONCE here
-            
-            if (json.data && json.data.length > 0) {
-              const cabinKey = cabin?.toLowerCase();
-              const pricesFound = json.data.map((f: any) => {
-                if (cabinKey === 'business') return parseFloat(f.basePriceBusiness);
-                if (cabinKey.includes('first')) return parseFloat(f.basePriceFirst);
-                return parseFloat(f.basePriceEconomy);
-              }).filter((p: number) => !isNaN(p));
+         const res = await fetch(
+          `/api/v1/flights?originIataCode=${currentFrom}&destinationIataCode=${currentTo}&departureDate=${dateStr}&limit=5`
+          );
+          if (!res.ok) throw new Error();
 
-              priceMap[dateStr] = pricesFound.length > 0 ? Math.min(...pricesFound) : null;
-            } else {
-              priceMap[dateStr] = null;
-            }
+          const json = await res.json(); 
+
+          // 🚨 FIX: Safely extract flight data here too
+          const flightData = json.data || (Array.isArray(json) ? json : []);
+
+          if (flightData && flightData.length > 0) {
+          const cabinKey = cabin?.toLowerCase();
+          const pricesFound = flightData.map((f: any) => {
+          if (cabinKey === 'business') return parseFloat(f.basePriceBusiness);
+          if (cabinKey.includes('first')) return parseFloat(f.basePriceFirst);
+          return parseFloat(f.basePriceEconomy);
+          }).filter((p: number) => !isNaN(p));
+
+          priceMap[dateStr] = pricesFound.length > 0 ? Math.min(...pricesFound) : null;
+          } else {
+          priceMap[dateStr] = null;
+          }
           } catch {
             priceMap[dateStr] = null;
           }
@@ -231,7 +254,7 @@ useEffect(() => {
 }, [session]); // Triggers as soon as session is truthy
 
   // 2. Fetch Main Flight Results & Sync URL
-  useEffect(() => {
+useEffect(() => {
     const fetchFlights = async () => {
       setLoading(true);
       try {
@@ -246,18 +269,21 @@ useEffect(() => {
           return;
         }
 
-     const apiParams = new URLSearchParams();
-      // MATCHING YOUR API: originIataCode, destinationIataCode, departureDate
-      apiParams.append("originIataCode", currentOrigin);
-      apiParams.append("destinationIataCode", currentDest);
-      
-      const dateStr = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
-      apiParams.append("departureDate", dateStr);
-      apiParams.append("limit", "20");
+        const apiParams = new URLSearchParams();
+        apiParams.append("originIataCode", currentOrigin);
+        apiParams.append("destinationIataCode", currentDest);
+        
+        const dateStr = currentDate.toISOString().split('T')[0]; 
+        apiParams.append("departureDate", dateStr);
+        apiParams.append("limit", "20");
 
         const response = await fetch(`/api/v1/flights?${apiParams.toString()}`);
         const json = await response.json();
-        setFlights(Array.isArray(json.data) ? json.data : []);
+        
+        // 🚨 FIX: Safely handle both { data: [...] } and raw [...] arrays
+        const flightData = json.data || (Array.isArray(json) ? json : []);
+        setFlights(Array.isArray(flightData) ? flightData : []);
+        
       } catch (error) {
         setFlights([]);
       } finally {
@@ -276,34 +302,38 @@ useEffect(() => {
 
 
     urlParams.append("adults", adults.toString());
-  urlParams.append("children", children.toString());
+
     urlParams.append("departure", getSafeISO(departure));
     urlParams.append("return", getSafeISO(returnDate));
 
     router.replace(`/FlightSearch?${urlParams.toString()}`, { scroll: false });
-  },[from, to, departure, returnDate, isSelectingReturn, adults, children])
+  },[from, to, departure, returnDate, isSelectingReturn, adults])
 
-  const sortedFlights = useMemo(() => {
-  return [...flights].sort((a, b) => {
-    // 1. Get numeric timestamps for comparison
-    const timeA = new Date(a.departureTime).getTime();
-    const timeB = new Date(b.departureTime).getTime();
+ const sortedFlights = useMemo(() => {
+    return [...flights].sort((a, b) => {
+      const timeA = new Date(a.departureTime).getTime();
+      const timeB = new Date(b.departureTime).getTime();
 
-    if (sortBy === "price") {
-      const priceA = Number(a.basePrice);
-      const priceB = Number(b.basePrice);
-      
-      // If prices are different, sort by price
-      if (priceA !== priceB) return priceA - priceB;
-      
-      // If prices are identical, tie-break with earliest time
-      return timeA - timeB;
-    } else {
-      // "Earliest" logic: Pure chronological order
-      return timeA - timeB;
-    }
-  });
-}, [flights, sortBy]);
+      if (sortBy === "price") {
+        // 🚨 FIX: Dynamically grab the correct price based on cabin state
+        const cabinKey = cabin?.toLowerCase() || 'economy';
+        const getPrice = (f: any) => {
+          if (cabinKey === 'business') return Number(f.basePriceBusiness);
+          if (cabinKey.includes('first')) return Number(f.basePriceFirst);
+          return Number(f.basePriceEconomy);
+        };
+
+        const priceA = getPrice(a);
+        const priceB = getPrice(b);
+        
+        if (priceA !== priceB) return priceA - priceB;
+        return timeA - timeB;
+      } else {
+        // "Earliest" logic
+        return timeA - timeB;
+      }
+    });
+  }, [flights, sortBy, cabin]);
 
 // Inside your FlightSearch.tsx handleSelect or Button onClick
 const handleSelect = (flight: any) => {
@@ -336,6 +366,7 @@ const handleSelect = (flight: any) => {
 };
 
 // Extract the navigation logic to a helper to keep it DRY
+// Inside FlightSearch.tsx
 const proceedToSeats = (currentFlight: any, departureFlight: any) => {
   if (isSelectingReturn) {
     localStorage.setItem('selectedReturnFlight', JSON.stringify(currentFlight));
@@ -344,62 +375,73 @@ const proceedToSeats = (currentFlight: any, departureFlight: any) => {
   }
 
   const params = new URLSearchParams();
-  params.append('departId', departureFlight?.id || currentFlight.id);
+  
+  // ---> CHANGE IS HERE: Grab .flightCode instead of .id <---
+  params.append('departFlightCode', departureFlight?.flightCode || currentFlight.flightCode);
+  
   if (tripType === 'round-trip') {
-    params.append('returnId', currentFlight.id);
+    params.append('returnFlightCode', currentFlight.flightCode);
   }
+  
   params.append('adults', adults.toString());
-  params.append('children', children.toString());
+
   
   router.push(`/FlightSearch/SeatSelection?${params.toString()}`);
 };
 
 
+const availableFlights = useMemo(() => {
+  return sortedFlights.filter((flight) => {
+    const cabinKey = cabin?.toLowerCase();
+    let seatCategory = "ECONOMY";
+    if (cabinKey === 'business') seatCategory = "BUSINESS";
+    if (cabinKey === 'first class' || cabinKey === 'first') seatCategory = "FIRST";
 
+    const availability = flight.seatAvailability?.[seatCategory];
+    // Only show flights that have this cabin class configuration on the plane
+    return availability && availability.total > 0;
+  });
+}, [sortedFlights, cabin]);
   
 
   return (
     <>
-      <SearchHeader
- searchData={localSearch}
+     <SearchHeader
+  searchData={localSearch}
   onFromChange={(val) => setLocalSearch((prev) => ({ ...prev, from: val }))}
   onToChange={(val) => setLocalSearch((prev) => ({ ...prev, to: val }))}
   onDepartureChange={(val) => setLocalSearch((prev) => ({ ...prev, departure: val }))}
   onReturnChange={(val) => setLocalSearch((prev) => ({ ...prev, return: val }))}
   onTypeChange={(val) => setLocalSearch((prev) => ({ ...prev, type: val }))}
   onCabinChange={(val) => setLocalSearch((prev) => ({ ...prev, cabin: val }))}
-  onAdultsChange={(val) => setLocalSearch((prev) => ({ ...prev, adults: val }))} // Add this
-  onChildrenChange={(val) => setLocalSearch((prev) => ({ ...prev, children: val }))} // Add this
-        onSearch={() => {
-          // 1. Properly convert strings to Date objects before updating "Live" state
-          const newDeparture = ensureDate(localSearch.departure);
-          const newReturn = ensureDate(localSearch.return);
+  onAdultsChange={(val) => setLocalSearch((prev) => ({ ...prev, adults: val }))}
 
-          // 2. Detect if the destination/origin changed
-          const routeChanged =
-            from !== localSearch.from || to !== localSearch.to;
+  onSearch={() => {
+    // 1. Properly convert strings to Date objects before updating "Live" state
+    const newDeparture = ensureDate(localSearch.departure);
+    const newReturn = ensureDate(localSearch.return);
 
-          // 3. Update Live States
-          setAdults(localSearch.adults);
-    setChildren(localSearch.children);
-          setFrom(localSearch.from);
-          setTo(localSearch.to);
-          setDeparture(newDeparture);
-          setReturnDate(newReturn);
-          setTripType(localSearch.type);
-          setCabin(localSearch.cabin);
+    // 2. Update Live States
+    setAdults(localSearch.adults);
 
-          // 4. SMART SELECTION LOGIC
-          if (routeChanged) {
-            // If they changed the city, we HAVE to start over from departure
-            setSelectedDeparture(null);
-            setIsSelectingReturn(false);
-          } else if (selectedDeparture) {
-            // If they only changed the date, STAY on the return leg
-            setIsSelectingReturn(true);
-          }
-        }}
-      />
+    setFrom(localSearch.from);
+    setTo(localSearch.to);
+    setDeparture(newDeparture);
+    setReturnDate(newReturn);
+    setTripType(localSearch.type);
+    setCabin(localSearch.cabin);
+
+    // 3. THE FIX: Treat every search click as a brand new search
+    // Reset the selection UI so it doesn't stay stuck on the return leg
+    setSelectedDeparture(null);
+    setIsSelectingReturn(false);
+
+    // 4. Wipe the old "ghost" selections from the browser memory
+    localStorage.removeItem('selectedDepartureFlight');
+    localStorage.removeItem('selectedReturnFlight');
+    localStorage.removeItem('pendingSelection');
+  }}
+/>
 
       <Container size="xl" py="xl">
         <Grid gutter="xl">
@@ -518,173 +560,28 @@ const proceedToSeats = (currentFlight: any, departureFlight: any) => {
                   : `Select departure flight to ${to}`}
             </Title>
 
-            <Stack gap="md">
-{loading ? (
-  <Center py="xl">
-    <Loader size="md" />
-  </Center>
-) : (() => {
-  // 1. FILTER: Create a list of flights that actually have the selected cabin
-  const availableFlights = sortedFlights.filter((flight) => {
-    const cabinKey = cabin?.toLowerCase();
-    let seatCategory = "ECONOMY";
-    if (cabinKey === 'business') seatCategory = "BUSINESS";
-    if (cabinKey === 'first class' || cabinKey === 'first') seatCategory = "FIRST";
+          <Stack gap="md">
+  {loading ? (
+    <Center py="xl">
+      <Loader size="md" />
+    </Center>
+  ) : (
+    availableFlights.map((flight) => (
+      <FlightCard
+        key={flight.id}
+        flight={flight}
+        cabin={cabin}
+        adults={adults}
 
-    const availability = flight.seatAvailability?.[seatCategory];
-    // Return true only if the cabin exists on this aircraft
-    return availability && availability.total > 0;
-  });
-
-  // 2. CHECK: If no flights exist after filtering, show the "Not Found" UI
-  if (availableFlights.length === 0) {
-    return (
-      <Card withBorder p="xl" radius="md">
-        <Stack align="center" gap="sm">
-          <IconPlaneDeparture size={48} color="var(--mantine-color-gray-4)" />
-          <Text fw={700} size="lg">No Flights Found</Text>
-          <Text c="dimmed" ta="center" style={{ maxWidth: 400 }}>
-            There are no <b>{cabin}</b> seats available for this route on the selected date. 
-            Please try another date or switch to a different cabin class.
-          </Text>
-        </Stack>
-      </Card>
-    );
-  }
-
-  // 3. RENDER: Map only the flights that passed the filter
-  return availableFlights.map((flight) => {
-    const cabinKey = cabin?.toLowerCase();
-    let seatCategory = "ECONOMY";
-    let rawPrice = flight.basePriceEconomy;
-
-    if (cabinKey === 'business') {
-      seatCategory = "BUSINESS";
-      rawPrice = flight.basePriceBusiness;
-    } else if (cabinKey === 'first class' || cabinKey === 'first') {
-      seatCategory = "FIRST";
-      rawPrice = flight.basePriceFirst;
-    }
-
-    const availability = flight.seatAvailability?.[seatCategory];
-    const isSoldOut = availability.available === 0;
-
-    return (
-      <Card 
-  key={flight.id} 
-  withBorder 
-  radius="md" 
-  p="lg" 
-  shadow="sm" 
-  mb="md"
-  style={{ opacity: isSoldOut ? 0.6 : 1 }}
->
-  <Grid align="center">
-    {/* Left Icon Column */}
-    <GridCol span={{ base: 12, sm: 1 }}>
-      <Center>
-        <IconPlaneDeparture size={30} stroke={1.5} color={isSoldOut ? "gray" : "blue"} />
-      </Center>
-    </GridCol>
-
-    {/* Center Flight Info Column */}
-    <GridCol span={{ base: 12, sm: 7 }}>
-      <Group justify="center" wrap="nowrap" px="md" gap="xl">
-        
-        {/* Departure Time */}
-        <Stack gap={2} align="center" style={{ minWidth: 100 }}>
-    <Text fz="xl" fw={800} style={{ whiteSpace: 'nowrap' }}>
-    {/* Change this line */}
-    {formatLocalTime(flight.departureTime)}
-  </Text>
-          <Badge variant="light" color="gray" size="sm">{flight.route?.origin?.iataCode}</Badge>
-        </Stack>
-
-        {/* Duration & Visual Line */}
-        <Stack gap={0} style={{ flex: 1, minWidth: 120 }} align="center">
-          <Text size="xs" c="dimmed">{formatDuration(flight.route?.durationMins || 0)}</Text>
-          <Box w="100%" style={{ borderBottom: "1px solid #e9ecef", position: 'relative', margin: '8px 0' }}>
-             {/* Fixed icon positioning to avoid overlap */}
-             <IconPlaneDeparture 
-              size={16} 
-              style={{ 
-                position: 'absolute', 
-                left: '50%', 
-                top: -8, 
-                transform: 'translateX(-50%)', // Center it on the line
-                color: '#adb5bd',
-                backgroundColor: 'white', // Masks the line behind the icon
-                padding: '0 4px'
-              }} 
-             />
-          </Box>
-          <Text size="xs" fw={700} c={isSoldOut ? "red.6" : "green.7"}>
-            {isSoldOut ? "Sold Out" : "Direct"}
-          </Text>
-        </Stack>
-
-        {/* Arrival Time */}
-        <Stack gap={2} align="center" style={{ minWidth: 100 }}>
-        <Text fz="xl" fw={800} style={{ whiteSpace: 'nowrap' }}>
-  {/* Change this line */}
-  {formatLocalTime(flight.arrivalTime)}
-</Text>
-          <Badge variant="light" color="gray" size="sm">{flight.route?.destination?.iataCode}</Badge>
-        </Stack>
-      </Group>
-    </GridCol>
-
-    {/* Right Price Column */}
-    <GridCol span={{ base: 12, sm: 4 }} style={{ borderLeft: '1px solid #f1f3f5' }}>
-      <Stack gap={4} align="flex-end">
-        {(() => {
-          const adultPrice = parseFloat(rawPrice) || 0;
-          const childPrice = Math.round(adultPrice * 0.8);
-          const total = (adultPrice * adults) + (childPrice * children);
-
-          return (
-            <>
-              <Group gap={8} justify="flex-end">
-                <Text size="xs" c="dimmed"> Adults x{adults}</Text>
-                <Text fw={700} c="blue.9" fz="xl">
-                  THB {adultPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </Text>
-              </Group>
-              {children > 0 && (
-                <Group gap={8} justify="flex-end" mt={-4}>
-                  <Text size="xs" c="dimmed">Child x{children}</Text>
-                  <Text size="xs" fw={600}>THB {childPrice.toLocaleString()}</Text>
-                </Group>
-              )}
-              <Divider w="100%" my={4} />
-              <Text size="xs" c="dimmed" tt="uppercase">Total for {adults + children} Pax</Text>
-              <Text fz="xl" fw={900} c="dark">THB {total.toLocaleString()}</Text>
-              {!isSoldOut && availability.available < 10 && (
-                <Text size="xs" c="orange.7" fw={700}>Only {availability.available} seats left!</Text>
-              )}
-            </>
-          );
-        })()}
-        
-        <Button 
-          fullWidth 
-          mt="sm"
-          size="md"
-          color={isSoldOut ? "gray" : isSelectingReturn ? "orange" : "blue"}
-          radius="md"
-          disabled={isSoldOut}
-          onClick={() => handleSelect(flight)}
-        >
-          {isSoldOut ? "Flight Full" : (tripType === 'round-trip' && !isSelectingReturn ? 'Select Departure' : 'Book Flight')}
-        </Button>
-      </Stack>
-    </GridCol>
-  </Grid>
-</Card>
-    );
-  });
-})()}
-            </Stack>
+        isSelectingReturn={isSelectingReturn}
+        tripType={tripType}
+        onSelect={handleSelect}
+        formatLocalTime={formatLocalTime}
+        formatDuration={formatDuration}
+      />
+    ))
+  )}
+</Stack>
           </GridCol>
         </Grid>
       </Container>

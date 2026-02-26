@@ -24,7 +24,7 @@ interface SearchHeaderProps {
   onTypeChange: (val: string) => void;
   onCabinChange: (val: string) => void;
   onAdultsChange: (val: number) => void;
-  onChildrenChange: (val: number) => void;
+
   onSearch: () => void;
 }
 
@@ -37,7 +37,6 @@ export function SearchHeader({
   onTypeChange, 
   onCabinChange,
   onAdultsChange,
-  onChildrenChange,
   onSearch
 }: SearchHeaderProps) {
   const [options, setOptions] = useState<{ value: string; label: string }[]>(() => {
@@ -60,6 +59,7 @@ export function SearchHeader({
       try {
         const res = await fetch(`/api/v1/airports?search=${encodeURIComponent(query)}`);
         const data = await res.json();
+        console.log(data);
         const formatted = data.map((ap: any) => ({
           value: ap.iataCode,
           label: `${ap.city} (${ap.iataCode}) - ${ap.name}`
@@ -124,21 +124,14 @@ useEffect(() => {
             />
             <Group gap="xl" style={{ flex: 1.5 }}>
               <NumberInput
-                label="Adults"
+                label="Passengers"
                 value={searchData.adults}
                 onChange={(val) => onAdultsChange(Number(val))}
                 min={1}
                 max={9}
                 style={{ width: 70 }}
               />
-              <NumberInput
-                label="Children"
-                value={searchData.children}
-                onChange={(val) => onChildrenChange(Number(val))}
-                min={0}
-                max={9}
-                style={{ width: 70 }}
-              />
+             
             </Group>
           </Group>
 

@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    return successResponse(result);
+      return successResponse(result["data"]);
   } catch (err) {
     if (err instanceof ZodError) {
       return validationErrorResponse(zodFieldErrors(err)); 
