@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { aircraftService } from "@/services/aircraft.services";
-import { updateAircraftSchema } from "@/types/aircraft.type";
+import { CreateAircraftInput, updateAircraftSchema } from "@/types/aircraft.type";
 // Note: Adjust this import path to point to your new auth utility file
 import { requireServerSession } from "@/services/auth.services"; 
 
@@ -54,5 +54,23 @@ export async function deleteAircraftAction(id: string) {
     return { success: true };
   } catch (error: any) {
     return { error: error.message };
+  }
+}
+
+export async function createAircraftAction(data: CreateAircraftInput) {
+  const session = await requireServerSession();
+  
+  if (!session) {
+    return { error: 'Unauthorized' };
+  }
+
+  try {
+    await aircraftService.createAircraft(data, session as any);
+    
+    // Revalidate the fleet table so the new aircraft shows up immediately
+    revalidatePath('/admin/dashboard/aircraft');
+    return { success: true };
+  } catch (error: any) {
+    return { error: error.message || 'Failed to add aircraft.' };
   }
 }

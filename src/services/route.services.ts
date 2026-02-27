@@ -18,39 +18,13 @@ import {
 type RouteListItem = Awaited<ReturnType<typeof routeRepository.findAll>>[number];
 
 
-export class RouteNotFoundError extends Error {
-  constructor(identifier: string) {
-    super(`Route not found: ${identifier}`);
-    this.name = 'RouteNotFoundError';
-  }
-}
-
-export class RouteConflictError extends Error {
-  constructor(origin: string, dest: string) {
-    super(`Route ${origin} → ${dest} already exists`);
-    this.name = 'RouteConflictError';
-  }
-}
-
-export class RouteHasActiveFlightsError extends Error {
-  constructor(count: number) {
-    super(`Cannot delete route with ${count} active flight(s)`);
-    this.name = 'RouteHasActiveFlightsError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on route`);
-    this.name = 'UnauthorizedError';
-  }
-}
+import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 
 
-function checkPermission(
+const checkPermission = (
   session: Session,
   action: 'create' | 'read' | 'update' | 'delete',
-) {
+) =>
   assertPermission(
     session,
     action,
@@ -58,7 +32,6 @@ function checkPermission(
     'route',
     (a) => new UnauthorizedError(a),
   );
-}
 
 
 export const routeService = {
@@ -70,7 +43,7 @@ export const routeService = {
       id,
       session.user.role,
     );
-    if (!route) throw new RouteNotFoundError(id);
+    if (!route) throw new NotFoundError(`Route not found: ${id}`);
     return route;
   },
 
@@ -85,7 +58,7 @@ export const routeService = {
     const dest   = iataCodeSchema.parse(destCode);
 
     const route = await routeRepository.findByIataCodes(origin, dest);
-    if (!route) throw new RouteNotFoundError(`${origin} → ${dest}`);
+    if (!route) throw new NotFoundError(`Route not found: ${origin} → ${dest}`);
     return route;
   },
 
@@ -179,14 +152,14 @@ export const routeService = {
       data.originAirportId,
       data.destAirportId,
     );
-    if (existing) throw new RouteConflictError(data.originAirportId, data.destAirportId);
+    if (existing) throw new ConflictError(`${data.originAirportId} → ${data.destAirportId} already exists`);
 
     if (data.createReturn) {
       const reverseExists = await routeRepository.findByAirportIds(
         data.destAirportId,
         data.originAirportId,
       );
-      if (reverseExists) throw new RouteConflictError(data.destAirportId, data.originAirportId);
+      if (reverseExists) throw new ConflictError(`${data.destAirportId} → ${data.originAirportId} already exists`);
     }
 
     if (data.createReturn) {
@@ -204,7 +177,7 @@ export const routeService = {
     const data = updateRouteSchema.parse(input);
 
     const existing = await routeRepository.findByIdAdmin(id);
-    if (!existing) throw new RouteNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Route not found: ${id}`);
 
     return routeRepository.update(id, data);
   },
@@ -213,10 +186,10 @@ export const routeService = {
     checkPermission(session, 'delete');
 
     const existing = await routeRepository.findByIdAdmin(id);
-    if (!existing) throw new RouteNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Route not found: ${id}`);
 
     const activeFlights = await routeRepository.countActiveFlights(id);
-    if (activeFlights > 0) throw new RouteHasActiveFlightsError(activeFlights);
+    if (activeFlights > 0) throw new ConflictError(`Cannot delete route with ${activeFlights} active flight(s)`);
 
     return routeRepository.delete(id);
   },

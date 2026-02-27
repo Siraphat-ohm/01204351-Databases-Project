@@ -17,7 +17,9 @@ import {
   FileClock,        // สำหรับ Logs
   Settings,
   LogOut, 
-  Bell
+  Bell,
+  Milestone,
+  Archive
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -32,16 +34,15 @@ const navData = [
   { label: 'Flight Schedule', icon: PlaneTakeoff, link: '/admin/dashboard/flights' }, // Add/Mod/Del Flight
   { label: 'Fleet / Aircraft', icon: Plane, link: '/admin/dashboard/aircraft' },      // Add/Mod/Del Aircraft
   { label: 'Airports', icon: MapPin, link: '/admin/dashboard/airports' },             // Add/Mod/Del Airport
-
-  { category: 'Commercial' },
-  { label: 'Tickets & Booking', icon: Ticket, link: '/admin/dashboard/bookings' },    // Add/Mod/Cancel/Book for customer
+  { label: 'Routes', icon: Milestone, link: '/admin/dashboard/routes' },
 
   { category: 'Management' },
   { label: 'Users & Crew', icon: Users, link: '/admin/dashboard/users' },             // View/Mod/Del/Role Change
   { label: 'Customer Issues', icon: MessageSquareWarning, link: '/admin/dashboard/issues', alert: true }, // Answer Issues
 
   { category: 'System' },
-  { label: 'Audit Logs', icon: FileClock, link: '/admin/dashboard/logs' },            // Login/Ticket/Trans/Flight Logs
+  { label: 'Payment Logs', icon: Archive, link: '/admin/dashboard/payment-logs' },
+  { label: 'Flight Operation Logs', icon: FileClock, link: '/admin/dashboard/ops-log' },            // Login/Ticket/Trans/Flight Logs
   { label: 'Settings', icon: Settings, link: '/admin/dashboard/settings' },
 ];
 

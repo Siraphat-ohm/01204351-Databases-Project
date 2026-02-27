@@ -26,3 +26,30 @@ export function hasPermission<Action extends string>(
 ) {
   return canAccess(session.user.role, action);
 }
+
+/**
+ * Convenience wrapper that calls `assertPermission` directly.
+ * Use when you don't need a pre-bound checker.
+ */
+export function checkPermission<Action extends string>(
+  session: ServiceSession,
+  action: Action,
+  canAccess: CanAccessFn<Action>,
+  resource: string,
+  unauthorizedFactory?: UnauthorizedFactory<Action>,
+) {
+  return assertPermission(session, action, canAccess, resource, unauthorizedFactory);
+}
+
+/**
+ * Create a pre-bound `checkPermission` function for a specific resource and `canAccess` predicate.
+ * Services can call the returned function as `checkPermission(session, 'read')`.
+ */
+export function makeCheckPermission<Action extends string>(
+  canAccess: CanAccessFn<Action>,
+  resource: string,
+  unauthorizedFactory?: UnauthorizedFactory<Action>,
+) {
+  return (session: ServiceSession, action: Action) =>
+    assertPermission(session, action, canAccess, resource, unauthorizedFactory);
+}

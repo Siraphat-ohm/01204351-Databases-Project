@@ -1,10 +1,16 @@
-import { FlightService } from "@/lib/services/backoffice/flight"
-import { AircraftService } from "@/lib/services/backoffice/aircraft";
+import { getServerSession } from "@/services/auth.services";
+import { userService } from "@/services/user.services";
+
 
 export default async function Page() {
    // const { data } = await AircraftService.getAllAircraft();
-    const { data: flights } = await FlightService.getAllFlights({ page: 1, limit: 10 });
+    const session = await getServerSession();
+    if(!session){
+      throw new Error("Unauthorized");
+      return <h1>Unauthorized</h1>
+    }
+    const data = await userService.findAllPaginated(session);
   
-    const bultify_json = JSON.stringify(flights, null, 2);
+    const bultify_json = JSON.stringify(data, null, 2);
   return <h1>{bultify_json}</h1>
 }

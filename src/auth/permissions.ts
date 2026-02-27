@@ -1,76 +1,80 @@
-import { createAccessControl } from 'better-auth/plugins/access';
-
+import { createAccessControl } from "better-auth/plugins/access";
 
 export const statement = {
-  route:    ['create', 'read', 'update', 'delete'],
-  flight:   ['create', 'read', 'update', 'delete', 'manage-status'],
-  booking:  ['create', 'read', 'cancel', 'read-all'],
-  ticket:   ['create', 'read', 'update', 'delete', 'check-in', 'read-all'],
-  payment:  ['create', 'read', 'refund', 'read-all'],
-  airport:  ['create', 'read', 'update', 'delete'],
-  aircraft: ['create', 'read', 'update', 'delete', 'manage-status'],
-  staff:    ['create', 'read', 'update', 'delete'],
+  route: ["create", "read", "update", "delete"],
+  flight: ["create", "read", "update", "delete", "manage-status"],
+  booking: ["create", "read", "cancel", "read-all", "update"],
+  ticket: ["create", "read", "update", "delete", "check-in", "read-all"],
+  payment: ["create", "read", "refund", "read-all"],
+  airport: ["create", "read", "update", "delete"],
+  aircraft: ["create", "read", "update", "delete", "manage-status"],
+  staff: ["create", "read", "update", "delete"],
 } as const;
 
 export const ac = createAccessControl(statement);
 
-
 export const passengerRole = ac.newRole({
-  route:   ['read'],
-  flight:  ['read'],
-  booking: ['create', 'read', 'cancel'],
-  ticket:  ['read'],
-  payment: ['create', 'read'],
-  airport: ['read'],
+  route: ["read"],
+  flight: ["read"],
+  booking: ["create", "read", "cancel"],
+  ticket: ["read"],
+  payment: ["create", "read"],
+  airport: ["read"],
 });
 
 export const groundStaffRole = ac.newRole({
-  route:   ['read'],
-  flight:  ['read'],
-  booking: ['read-all'],
-  ticket:  ['read-all', 'update', 'check-in'],
-  payment: ['read-all'],
-  airport: ['read'],
+  route: ["read"],
+  flight: ["read"],
+  booking: ["read-all"],
+  ticket: ["read-all", "update", "check-in"],
+  payment: ["read-all"],
+  airport: ["read"],
 });
 
 export const cabinCrewRole = ac.newRole({
-  route:   ['read'],
-  flight:  ['read'],
-  ticket:  ['read-all'],
-  airport: ['read'],
+  route: ["read"],
+  flight: ["read"],
+  ticket: ["read-all"],
+  airport: ["read"],
 });
 
 export const pilotRole = ac.newRole({
-  route:   ['read'],
-  flight:  ['read'],
-  ticket:  ['read-all'],
-  airport: ['read'],
+  route: ["read"],
+  flight: ["read"],
+  ticket: ["read-all"],
+  airport: ["read"],
 });
 
 export const mechanicRole = ac.newRole({
-  aircraft: ['read', 'manage-status'],
-  flight:   ['read'],
-  airport:  ['read'],
+  aircraft: ["read", "manage-status"],
+  flight: ["read"],
+  airport: ["read"],
 });
 
 export const adminRole = ac.newRole({
-  route:    ['create', 'read', 'update', 'delete'],
-  flight:   ['create', 'read', 'update', 'delete', 'manage-status'],
-  booking:  ['create', 'read', 'cancel', 'read-all'],
-  ticket:   ['create', 'read', 'update', 'delete', 'check-in', 'read-all'],
-  payment:  ['create', 'read', 'refund', 'read-all'],
-  airport:  ['create', 'read', 'update', 'delete'],
-  aircraft: ['create', 'read', 'update', 'delete', 'manage-status'],
-  staff:    ['create', 'read', 'update', 'delete'],
+  route: ["create", "read", "update", "delete"],
+  flight: ["create", "read", "update", "delete", "manage-status"],
+  booking: ["create", "read", "cancel", "read-all"],
+  ticket: ["create", "read", "update", "delete", "check-in", "read-all"],
+  payment: ["create", "read", "refund", "read-all"],
+  airport: ["create", "read", "update", "delete"],
+  aircraft: ["create", "read", "update", "delete", "manage-status"],
+  staff: ["create", "read", "update", "delete"],
+});
+
+export const systemRole = ac.newRole({
+  payment: ["create", "read", "refund", "read-all"],
+  booking: ["update", "read-all"],
 });
 
 export const rolePermissions = {
-  PASSENGER:   passengerRole,
+  PASSENGER: passengerRole,
   GROUND_STAFF: groundStaffRole,
-  CABIN_CREW:  cabinCrewRole,
-  PILOT:       pilotRole,
-  MECHANIC:    mechanicRole,
-  ADMIN:       adminRole,
+  CABIN_CREW: cabinCrewRole,
+  PILOT: pilotRole,
+  MECHANIC: mechanicRole,
+  ADMIN: adminRole,
+  SYSTEM: systemRole,
 } as const;
 
 export type RoleKey = keyof typeof rolePermissions;
@@ -122,10 +126,7 @@ export function canAccessAircraft(
   return Array.isArray(allowed) && allowed.includes(action);
 }
 
-export function canAccessStaff(
-  roleName: string,
-  action: StaffAction,
-): boolean {
+export function canAccessStaff(roleName: string, action: StaffAction): boolean {
   const role = rolePermissions[roleName as RoleKey];
   if (!role) return false;
 

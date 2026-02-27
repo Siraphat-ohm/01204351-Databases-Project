@@ -14,26 +14,7 @@ import {
   type PaginationParams,
 } from '@/services/_shared/pagination';
 
-export class PaymentLogNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Payment log not found: ${id}`);
-    this.name = 'PaymentLogNotFoundError';
-  }
-}
-
-export class BookingNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Booking not found: ${id}`);
-    this.name = 'BookingNotFoundError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on payment log`);
-    this.name = 'UnauthorizedError';
-  }
-}
+import { NotFoundError, UnauthorizedError } from '@/lib/errors';
 
 function isAdmin(session: Session) {
   return hasAnyRole(session, ['ADMIN']);
@@ -41,7 +22,7 @@ function isAdmin(session: Session) {
 
 async function assertCanReadBooking(session: Session, bookingId: string) {
   const booking = await bookingRepository.findById(bookingId);
-  if (!booking) throw new BookingNotFoundError(bookingId);
+  if (!booking) throw new NotFoundError(`Booking not found: ${bookingId}`);
 
   if (!isAdmin(session) && booking.userId !== session.user.id) {
     throw new UnauthorizedError('read');
@@ -53,7 +34,7 @@ async function assertCanReadBooking(session: Session, bookingId: string) {
 export const paymentLogService = {
   async findById(id: string, session: Session) {
     const log = await paymentLogRepository.findById(id);
-    if (!log) throw new PaymentLogNotFoundError(id);
+    if (!log) throw new NotFoundError(`Payment log not found: ${id}`);
 
     const bookingId = String((log as { bookingId: unknown }).bookingId);
     await assertCanReadBooking(session, bookingId);
@@ -111,7 +92,7 @@ export const paymentLogService = {
 
     const data = updatePaymentLogSchema.parse(input);
     const updated = await paymentLogRepository.updateById(id, data);
-    if (!updated) throw new PaymentLogNotFoundError(id);
+    if (!updated) throw new NotFoundError(`Payment log not found: ${id}`);
 
     return updated;
   },
@@ -120,7 +101,7 @@ export const paymentLogService = {
     if (!isAdmin(session)) throw new UnauthorizedError('delete');
 
     const deleted = await paymentLogRepository.deleteById(id);
-    if (!deleted) throw new PaymentLogNotFoundError(id);
+    if (!deleted) throw new NotFoundError(`Payment log not found: ${id}`);
 
     return deleted;
   },

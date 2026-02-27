@@ -45,10 +45,10 @@ export class UnauthorizedError extends Error {
   }
 }
 
-function checkPermission(
+const checkPermission = (
   session: Session,
   action: 'create' | 'read' | 'update' | 'delete',
-) {
+) =>
   assertPermission(
     session,
     action,
@@ -56,7 +56,6 @@ function checkPermission(
     'airport',
     (a) => new UnauthorizedError(a),
   );
-}
 
 export const airportService = {
   async findById(id: string, session: Session) {
