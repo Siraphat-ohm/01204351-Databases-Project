@@ -1,6 +1,7 @@
 // src/app/api/v1/payments/route.ts
 import { NextRequest } from "next/server";
 import { ZodError } from "zod";
+import { NotFoundError, ConflictError, UnauthorizedError, BadRequestError } from '@/lib/errors';
 import { paymentService } from "@/services/payment.services";
 import { getServerSession } from "@/services/auth.services";
 import {
@@ -52,19 +53,13 @@ export async function POST(req: NextRequest) {
     const created = await paymentService.createPayment(body, serviceSession);
     return successResponse(created, 201);
   } catch (err) {
-    if (err instanceof ZodError) {
-      return validationErrorResponse(zodFieldErrors(err));
-    }
-    if (err instanceof Error && err.name === "UnauthorizedError") {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === "BookingNotFoundError") {
-      return errorResponse(err.message, 404);
-    }
-    if (err instanceof Error && err.name === "PaymentConflictError") {
-      return errorResponse(err.message, 409);
-    }
-    console.error("[POST /api/v1/payments]", err);
-    return errorResponse("Internal server error");
+    if (err instanceof ZodError) return validationErrorResponse(zodFieldErrors(err));
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
+    if (err instanceof ConflictError) return errorResponse(err.message, 409);
+    if (err instanceof BadRequestError) return errorResponse(err.message, 400);
+
+    console.error('[POST /api/v1/payments]', err);
+    return errorResponse('Internal server error');
   }
 }
