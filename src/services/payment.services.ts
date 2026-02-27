@@ -1,3 +1,8 @@
+import type { PaginatedResponse } from '@/types/common';
+import type { Prisma } from '@/generated/prisma/client';
+import { resolvePagination, type PaginationParams } from '@/services/_shared/pagination';
+
+type PaymentListItem = Awaited<ReturnType<typeof paymentRepository.findAll>>[number];
 import { stripe } from "@/lib/stripe";
 import { bookingRepository } from "@/repositories/booking.repository";
 import { paymentRepository } from "@/repositories/payment.repository";
@@ -232,5 +237,29 @@ export const paymentService = {
     });
 
     return refund;
+  },
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams<Prisma.TransactionWhereInput>,
+  ): Promise<PaginatedResponse<PaymentListItem>> {
+    checkPermission(session, 'read-all');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
+    const [data, total] = await Promise.all([
+      paymentRepository.findMany({ where, skip, take: limit }),
+      paymentRepository.count(where),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   },
 };
