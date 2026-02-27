@@ -17,19 +17,7 @@ import {
   type PaginationParams,
 } from '@/services/_shared/pagination';
 
-export class IssueReportNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Issue report not found: ${id}`);
-    this.name = 'IssueReportNotFoundError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on issue report`);
-    this.name = 'UnauthorizedError';
-  }
-}
+import { NotFoundError, UnauthorizedError } from '@/lib/errors';
 
 function isAdmin(session: Session) {
   return hasAnyRole(session, ['ADMIN']);
@@ -38,7 +26,7 @@ function isAdmin(session: Session) {
 export const issueReportService = {
   async findById(id: string, session: Session) {
     const issue = await issueReportRepository.findById(id);
-    if (!issue) throw new IssueReportNotFoundError(id);
+    if (!issue) throw new NotFoundError(`Issue report not found: ${id}`);
 
     const issueUserId = String((issue as { userId: unknown }).userId);
     if (!isAdmin(session) && issueUserId !== session.user.id) {

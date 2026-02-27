@@ -2,19 +2,8 @@ import { headers } from "next/headers";
 import { auth, type AuthSession } from "@/lib/auth";
 import type { RoleKey } from "@/auth/permissions";
 
-export class AuthenticationRequiredError extends Error {
-  constructor(message = "Authentication required") {
-    super(message);
-    this.name = "AuthenticationRequiredError";
-  }
-}
+import { UnauthorizedError } from '@/lib/errors';
 
-export class AuthorizationError extends Error {
-  constructor(message = "Insufficient role") {
-    super(message);
-    this.name = "AuthorizationError";
-  }
-}
 
 type MaybeSession = AuthSession | null;
 
@@ -46,7 +35,7 @@ export function hasRole(session: MaybeSession, roleOrRoles: RoleKey | RoleKey[])
 export async function requireServerSession(): Promise<AuthSession> {
   const session = await getServerSession();
   if (!session) {
-    throw new AuthenticationRequiredError();
+    throw new UnauthorizedError('Authentication required');
   }
   return session;
 }
@@ -59,7 +48,7 @@ export async function requireServerUser() {
 export async function requireRole(roleOrRoles: RoleKey | RoleKey[]): Promise<AuthSession> {
   const session = await requireServerSession();
   if (!hasRole(session, roleOrRoles)) {
-    throw new AuthorizationError();
+    throw new UnauthorizedError('Insufficient role');
   }
   return session;
 }

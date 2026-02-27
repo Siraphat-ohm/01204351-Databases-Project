@@ -21,33 +21,7 @@ import {
 
 type TicketListItem = Awaited<ReturnType<typeof ticketRepository.findAll>>[number];
 
-export class TicketNotFoundError extends Error {
-  constructor(identifier: string) {
-    super(`Ticket not found: ${identifier}`);
-    this.name = 'TicketNotFoundError';
-  }
-}
-
-export class TicketConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'TicketConflictError';
-  }
-}
-
-export class TicketAlreadyCheckedInError extends Error {
-  constructor(id: string) {
-    super(`Ticket already checked in: ${id}`);
-    this.name = 'TicketAlreadyCheckedInError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on ticket`);
-    this.name = 'UnauthorizedError';
-  }
-}
+import { NotFoundError, ConflictError, BadRequestError, UnauthorizedError } from '@/lib/errors';
 
 function checkPermission(
   session: Session,
@@ -78,8 +52,8 @@ export const ticketService = {
         data.seatNumber,
       );
       if (seatTaken) {
-        throw new TicketConflictError(`Seat already assigned: ${data.seatNumber}`);
-      }
+          throw new ConflictError(`Seat already assigned: ${data.seatNumber}`);
+        }
     }
 
     return ticketRepository.create(data);
@@ -89,7 +63,7 @@ export const ticketService = {
     checkPermission(session, 'read');
 
     const ticket = await ticketRepository.findById(id);
-    if (!ticket) throw new TicketNotFoundError(id);
+    if (!ticket) throw new NotFoundError(`Ticket not found: ${id}`);
 
     if (!canReadAll(session) && ticket.booking.userId !== session.user.id) {
       throw new UnauthorizedError('read');
@@ -169,9 +143,9 @@ export const ticketService = {
     checkPermission(session, 'check-in');
 
     const ticket = await ticketRepository.findById(id);
-    if (!ticket) throw new TicketNotFoundError(id);
+    if (!ticket) throw new NotFoundError(`Ticket not found: ${id}`);
 
-    if (ticket.checkedIn) throw new TicketAlreadyCheckedInError(id);
+      if (ticket.checkedIn) throw new BadRequestError(`Ticket already checked in: ${id}`);
 
     const data = checkInTicketSchema.parse(input);
 
@@ -181,7 +155,7 @@ export const ticketService = {
         data.seatNumber,
       );
       if (seatTaken && seatTaken.id !== ticket.id) {
-        throw new TicketConflictError(`Seat already assigned: ${data.seatNumber}`);
+        throw new ConflictError(`Seat already assigned: ${data.seatNumber}`);
       }
     }
 
@@ -192,7 +166,7 @@ export const ticketService = {
     checkPermission(session, 'update');
 
     const ticket = await ticketRepository.findById(id);
-    if (!ticket) throw new TicketNotFoundError(id);
+    if (!ticket) throw new NotFoundError(`Ticket not found: ${id}`);
 
     const data = updateTicketSchema.parse(input);
 
@@ -202,7 +176,7 @@ export const ticketService = {
         data.seatNumber,
       );
       if (seatTaken && seatTaken.id !== ticket.id) {
-        throw new TicketConflictError(`Seat already assigned: ${data.seatNumber}`);
+        throw new ConflictError(`Seat already assigned: ${data.seatNumber}`);
       }
     }
 
@@ -213,7 +187,7 @@ export const ticketService = {
     checkPermission(session, 'delete');
 
     const ticket = await ticketRepository.findById(id);
-    if (!ticket) throw new TicketNotFoundError(id);
+    if (!ticket) throw new NotFoundError(`Ticket not found: ${id}`);
 
     return ticketRepository.delete(id);
   },

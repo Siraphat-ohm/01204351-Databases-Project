@@ -14,26 +14,7 @@ import {
   type PaginationParams,
 } from '@/services/_shared/pagination';
 
-export class FlightOpsLogNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Flight ops log not found: ${id}`);
-    this.name = 'FlightOpsLogNotFoundError';
-  }
-}
-
-export class FlightNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Flight not found: ${id}`);
-    this.name = 'FlightNotFoundError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on flight ops log`);
-    this.name = 'UnauthorizedError';
-  }
-}
+import { NotFoundError, UnauthorizedError } from '@/lib/errors';
 
 function canRead(session: Session) {
   return hasAnyRole(session, ['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC']);
@@ -48,7 +29,7 @@ export const flightOpsLogService = {
     if (!canRead(session)) throw new UnauthorizedError('read');
 
     const row = await flightOpsLogRepository.findById(id);
-    if (!row) throw new FlightOpsLogNotFoundError(id);
+    if (!row) throw new NotFoundError(`Flight ops log not found: ${id}`);
     return row;
   },
 
@@ -56,10 +37,10 @@ export const flightOpsLogService = {
     if (!canRead(session)) throw new UnauthorizedError('read');
 
     const flight = await flightRepository.findById(flightId);
-    if (!flight) throw new FlightNotFoundError(flightId);
+    if (!flight) throw new NotFoundError(`Flight not found: ${flightId}`);
 
     const row = await flightOpsLogRepository.findByFlightId(flightId);
-    if (!row) throw new FlightOpsLogNotFoundError(flightId);
+    if (!row) throw new NotFoundError(`Flight ops log not found: ${flightId}`);
     return row;
   },
 
@@ -98,7 +79,7 @@ export const flightOpsLogService = {
     if (!canWrite(session)) throw new UnauthorizedError('upsert');
 
     const flight = await flightRepository.findById(flightId);
-    if (!flight) throw new FlightNotFoundError(flightId);
+    if (!flight) throw new NotFoundError(`Flight not found: ${flightId}`);
 
     const data = upsertFlightOpsLogSchema.parse(input);
     return flightOpsLogRepository.upsertByFlightId(flightId, data);
@@ -109,7 +90,7 @@ export const flightOpsLogService = {
 
     const data = patchFlightOpsLogSchema.parse(input);
     const row = await flightOpsLogRepository.patchById(id, data);
-    if (!row) throw new FlightOpsLogNotFoundError(id);
+    if (!row) throw new NotFoundError(`Flight ops log not found: ${id}`);
 
     return row;
   },
@@ -118,7 +99,7 @@ export const flightOpsLogService = {
     if (!canWrite(session)) throw new UnauthorizedError('delete');
 
     const row = await flightOpsLogRepository.deleteById(id);
-    if (!row) throw new FlightOpsLogNotFoundError(id);
+    if (!row) throw new NotFoundError(`Flight ops log not found: ${id}`);
 
     return row;
   },
