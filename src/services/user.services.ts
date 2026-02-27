@@ -82,4 +82,23 @@ export const userService = {
 
     return userRepository.updateRole(id, data.role);
   },
+
+  async updateUser(id: string, input: UpdateMyProfileInput, session: Session) {
+    assertAdmin(session, 'update');
+
+    const data = updateMyProfileSchema.parse(input);
+    const existing = await userRepository.findByIdAdmin(id);
+    if (!existing) throw new NotFoundError(`User not found: ${id}`);
+
+    return userRepository.update(id, data);
+  },
+
+  async deleteUser(id: string, session: Session) {
+    assertAdmin(session, 'delete');
+
+    const existing = await userRepository.findByIdAdmin(id);
+    if (!existing) throw new NotFoundError(`User not found: ${id}`);
+
+    return userRepository.delete(id);
+  },
 };
