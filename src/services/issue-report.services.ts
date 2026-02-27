@@ -42,7 +42,7 @@ export const issueReportService = {
 
   async findMinePaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Record<string, unknown>>,
   ): Promise<PaginatedResponse<Awaited<ReturnType<typeof issueReportRepository.findAll>>[number]>> {
     const { page, limit, skip } = resolvePagination(params);
 
@@ -73,17 +73,15 @@ export const issueReportService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Record<string, unknown>>,
   ): Promise<PaginatedResponse<Awaited<ReturnType<typeof issueReportRepository.findAll>>[number]>> {
     if (!isAdmin(session)) throw new UnauthorizedError('read-all');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      issueReportRepository.findMany({
-        skip,
-        take: limit,
-      }),
-      issueReportRepository.count(),
+      issueReportRepository.findMany({ where, skip, take: limit }),
+      issueReportRepository.count(where),
     ]);
 
     return {
