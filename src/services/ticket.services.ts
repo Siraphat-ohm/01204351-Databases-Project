@@ -10,6 +10,7 @@ import {
 import type { PaginatedResponse } from '@/types/common';
 import { canAccessTicket } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import type { Prisma } from '@/generated/prisma/client';
 import {
   makeCheckPermission,
   hasPermission,
@@ -108,17 +109,15 @@ export const ticketService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.TicketWhereInput>,
   ): Promise<PaginatedResponse<TicketListItem>> {
     checkPermission(session, 'read-all');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      ticketRepository.findMany({
-        skip,
-        take: limit,
-      }),
-      ticketRepository.count(),
+      ticketRepository.findMany({ where, skip, take: limit }),
+      ticketRepository.count(where),
     ]);
 
     return {
