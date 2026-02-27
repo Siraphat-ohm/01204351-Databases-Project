@@ -14,6 +14,14 @@ export default function HistoryPage() {
   const router = useRouter();
 
  const { data: session, isPending: isAuthLoading } = useAuthSession(); // Added isPending
+ const formatTime = (dateString: string) => {
+  if (!dateString) return "--:--";
+  return new Date(dateString).toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC' // Standard for flight history
+  }) ;
+};
 
   useEffect(() => {
     // 1. Handle the refresh/loading state properly
@@ -106,38 +114,44 @@ export default function HistoryPage() {
               >
                 <Flex align="stretch" direction={{ base: 'column', sm: 'row' }}>
                   
-                  {/* --- LEFT SECTION: CENTERED FLIGHT INFO --- */}
-                  <Stack p="xl" style={{ flex: 1 }} >
-                    <Group justify="space-between" align="start">
-                      <Badge color="blue" variant="filled" radius="xl">
-                        {group.flight?.flightCode}
-                      </Badge>
-                      <Text size="sm" fw={500} c="dimmed">Ref: {group.ref}</Text>
-                    </Group>
+{/* --- LEFT SECTION: CENTERED FLIGHT INFO --- */}
+<Stack p="xl" style={{ flex: 1 }}>
+  <Group justify="space-between" align="start">
+    <Badge color="blue" variant="filled" radius="xl">
+      {group.flight?.flightCode}
+    </Badge>
+    <Text size="sm" fw={500} c="dimmed">Ref: {group.ref}</Text>
+  </Group>
 
-                    <Group justify="space-between" align="center" mt="md">
-                      <Stack gap={0}>
-                        <Text size="xl" fw={900}>{group.flight?.route?.origin?.iataCode}</Text>
-                        <Text size="sm" c="dimmed">{group.flight?.route?.origin?.city}</Text>
-                      </Stack>
-                      
-                      <Stack align="center" gap={0} style={{ flex: 1 }}>
-                        <IconPlaneDeparture color="gray" size={24} style={{ opacity: 0.5 }} />
-                        <Divider w="50%" />
-                      </Stack>
+  <Group justify="space-between" align="center" mt="md">
+    {/* ORIGIN */}
+    <Stack gap={0}>
+      <Text size="xl" fw={900}>{group.flight?.route?.origin?.iataCode}</Text>
+      <Text size="sm" c="dimmed">{group.flight?.route?.origin?.city}</Text>
+      {/* Added Departure Time */}
+      <Text size="sm" fw={700} c="blue.6">{formatTime(group.flight?.departureTime)}</Text>
+    </Stack>
+    
+    <Stack align="center" gap={0} style={{ flex: 1 }}>
+      <IconPlaneDeparture color="gray" size={24} style={{ opacity: 0.5 }} />
+      <Divider w="50%" />
+    </Stack>
 
-                      <Stack gap={0} align="flex-end">
-                        <Text size="xl" fw={900}>{group.flight?.route?.destination?.iataCode}</Text>
-                        <Text size="sm" c="dimmed">{group.flight?.route?.destination?.city}</Text>
-                      </Stack>
-                    </Group>
+    {/* DESTINATION */}
+    <Stack gap={0} align="flex-end">
+      <Text size="xl" fw={900}>{group.flight?.route?.destination?.iataCode}</Text>
+      <Text size="sm" c="dimmed">{group.flight?.route?.destination?.city}</Text>
+      {/* Added Arrival Time */}
+      <Text size="sm" fw={700} c="blue.6">{formatTime(group.flight?.arrivalTime)}</Text>
+    </Stack>
+  </Group>
 
-                    <Text size="sm" fw={600} mt="md">
-                      {new Date(group.flight?.departureTime).toLocaleString('en-GB', {
-                        weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                      })}
-                    </Text>
-                  </Stack>
+  <Text size="sm" fw={600} mt="md">
+    {new Date(group.flight?.departureTime).toLocaleString('en-GB', {
+      weekday: 'short', day: '2-digit', month: 'short', year: 'numeric'
+    })}
+  </Text>
+</Stack>
 
                   {/* --- RIGHT SECTION: PASSENGER DETAILS --- */}
                   <Stack p="lg" gap={0} bg="gray.0" style={{ borderLeft: '1px dashed #dee2e6', flex: 1 }}>

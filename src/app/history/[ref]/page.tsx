@@ -46,6 +46,29 @@ export default function BookingDetailsPage() {
       setLoading(false);
     }
   };
+  const formatUTCTime = (dateString: string) => {
+  if (!dateString) return "...";
+  const d = new Date(dateString);
+  return d.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "UTC",
+  }) ;
+};
+
+const getBoardingTimeUTC = (dateString: string) => {
+  if (!dateString) return "...";
+  const d = new Date(dateString);
+  // Aviation standard: Boarding starts ~40 mins before departure
+  const boarding = new Date(d.getTime() - 40 * 60000); 
+  return boarding.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "UTC",
+  }) ;
+};
 
   useEffect(() => {
     if (!session) {
@@ -187,34 +210,44 @@ const handleCheckIn = async (ticket: any) => { // Pass the whole ticket object
                       </Stack>
                     </Group>
 
-                    <Group mt="xl" justify="space-between" align="center">
-                      <div>
-                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                          From
-                        </Text>
-                        <Text size="xl" fw={900} lh={1}>
-                          {ticket.flight?.route?.origin?.iataCode}
-                        </Text>
-                        <Text size="sm">{ticket.flight?.route?.origin?.city}</Text>
-                      </div>
+<Group mt="xl" justify="space-between" align="center">
+  {/* Departure Column */}
+  <div>
+    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+      From
+    </Text>
+    <Text size="xl" fw={900} lh={1}>
+      {ticket.flight?.route?.origin?.iataCode}
+    </Text>
+    <Text size="sm">{ticket.flight?.route?.origin?.city}</Text>
+    {/* Added Departure Time */}
+    <Text size="md" fw={700} c="blue.7" mt={4}>
+      {formatUTCTime(ticket.flight?.departureTime)}
+    </Text>
+  </div>
 
-                      <Box style={{ textAlign: "center", opacity: 0.2 }}>
-                        <IconPlaneDeparture size={32} />
-                        <Divider w={80} />
-                      </Box>
+  <Box style={{ textAlign: "center", opacity: 0.2 }}>
+    <IconPlaneDeparture size={32} />
+    <Divider w={80} />
+  </Box>
 
-                      <div style={{ textAlign: "right" }}>
-                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                          To
-                        </Text>
-                        <Text size="xl" fw={900} lh={1}>
-                          {ticket.flight?.route?.destination?.iataCode}
-                        </Text>
-                        <Text size="sm">
-                          {ticket.flight?.route?.destination?.city}
-                        </Text>
-                      </div>
-                    </Group>
+  {/* Arrival Column */}
+  <div style={{ textAlign: "right" }}>
+    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+      To
+    </Text>
+    <Text size="xl" fw={900} lh={1}>
+      {ticket.flight?.route?.destination?.iataCode}
+    </Text>
+    <Text size="sm">
+      {ticket.flight?.route?.destination?.city}
+    </Text>
+    {/* Added Arrival Time */}
+    <Text size="md" fw={700} c="blue.7" mt={4}>
+      {formatUTCTime(ticket.flight?.arrivalTime)}
+    </Text>
+  </div>
+</Group>
 
                     <Divider variant="dashed" my="lg" />
 
@@ -238,7 +271,7 @@ const handleCheckIn = async (ticket: any) => { // Pass the whole ticket object
                           Boarding Time
                         </Text>
                         <Text fw={700} c="blue.7">
-                          04:20 PM
+                          {getBoardingTimeUTC(ticket.flight?.departureTime)}
                         </Text>
                       </div>
                     </Group>
