@@ -8,47 +8,56 @@ import { useAuthSession } from "@/services/auth-client.service";
 import { Navbar } from "@/components/Navbar";
 
 export default function HistoryPage() {
-  const { data: session } = useAuthSession();
+  
   const [groupedBookings, setGroupedBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+ const { data: session, isPending: isAuthLoading } = useAuthSession(); // Added isPending
+
   useEffect(() => {
-     if (!session) {
+    // 1. Handle the refresh/loading state properly
+    if (isAuthLoading) return;
+
+    if (!session) {
       router.replace(`/login`);
       return;
     }
+
     const fetchTickets = async () => {
       try {
         const res = await fetch("/api/v1/tickets");
         const data = await res.json();
         
-       if (Array.isArray(data)) {
-  const groups = data.reduce((acc: any, ticket: any) => {
-    const ref = ticket.booking?.bookingRef || "N/A";
-    if (!acc[ref]) {
-      acc[ref] = {
-        ref,
-        flight: ticket.flight,
-        booking: ticket.booking,
-        passengers: []
-      };
-    }
-    acc[ref].passengers.push(ticket);
-    return acc;
-  }, {});
+        if (Array.isArray(data)) {
+          // 2. FILTER ONLY CONFIRMED BOOKINGS
+          const confirmedTickets = data.filter(
+            (ticket: any) => ticket.booking?.status === "CONFIRMED"
+          );
 
-  // Convert to array and sort by booking creation date (Latest First)
-  const sortedGroups = Object.values(groups).sort((a: any, b: any) => {
-    const dateA = new Date(a.booking?.createdAt).getTime();
-    const dateB = new Date(b.booking?.createdAt).getTime();
-    
-    // Sort descending: most recent booking date first
-    return dateB - dateA;
-  });
+          // 3. GROUP THE FILTERED TICKETS
+          const groups = confirmedTickets.reduce((acc: any, ticket: any) => {
+            const ref = ticket.booking?.bookingRef || "N/A";
+            if (!acc[ref]) {
+              acc[ref] = {
+                ref,
+                flight: ticket.flight,
+                booking: ticket.booking,
+                passengers: []
+              };
+            }
+            acc[ref].passengers.push(ticket);
+            return acc;
+          }, {});
 
-  setGroupedBookings(sortedGroups);
-}
+          const sortedGroups = Object.values(groups).sort((a: any, b: any) => {
+            const dateA = new Date(a.booking?.createdAt).getTime();
+            const dateB = new Date(b.booking?.createdAt).getTime();
+            return dateB - dateA;
+          });
+
+          setGroupedBookings(sortedGroups);
+        }
       } catch (error) {
         console.error("Failed to fetch tickets", error);
       } finally {
@@ -56,8 +65,8 @@ export default function HistoryPage() {
       }
     };
 
-    if (session) fetchTickets();
-  }, [session]);
+    fetchTickets();
+  }, [session, isAuthLoading, router]); // Added dependencies
 
   if (loading) {
     return (

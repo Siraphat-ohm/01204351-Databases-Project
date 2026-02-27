@@ -55,17 +55,24 @@ export default function BookingDetailsPage() {
     fetchBookingDetails();
   }, [ref, session, router]);
 
-  const handleCheckIn = async (ticketId: string) => {
-    setCheckingInId(ticketId);
+const handleCheckIn = async (ticket: any) => { // Pass the whole ticket object
+    setCheckingInId(ticket.id);
     try {
-        console.log(ticketId)
-      const res = await fetch(`/api/v1/tickets/${ticketId}/check-in`, {
+      const res = await fetch(`/api/v1/tickets/${ticket.id}/check-in`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        // Send the existing ticket data so Zod validation passes
+        body: JSON.stringify({
+          firstName: ticket.firstName,
+          lastName: ticket.lastName,
+          seatNumber: ticket.seatNumber,
+        }),
       });
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Check-in failed");
+      }
 
       notifications?.show({
         title: "Success",
@@ -74,11 +81,11 @@ export default function BookingDetailsPage() {
       });
 
       await fetchBookingDetails();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
       notifications?.show({
         title: "Error",
-        message: "Check-in failed. Please try again.",
+        message: e.message || "Check-in failed. Please try again.",
         color: "red",
       });
     } finally {
@@ -344,16 +351,17 @@ export default function BookingDetailsPage() {
                     Successfully Checked In
                   </Badge>
                 ) : (
-                  <Button
-                    color="orange"
-                    radius="md"
-                    size="md"
-                    loading={checkingInId === ticket.id}
-                    onClick={() => handleCheckIn(ticket.id)}
-                    style={{ minWidth: 200 }}
-                  >
-                    Check In for {ticket.firstName}
-                  </Button>
+                // Inside your tickets.map loop:
+                <Button
+                color="orange"
+                radius="md"
+                size="md"
+                loading={checkingInId === ticket.id}
+                onClick={() => handleCheckIn(ticket)} // Pass ticket instead of ticket.id
+                style={{ minWidth: 200 }}
+                >
+                Check In for {ticket.firstName}
+                </Button>
                 )}
               </Group>
             </Stack>
