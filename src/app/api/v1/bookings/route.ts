@@ -11,6 +11,7 @@ import {
   validationErrorResponse,
   zodFieldErrors,
 } from '@/lib/utils/api-response';
+import { NotFoundError, ConflictError, UnauthorizedError, BadRequestError } from '@/lib/errors';
 import { enforceApiRateLimit } from '@/lib/utils/rate-limit';
 
 function canReadAll(role: string) {
@@ -62,12 +63,8 @@ export async function GET(req: NextRequest) {
     const result = await bookingService.findAllPaginated(serviceSession, { page, limit });
     return successResponse(result);
   } catch (err) {
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === 'BookingNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
     console.error('[GET /api/v1/bookings]', err);
     return errorResponse('Internal server error');
   }
@@ -105,36 +102,12 @@ export async function POST(req: NextRequest) {
 
     return successResponse(created, 201);
   } catch (err) {
-    if (err instanceof ZodError) {
-      return validationErrorResponse(zodFieldErrors(err));
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === 'BookingNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
-    if (err instanceof Error && err.name === 'BookingConflictError') {
-      return NextResponse.json({ error: err.message, validationCode: 'BOOKING_CONFLICT' }, {
-        status: 409,
-      });
-    }
-    if (err instanceof Error && err.name === 'BookingSeatConflictError') {
-      return NextResponse.json({ error: err.message, validationCode: 'SEAT_CONFLICT' }, {
-        status: 409,
-      });
-    }
-    if (err instanceof Error && err.name === 'BookingPassengerLimitError') {
-      return NextResponse.json(
-        { error: err.message, validationCode: 'PASSENGER_LIMIT' },
-        { status: 409 },
-      );
-    }
-    if (err instanceof Error && err.name === 'BookingPriceMismatchError') {
-      return NextResponse.json({ error: err.message, validationCode: 'PRICE_MISMATCH' }, {
-        status: 409,
-      });
-    }
+    if (err instanceof ZodError) return validationErrorResponse(zodFieldErrors(err));
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
+    if (err instanceof ConflictError) return NextResponse.json({ error: err.message }, { status: 409 });
+    if (err instanceof BadRequestError) return errorResponse(err.message, 400);
+
     console.error('[POST /api/v1/bookings]', err);
     return errorResponse('Internal server error');
   }
