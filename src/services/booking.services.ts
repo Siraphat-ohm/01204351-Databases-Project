@@ -27,6 +27,7 @@ import {
   FlightStatus,
 } from '@/generated/prisma/client';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import type { Prisma } from '@/generated/prisma/client';
 import {
   makeCheckPermission,
   hasPermission,
@@ -165,17 +166,15 @@ export const bookingService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.BookingWhereInput>,
   ): Promise<PaginatedResponse<BookingListItem>> {
     checkPermission(session, 'read-all');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      bookingRepository.findMany({
-        skip,
-        take: limit,
-      }),
-      bookingRepository.count(),
+      bookingRepository.findMany({ where, skip, take: limit }),
+      bookingRepository.count(where),
     ]);
 
     return {
