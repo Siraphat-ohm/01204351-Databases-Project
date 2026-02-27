@@ -24,6 +24,9 @@ import {
 import { TicketClass } from '@/generated/prisma/client';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import { makeCheckPermission } from '@/services/_shared/authorization';
+import type { PaginatedResponse } from '@/types/common';
+import type { Prisma } from '@/generated/prisma/client';
+import { resolvePagination, type PaginationParams } from '@/services/_shared/pagination';
 import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 
 
@@ -88,6 +91,30 @@ const PUBLIC_SESSION: Session = {
 };
 
 export const flightService = {
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams<Prisma.FlightWhereInput>,
+  ): Promise<PaginatedResponse<Awaited<ReturnType<typeof flightRepository.findAll>>[number]>> {
+    checkPermission(session, 'read');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
+    const [data, total] = await Promise.all([
+      flightRepository.findMany({ where, skip, take: limit }),
+      flightRepository.count(where),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  },
 
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
