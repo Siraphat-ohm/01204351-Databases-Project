@@ -9,6 +9,7 @@ import {
 import { canAccessAirport } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { PaginatedResponse } from '@/types/common';
+import type { Prisma } from '@/generated/prisma/client';
 import { makeCheckPermission } from '@/services/_shared/authorization';
 import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 import {
@@ -49,14 +50,15 @@ export const airportService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.AirportWhereInput>,
   ): Promise<PaginatedResponse<AirportListItem>> {
     checkPermission(session, 'read');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      airportRepository.findAll({ skip, take: limit }),
-      airportRepository.count(),
+      airportRepository.findAll({ where, skip, take: limit }),
+      airportRepository.count(where),
     ]);
 
     return {
@@ -73,7 +75,7 @@ export const airportService = {
   async searchPaginated(
     search: string,
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.AirportWhereInput>,
   ): Promise<PaginatedResponse<AirportListItem>> {
     checkPermission(session, 'read');
 
