@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ZodError } from 'zod';
+import { NotFoundError, UnauthorizedError } from '@/lib/errors';
 import { paymentLogService } from '@/services/payment-log.services';
 import { getServerSession } from '@/services/auth.services';
 import {
@@ -35,15 +36,8 @@ export async function GET(
 
     return successResponse(row);
   } catch (err) {
-    if (err instanceof Error && err.name === 'PaymentLogNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === 'BookingNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
     console.error('[GET /api/v1/payment-logs/[id]]', err);
     return errorResponse('Internal server error');
   }
@@ -74,15 +68,9 @@ export async function PATCH(
 
     return successResponse(row);
   } catch (err) {
-    if (err instanceof ZodError) {
-      return validationErrorResponse(zodFieldErrors(err));
-    }
-    if (err instanceof Error && err.name === 'PaymentLogNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
+    if (err instanceof ZodError) return validationErrorResponse(zodFieldErrors(err));
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
     console.error('[PATCH /api/v1/payment-logs/[id]]', err);
     return errorResponse('Internal server error');
   }
@@ -111,12 +99,8 @@ export async function DELETE(
 
     return successResponse(row);
   } catch (err) {
-    if (err instanceof Error && err.name === 'PaymentLogNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
     console.error('[DELETE /api/v1/payment-logs/[id]]', err);
     return errorResponse('Internal server error');
   }
