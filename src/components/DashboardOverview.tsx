@@ -182,8 +182,8 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
             </Center>
 
             <Text fw={700} mt="lg" mb="sm">Popular Destinations</Text>
-            {data.popularDestinations.map((dest) => (
-              <div key={dest.code} style={{ marginBottom: 10 }}>
+            {data.popularDestinations.map((dest, index) => (
+              <div key={`${dest.code}-${index}`} style={{ marginBottom: 10 }}>
                 <Group justify="space-between" mb={5}>
                   <Text size="xs">{dest.city} ({dest.code})</Text>
                   <Text size="xs" fw={500}>{dest.percentage}%</Text>

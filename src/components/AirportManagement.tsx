@@ -12,7 +12,8 @@ import { useState, useTransition, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-// import { deleteAirportAction } from '@/actions/airport-actions'; // Uncomment when ready
+// 🌟 Import the real server action
+import { deleteAirportAction } from '@/actions/airport-actions';
 
 export interface Airport {
   id: string; 
@@ -37,37 +38,50 @@ export function AirportManagement({ initialAirports, totalPages, currentPage }: 
 
   // Initialize Search from URL
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  
+  // Sync state if browser Back/Forward buttons are used
+  useEffect(() => {
+    setSearchTerm(searchParams.get('search') || '');
+  }, [searchParams]);
+
   const [isPending, startTransition] = useTransition();
 
   // Delete Modal State
   const [deleteOpened, { open: openDelete, close: closeDelete }] = useDisclosure(false);
   const [airportToDelete, setAirportToDelete] = useState<Airport | null>(null);
+  
+  // 🌟 NEW: Track deletion errors explicitly
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // ────────────────────────────────────────────────
-  // URL Sync for Search (Debounced)
+  // EXPLICIT SEARCH HANDLER (Wrapped in Transition)
   // ────────────────────────────────────────────────
-  useEffect(() => {
-    const handler = setTimeout(() => {
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    startTransition(() => {
       const params = new URLSearchParams(searchParams);
       
-      if (searchTerm) params.set('search', searchTerm);
+      if (searchTerm.trim()) params.set('search', searchTerm.trim());
       else params.delete('search');
 
-      // Reset to page 1 if searching
-      if (searchTerm !== (searchParams.get('search') || '') && currentPage !== 1) {
-         params.set('page', '1');
-      }
+      params.set('page', '1'); // Always reset to page 1 on a new search
 
       router.push(`${pathname}?${params.toString()}`);
-    }, 400); // 400ms debounce
-
-    return () => clearTimeout(handler);
-  }, [searchTerm, pathname, router, searchParams, currentPage]);
+    });
+  };
 
   const handlePageChange = (page: number) => {
-    const params = new URLSearchParams(searchParams);
-    params.set('page', page.toString());
-    router.push(`${pathname}?${params.toString()}`);
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams);
+      params.set('page', page.toString());
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    startTransition(() => router.push(pathname));
   };
 
   // ────────────────────────────────────────────────
@@ -76,12 +90,26 @@ export function AirportManagement({ initialAirports, totalPages, currentPage }: 
   const confirmDelete = async () => {
     if (!airportToDelete) return;
     
+    setDeleteError(null); // Clear previous errors
+
     startTransition(async () => {
-      // const result = await deleteAirportAction(airportToDelete.id);
-      const result = { error: null }; // Mock result
+      const result = await deleteAirportAction(airportToDelete.id);
       
       if (result?.error) {
-        notifications.show({ title: "Delete Failed", message: result.error, color: "red", icon: <X size={18} /> });
+        // 🌟 NORMALIZE THE ERROR MESSAGE 🌟
+        let friendlyError = result.error;
+        
+        // If the server throws the "in use" error, rewrite it completely to be helpful
+        if (friendlyError.includes("in use")) {
+          friendlyError = `Cannot delete ${airportToDelete.name} (${airportToDelete.iataCode}) because it is currently connected to active routes. You must delete those routes first.`;
+        } 
+        // Fallback: If it's a different error but still contains the ugly ID, swap it out
+        else if (friendlyError.includes(airportToDelete.id)) {
+          friendlyError = friendlyError.replace(airportToDelete.id, `${airportToDelete.name} (${airportToDelete.iataCode})`);
+        }
+
+        setDeleteError(friendlyError);
+        notifications.show({ title: "Delete Failed", message: "See details in the modal.", color: "red", icon: <X size={18} /> });
       } else {
         notifications.show({ title: "Deleted", message: `${airportToDelete.iataCode} has been removed.`, color: "green", icon: <Check size={18} /> });
         closeDelete();
@@ -91,8 +119,15 @@ export function AirportManagement({ initialAirports, totalPages, currentPage }: 
     });
   };
 
+  const handleCloseDeleteModal = () => {
+    if (isPending) return;
+    closeDelete();
+    setAirportToDelete(null);
+    setDeleteError(null); // Wipe error when closing
+  };
+
   // ────────────────────────────────────────────────
-  // Render (No client-side filter needed!)
+  // Render
   // ────────────────────────────────────────────────
   const rows = initialAirports.map((airport) => (
     <Table.Tr key={airport.id}>
@@ -122,7 +157,15 @@ export function AirportManagement({ initialAirports, totalPages, currentPage }: 
           <ActionIcon component={Link} href={`/admin/dashboard/airports/${airport.id}/edit`} variant="subtle" color="blue">
              <Pencil size={16} />
           </ActionIcon>
-          <ActionIcon variant="subtle" color="red" onClick={() => { setAirportToDelete(airport); openDelete(); }}>
+          <ActionIcon 
+            variant="subtle" 
+            color="red" 
+            onClick={() => { 
+              setAirportToDelete(airport); 
+              setDeleteError(null); // Reset error state on open
+              openDelete(); 
+            }}
+          >
             <Trash size={16} />
           </ActionIcon>
         </Group>
@@ -131,9 +174,7 @@ export function AirportManagement({ initialAirports, totalPages, currentPage }: 
   ));
 
   return (
-    <Box pos="relative">
-      <LoadingOverlay visible={isPending} overlayProps={{ radius: "sm", blur: 2 }} />
-
+    <Box>
       <Group justify="space-between" mb="lg">
         <div>
           <Title order={2}>Airport Management</Title>
@@ -144,16 +185,35 @@ export function AirportManagement({ initialAirports, totalPages, currentPage }: 
         </Button>
       </Group>
 
+      {/* ────────────────────────────────────────────────
+          SEARCH BAR (Submit via Form)
+          ──────────────────────────────────────────────── */}
       <Paper shadow="xs" p="md" mb="lg" withBorder>
-        <TextInput 
-          placeholder="Search by IATA, Name, City or Country..." 
-          leftSection={<Search size={16} />} 
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.currentTarget.value)}
-        />
+        <form onSubmit={handleSearch}>
+          <Group align="flex-end">
+            <TextInput 
+              label="Search Airports"
+              placeholder="Search by IATA, Name, City or Country... (Press Enter)" 
+              leftSection={<Search size={16} />} 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.currentTarget.value)}
+              style={{ flex: 1 }}
+              disabled={isPending}
+            />
+            <Button type="submit" color="blue" leftSection={<Search size={16} />} loading={isPending}>
+              Search
+            </Button>
+            {searchParams.get('search') && (
+              <Button variant="light" color="gray" onClick={clearFilters} disabled={isPending}>
+                Clear
+              </Button>
+            )}
+          </Group>
+        </form>
       </Paper>
 
-      <Paper shadow="xs" withBorder>
+      {/* 🌟 SIMPLE, SAFE LOADING EXPERIENCE 🌟 */}
+      <Paper shadow="xs" withBorder pos="relative">
         <Table.ScrollContainer minWidth={700}>
           <Table verticalSpacing="sm" striped highlightOnHover>
             <Table.Thead bg="gray.0">
@@ -185,13 +245,27 @@ export function AirportManagement({ initialAirports, totalPages, currentPage }: 
              value={currentPage}
              onChange={handlePageChange}
              color="blue" 
+             disabled={isPending}
            />
         </Center>
       )}
 
       {/* --- DELETE CONFIRMATION MODAL --- */}
-      <Modal opened={deleteOpened} onClose={closeDelete} title={<Group gap="xs" c="red"><AlertTriangle size={20} /> Confirm Deletion</Group>} centered>
+      <Modal 
+        opened={deleteOpened} 
+        onClose={handleCloseDeleteModal} 
+        title={<Group gap="xs" c="red"><AlertTriangle size={20} /> Confirm Deletion</Group>} 
+        centered
+        closeButtonProps={{ disabled: isPending }}
+      >
         <Stack>
+          {/* 🌟 NEW: Show server errors cleanly right inside the modal */}
+          {deleteError && (
+            <Alert color="red" title="Cannot Delete Airport" icon={<X size={16} />}>
+              {deleteError}
+            </Alert>
+          )}
+
           <Text size="sm">
             Are you sure you want to delete <strong>{airportToDelete?.name} ({airportToDelete?.iataCode})</strong>?
           </Text>
@@ -199,7 +273,7 @@ export function AirportManagement({ initialAirports, totalPages, currentPage }: 
             If this airport is currently used in active flight routes, the deletion will be rejected by the server.
           </Alert>
           <Group justify="flex-end" mt="md">
-            <Button variant="default" onClick={closeDelete} disabled={isPending}>Cancel</Button>
+            <Button variant="default" onClick={handleCloseDeleteModal} disabled={isPending}>Cancel</Button>
             <Button color="red" onClick={confirmDelete} loading={isPending} leftSection={!isPending && <Trash size={16} />}>
               Delete Airport
             </Button>

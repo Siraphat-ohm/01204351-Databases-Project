@@ -8,7 +8,9 @@ import {
 import { canAccessAircraft } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { PaginatedResponse } from '@/types/common';
-import { assertPermission } from '@/services/_shared/authorization';
+import type { Prisma } from '@/generated/prisma/client';
+import { makeCheckPermission } from '@/services/_shared/authorization';
+import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 import {
   resolvePagination,
   type PaginationParams,
@@ -16,52 +18,20 @@ import {
 
 type AircraftListItem = Awaited<ReturnType<typeof aircraftRepository.findAll>>[number];
 
-export class AircraftNotFoundError extends Error {
-  constructor(identifier: string) {
-    super(`Aircraft not found: ${identifier}`);
-    this.name = 'AircraftNotFoundError';
-  }
-}
 
-export class AircraftConflictError extends Error {
-  constructor(tailNumber: string) {
-    super(`Aircraft already exists: ${tailNumber}`);
-    this.name = 'AircraftConflictError';
-  }
-}
 
-export class AircraftInUseError extends Error {
-  constructor(aircraftId: string) {
-    super(`Cannot delete aircraft in use: ${aircraftId}`);
-    this.name = 'AircraftInUseError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on aircraft`);
-    this.name = 'UnauthorizedError';
-  }
-}
-
-const checkPermission = (
-  session: Session,
-  action: 'create' | 'read' | 'update' | 'delete' | 'manage-status',
-) =>
-  assertPermission(
-    session,
-    action,
-    canAccessAircraft,
-    'aircraft',
-    (a) => new UnauthorizedError(a),
-  );
+const checkPermission = makeCheckPermission(
+  canAccessAircraft,
+  'aircraft',
+  (a) => new UnauthorizedError(a),
+);
 
 export const aircraftService = {
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
 
     const aircraft = await aircraftRepository.findById(id);
-    if (!aircraft) throw new AircraftNotFoundError(id);
+    if (!aircraft) throw new NotFoundError(`Aircraft not found: ${id}`);
     return aircraft;
   },
 
@@ -72,14 +42,15 @@ export const aircraftService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.AircraftWhereInput>,
   ): Promise<PaginatedResponse<AircraftListItem>> {
     checkPermission(session, 'read');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      aircraftRepository.findAll({ skip, take: limit }),
-      aircraftRepository.count(),
+      aircraftRepository.findAll({ where, skip, take: limit }),
+      aircraftRepository.count(where),
     ]);
 
     return {
@@ -98,7 +69,7 @@ export const aircraftService = {
 
     const data = createAircraftSchema.parse(input);
     const existing = await aircraftRepository.findByTailNumber(data.tailNumber);
-    if (existing) throw new AircraftConflictError(data.tailNumber);
+    if (existing) throw new ConflictError(`Aircraft already exists: ${data.tailNumber}`);
 
     return aircraftRepository.create(data);
   },
@@ -108,11 +79,11 @@ export const aircraftService = {
 
     const data = updateAircraftSchema.parse(input);
     const existing = await aircraftRepository.findById(id);
-    if (!existing) throw new AircraftNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Aircraft not found: ${id}`);
 
     if (data.tailNumber && data.tailNumber !== existing.tailNumber) {
       const conflict = await aircraftRepository.findByTailNumber(data.tailNumber);
-      if (conflict) throw new AircraftConflictError(data.tailNumber);
+      if (conflict) throw new ConflictError(data.tailNumber);
     }
 
     return aircraftRepository.update(id, data);
@@ -122,7 +93,7 @@ export const aircraftService = {
     checkPermission(session, 'manage-status');
 
     const existing = await aircraftRepository.findById(id);
-    if (!existing) throw new AircraftNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Aircraft not found: ${id}`);
 
     return aircraftRepository.update(id, { status });
   },
@@ -131,10 +102,10 @@ export const aircraftService = {
     checkPermission(session, 'delete');
 
     const existing = await aircraftRepository.findById(id);
-    if (!existing) throw new AircraftNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Aircraft not found: ${id}`);
 
     const flightCount = await aircraftRepository.countFlights(id);
-    if (flightCount > 0) throw new AircraftInUseError(id);
+    if (flightCount > 0) throw new ConflictError(`Cannot delete aircraft in use: ${id}`);
 
     return aircraftRepository.delete(id);
   },

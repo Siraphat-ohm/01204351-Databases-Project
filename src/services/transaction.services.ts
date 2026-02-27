@@ -9,10 +9,11 @@ import {
 } from '@/types/payment.type';
 import type { PaginatedResponse } from '@/types/common';
 import { TransactionStatus, TransactionType } from '@/generated/prisma/client';
+import type { Prisma } from '@/generated/prisma/client';
 import { canAccessPayment } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import {
-  assertPermission,
+  makeCheckPermission,
   hasPermission,
 } from '@/services/_shared/authorization';
 import {
@@ -24,17 +25,11 @@ type TransactionListItem = Awaited<ReturnType<typeof paymentRepository.findAll>>
 
 import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 
-const checkPermission = (
-  session: Session,
-  action: 'create' | 'read' | 'refund' | 'read-all',
-) =>
-  assertPermission(
-    session,
-    action,
-    canAccessPayment,
-    'payment',
-    (a) => new UnauthorizedError(a),
-  );
+const checkPermission = makeCheckPermission(
+  canAccessPayment,
+  'payment',
+  (a) => new UnauthorizedError(a),
+);
 
 function canReadAll(session: Session) {
   return hasPermission(session, 'read-all', canAccessPayment);
@@ -79,17 +74,15 @@ export const transactionService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.TransactionWhereInput>,
   ): Promise<PaginatedResponse<TransactionListItem>> {
     checkPermission(session, 'read-all');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      paymentRepository.findMany({
-        skip,
-        take: limit,
-      }),
-      paymentRepository.count(),
+      paymentRepository.findMany({ where, skip, take: limit }),
+      paymentRepository.count(where),
     ]);
 
     return {
@@ -109,7 +102,7 @@ export const transactionService = {
     const data = createPaymentSchema.parse(input);
 
     const booking = await bookingRepository.findById(data.bookingId);
-    if (!booking) throw new TransactionNotFoundError(data.bookingId);
+    if (!booking) throw new NotFoundError(`Booking not found: ${data.bookingId}`);
 
     if (!canReadAll(session) && booking.userId !== session.user.id) {
       throw new UnauthorizedError('create');

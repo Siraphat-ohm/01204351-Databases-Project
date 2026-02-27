@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ZodError } from 'zod';
+import { NotFoundError, ConflictError, UnauthorizedError, BadRequestError } from '@/lib/errors';
 import { bookingService } from '@/services/booking.services';
 import { getServerSession } from '@/services/auth.services';
 import {
@@ -37,12 +38,8 @@ export async function GET(
 
     return successResponse(row);
   } catch (err) {
-    if (err instanceof Error && err.name === 'BookingNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
     console.error('[GET /api/v1/bookings/[id]]', err);
     return errorResponse('Internal server error');
   }
@@ -95,24 +92,12 @@ export async function PATCH(
       400,
     );
   } catch (err) {
-    if (err instanceof ZodError) {
-      return validationErrorResponse(zodFieldErrors(err));
-    }
-    if (err instanceof Error && err.name === 'BookingNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (
-      err instanceof Error &&
-      (err.name === 'BookingConflictError' ||
-        err.name === 'BookingAlreadyCancelledError' ||
-        err.name === 'BookingChangeNotAllowedError' ||
-        err.name === 'BookingReaccommodationError')
-    ) {
-      return errorResponse(err.message, 409);
-    }
+    if (err instanceof ZodError) return validationErrorResponse(zodFieldErrors(err));
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof ConflictError) return errorResponse(err.message, 409);
+    if (err instanceof BadRequestError) return errorResponse(err.message, 400);
+
     console.error('[PATCH /api/v1/bookings/[id]]', err);
     return errorResponse('Internal server error');
   }
@@ -141,15 +126,9 @@ export async function DELETE(
 
     return successResponse(row);
   } catch (err) {
-    if (err instanceof Error && err.name === 'BookingNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === 'BookingAlreadyCancelledError') {
-      return errorResponse(err.message, 409);
-    }
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof ConflictError) return errorResponse(err.message, 409);
     console.error('[DELETE /api/v1/bookings/[id]]', err);
     return errorResponse('Internal server error');
   }

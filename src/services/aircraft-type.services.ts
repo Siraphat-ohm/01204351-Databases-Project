@@ -9,7 +9,9 @@ import {
 import { canAccessAircraft } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { PaginatedResponse } from '@/types/common';
-import { assertPermission } from '@/services/_shared/authorization';
+import type { Prisma } from '@/generated/prisma/client';
+import { makeCheckPermission } from '@/services/_shared/authorization';
+import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 import {
   resolvePagination,
   type PaginationParams,
@@ -17,52 +19,18 @@ import {
 
 type AircraftTypeListItem = Awaited<ReturnType<typeof aircraftTypeRepository.findAll>>[number];
 
-export class AircraftTypeNotFoundError extends Error {
-  constructor(identifier: string) {
-    super(`Aircraft type not found: ${identifier}`);
-    this.name = 'AircraftTypeNotFoundError';
-  }
-}
-
-export class AircraftTypeConflictError extends Error {
-  constructor(iataCode: string) {
-    super(`Aircraft type already exists: ${iataCode}`);
-    this.name = 'AircraftTypeConflictError';
-  }
-}
-
-export class AircraftTypeInUseError extends Error {
-  constructor(aircraftTypeId: string) {
-    super(`Cannot delete aircraft type in use: ${aircraftTypeId}`);
-    this.name = 'AircraftTypeInUseError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on aircraft type`);
-    this.name = 'UnauthorizedError';
-  }
-}
-
-const checkPermission = (
-  session: Session,
-  action: 'create' | 'read' | 'update' | 'delete',
-) =>
-  assertPermission(
-    session,
-    action,
-    canAccessAircraft,
-    'aircraft',
-    (a) => new UnauthorizedError(a),
-  );
+const checkPermission = makeCheckPermission(
+  canAccessAircraft,
+  'aircraft',
+  (a) => new UnauthorizedError(a),
+);
 
 export const aircraftTypeService = {
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
 
     const aircraftType = await aircraftTypeRepository.findById(id);
-    if (!aircraftType) throw new AircraftTypeNotFoundError(id);
+    if (!aircraftType) throw new NotFoundError(`Aircraft type not found: ${id}`);
     return aircraftType;
   },
 
@@ -71,7 +39,7 @@ export const aircraftTypeService = {
 
     const code = aircraftTypeIataCodeSchema.parse(iataCode);
     const aircraftType = await aircraftTypeRepository.findByIataCode(code);
-    if (!aircraftType) throw new AircraftTypeNotFoundError(code);
+    if (!aircraftType) throw new NotFoundError(`Aircraft type not found: ${code}`);
     return aircraftType;
   },
 
@@ -82,14 +50,15 @@ export const aircraftTypeService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.AircraftTypeWhereInput>,
   ): Promise<PaginatedResponse<AircraftTypeListItem>> {
     checkPermission(session, 'read');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      aircraftTypeRepository.findAll({ skip, take: limit }),
-      aircraftTypeRepository.count(),
+      aircraftTypeRepository.findAll({ where, skip, take: limit }),
+      aircraftTypeRepository.count(where),
     ]);
 
     return {
@@ -108,7 +77,7 @@ export const aircraftTypeService = {
 
     const data = createAircraftTypeSchema.parse(input);
     const existing = await aircraftTypeRepository.findByIataCode(data.iataCode);
-    if (existing) throw new AircraftTypeConflictError(data.iataCode);
+    if (existing) throw new ConflictError(`Aircraft type already exists: ${data.iataCode}`);
 
     return aircraftTypeRepository.create(data);
   },
@@ -118,11 +87,11 @@ export const aircraftTypeService = {
 
     const data = updateAircraftTypeSchema.parse(input);
     const existing = await aircraftTypeRepository.findById(id);
-    if (!existing) throw new AircraftTypeNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Aircraft type not found: ${id}`);
 
     if (data.iataCode && data.iataCode !== existing.iataCode) {
       const conflict = await aircraftTypeRepository.findByIataCode(data.iataCode);
-      if (conflict) throw new AircraftTypeConflictError(data.iataCode);
+      if (conflict) throw new ConflictError(`Aircraft type already exists: ${data.iataCode}`);
     }
 
     return aircraftTypeRepository.update(id, data);
@@ -132,10 +101,10 @@ export const aircraftTypeService = {
     checkPermission(session, 'delete');
 
     const existing = await aircraftTypeRepository.findById(id);
-    if (!existing) throw new AircraftTypeNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Aircraft type not found: ${id}`);
 
     const fleetCount = await aircraftTypeRepository.countFleet(id);
-    if (fleetCount > 0) throw new AircraftTypeInUseError(id);
+    if (fleetCount > 0) throw new ConflictError(`Cannot delete aircraft type in use: ${id}`);
 
     return aircraftTypeRepository.delete(id);
   },

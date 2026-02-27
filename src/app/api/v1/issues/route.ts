@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ZodError } from 'zod';
+import { NotFoundError, ConflictError, UnauthorizedError, BadRequestError } from '@/lib/errors';
 import { issueReportService } from '@/services/issue-report.services';
 import { getServerSession } from '@/services/auth.services';
 import {
@@ -37,9 +38,7 @@ export async function GET(req: NextRequest) {
     const result = await issueReportService.findMinePaginated(serviceSession, { page, limit });
     return successResponse(result);
   } catch (err) {
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
     console.error('[GET /api/v1/issues]', err);
     return errorResponse('Internal server error');
   }
@@ -68,9 +67,7 @@ export async function POST(req: NextRequest) {
 
     return successResponse(created, 201);
   } catch (err) {
-    if (err instanceof ZodError) {
-      return validationErrorResponse(zodFieldErrors(err));
-    }
+    if (err instanceof ZodError) return validationErrorResponse(zodFieldErrors(err));
     console.error('[POST /api/v1/issues]', err);
     return errorResponse('Internal server error');
   }

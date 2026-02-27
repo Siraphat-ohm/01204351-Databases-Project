@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ZodError } from 'zod';
+import { NotFoundError, ConflictError, UnauthorizedError, BadRequestError } from '@/lib/errors';
 import { paymentLogService } from '@/services/payment-log.services';
 import { getServerSession } from '@/services/auth.services';
 import {
@@ -38,12 +39,8 @@ export async function GET(req: NextRequest) {
     const result = await paymentLogService.findAllPaginated(serviceSession, { page, limit });
     return successResponse(result);
   } catch (err) {
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === 'BookingNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
     console.error('[GET /api/v1/payment-logs]', err);
     return errorResponse('Internal server error');
   }
@@ -69,15 +66,9 @@ export async function POST(req: NextRequest) {
 
     return successResponse(created, 201);
   } catch (err) {
-    if (err instanceof ZodError) {
-      return validationErrorResponse(zodFieldErrors(err));
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === 'BookingNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
+    if (err instanceof ZodError) return validationErrorResponse(zodFieldErrors(err));
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
     console.error('[POST /api/v1/payment-logs]', err);
     return errorResponse('Internal server error');
   }

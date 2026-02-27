@@ -9,7 +9,9 @@ import {
 import { canAccessAirport } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { PaginatedResponse } from '@/types/common';
-import { assertPermission } from '@/services/_shared/authorization';
+import type { Prisma } from '@/generated/prisma/client';
+import { makeCheckPermission } from '@/services/_shared/authorization';
+import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 import {
   resolvePagination,
   type PaginationParams,
@@ -17,52 +19,18 @@ import {
 
 type AirportListItem = Awaited<ReturnType<typeof airportRepository.findAll>>[number];
 
-export class AirportNotFoundError extends Error {
-  constructor(identifier: string) {
-    super(`Airport not found: ${identifier}`);
-    this.name = 'AirportNotFoundError';
-  }
-}
-
-export class AirportConflictError extends Error {
-  constructor(iataCode: string) {
-    super(`Airport already exists: ${iataCode}`);
-    this.name = 'AirportConflictError';
-  }
-}
-
-export class AirportInUseError extends Error {
-  constructor(airportId: string) {
-    super(`Cannot delete airport in use: ${airportId}`);
-    this.name = 'AirportInUseError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on airport`);
-    this.name = 'UnauthorizedError';
-  }
-}
-
-const checkPermission = (
-  session: Session,
-  action: 'create' | 'read' | 'update' | 'delete',
-) =>
-  assertPermission(
-    session,
-    action,
-    canAccessAirport,
-    'airport',
-    (a) => new UnauthorizedError(a),
-  );
+const checkPermission = makeCheckPermission(
+  canAccessAirport,
+  'airport',
+  (a) => new UnauthorizedError(a),
+);
 
 export const airportService = {
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
 
     const airport = await airportRepository.findById(id);
-    if (!airport) throw new AirportNotFoundError(id);
+    if (!airport) throw new NotFoundError(`Airport not found: ${id}`);
     return airport;
   },
 
@@ -71,7 +39,7 @@ export const airportService = {
 
     const code = iataCodeSchema.parse(iataCode);
     const airport = await airportRepository.findByIataCode(code);
-    if (!airport) throw new AirportNotFoundError(code);
+    if (!airport) throw new NotFoundError(`Airport not found: ${code}`);
     return airport;
   },
 
@@ -82,14 +50,15 @@ export const airportService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.AirportWhereInput>,
   ): Promise<PaginatedResponse<AirportListItem>> {
     checkPermission(session, 'read');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      airportRepository.findAll({ skip, take: limit }),
-      airportRepository.count(),
+      airportRepository.findAll({ where, skip, take: limit }),
+      airportRepository.count(where),
     ]);
 
     return {
@@ -106,7 +75,7 @@ export const airportService = {
   async searchPaginated(
     search: string,
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.AirportWhereInput>,
   ): Promise<PaginatedResponse<AirportListItem>> {
     checkPermission(session, 'read');
 
@@ -143,7 +112,7 @@ export const airportService = {
 
     const data = createAirportSchema.parse(input);
     const existing = await airportRepository.findByIataCode(data.iataCode);
-    if (existing) throw new AirportConflictError(data.iataCode);
+    if (existing) throw new ConflictError(`Airport already exists: ${data.iataCode}`);
 
     return airportRepository.create(data);
   },
@@ -153,11 +122,11 @@ export const airportService = {
 
     const data = updateAirportSchema.parse(input);
     const existing = await airportRepository.findById(id);
-    if (!existing) throw new AirportNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Airport not found: ${id}`);
 
     if (data.iataCode && data.iataCode !== existing.iataCode) {
       const conflict = await airportRepository.findByIataCode(data.iataCode);
-      if (conflict) throw new AirportConflictError(data.iataCode);
+      if (conflict) throw new ConflictError(`Airport already exists: ${data.iataCode}`);
     }
 
     return airportRepository.update(id, data);
@@ -167,7 +136,7 @@ export const airportService = {
     checkPermission(session, 'delete');
 
     const existing = await airportRepository.findById(id);
-    if (!existing) throw new AirportNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Airport not found: ${id}`);
 
     const [routeCount, staffCount] = await Promise.all([
       airportRepository.countRoutes(id),
@@ -175,7 +144,7 @@ export const airportService = {
     ]);
 
     if (routeCount > 0 || staffCount > 0) {
-      throw new AirportInUseError(id);
+      throw new ConflictError(`Cannot delete airport in use: ${id}`);
     }
 
     return airportRepository.delete(id);
