@@ -51,17 +51,15 @@ export const flightOpsLogService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Record<string, unknown>>,
   ): Promise<PaginatedResponse<Awaited<ReturnType<typeof flightOpsLogRepository.findAll>>[number]>> {
     if (!canRead(session)) throw new UnauthorizedError('read-all');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      flightOpsLogRepository.findMany({
-        skip,
-        take: limit,
-      }),
-      flightOpsLogRepository.count(),
+      flightOpsLogRepository.findMany({ where, skip, take: limit }),
+      flightOpsLogRepository.count(where),
     ]);
 
     return {

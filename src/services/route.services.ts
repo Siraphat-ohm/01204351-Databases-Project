@@ -9,7 +9,8 @@ import {
 } from '@/types/route.type';
 import type { PaginatedResponse } from '@/types/common';
 import type { ServiceSession as Session } from '@/services/_shared/session';
-import { assertPermission } from '@/services/_shared/authorization';
+import type { Prisma } from '@/generated/prisma/client';
+import { makeCheckPermission } from '@/services/_shared/authorization';
 import {
   resolvePagination,
   type PaginationParams,
@@ -21,17 +22,11 @@ type RouteListItem = Awaited<ReturnType<typeof routeRepository.findAll>>[number]
 import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 
 
-const checkPermission = (
-  session: Session,
-  action: 'create' | 'read' | 'update' | 'delete',
-) =>
-  assertPermission(
-    session,
-    action,
-    canAccessRoute,
-    'route',
-    (a) => new UnauthorizedError(a),
-  );
+const checkPermission = makeCheckPermission(
+  canAccessRoute,
+  'route',
+  (a) => new UnauthorizedError(a),
+);
 
 
 export const routeService = {
@@ -81,17 +76,15 @@ export const routeService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.RouteWhereInput>,
   ): Promise<PaginatedResponse<RouteListItem>> {
     checkPermission(session, 'read');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      routeRepository.findMany({
-        skip,
-        take: limit,
-      }),
-      routeRepository.count(),
+      routeRepository.findMany({ where, skip, take: limit }),
+      routeRepository.count(where),
     ]);
 
     return {
@@ -108,7 +101,7 @@ export const routeService = {
   async searchPaginated(
     search: string,
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.RouteWhereInput>,
   ): Promise<PaginatedResponse<RouteListItem>> {
     checkPermission(session, 'read');
 

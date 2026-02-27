@@ -1,10 +1,11 @@
-export type PaginationParams = {
+export type PaginationParams<TWhere = Record<string, unknown>> = {
   page?: number;
   limit?: number;
+  where?: TWhere;
 };
 
-export function resolvePagination(
-  params?: PaginationParams,
+export function resolvePagination<TWhere = Record<string, unknown>>(
+  params?: PaginationParams<TWhere>,
   defaults?: { page?: number; limit?: number; maxLimit?: number },
 ) {
   const defaultPage = defaults?.page ?? 1;

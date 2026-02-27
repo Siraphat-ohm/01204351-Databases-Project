@@ -23,24 +23,13 @@ import {
 } from '@/schema/flight.schema';
 import { TicketClass } from '@/generated/prisma/client';
 import type { ServiceSession as Session } from '@/services/_shared/session';
-import { assertPermission } from '@/services/_shared/authorization';
+import { makeCheckPermission } from '@/services/_shared/authorization';
+import type { PaginatedResponse } from '@/types/common';
+import type { Prisma } from '@/generated/prisma/client';
+import { resolvePagination, type PaginationParams } from '@/services/_shared/pagination';
+import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 
 
-export class FlightNotFoundError extends Error {
-  constructor(id: string) { super(`Flight not found: ${id}`); this.name = 'FlightNotFoundError'; }
-}
-export class FlightConflictError extends Error {
-  constructor(code: string) { super(`Flight already exists: ${code}`); this.name = 'FlightConflictError'; }
-}
-export class FlightInUseError extends Error {
-  constructor(id: string) { super(`Cannot delete flight with bookings: ${id}`); this.name = 'FlightInUseError'; }
-}
-export class UnauthorizedError extends Error {
-  constructor(action: string) { super(`Unauthorized: "${action}" on flight`); this.name = 'UnauthorizedError'; }
-}
-export class AircraftNotFoundError extends Error {
-  constructor(id: string) { super(`Aircraft not found: ${id}`); this.name = 'AircraftNotFoundError'; }
-}
 export class FlightSeatReassignmentError extends Error {
   constructor(message: string) { super(message); this.name = 'FlightSeatReassignmentError'; }
 }
@@ -88,17 +77,11 @@ function buildSeatsByClass(layout: NonNullable<Awaited<ReturnType<typeof seatRep
   return byClass;
 }
 
-const checkPermission = (
-  session: Session,
-  action: 'create' | 'read' | 'update' | 'delete' | 'manage-status',
-) =>
-  assertPermission(
-    session,
-    action,
-    canAccessFlight,
-    'flight',
-    (a) => new UnauthorizedError(a),
-  );
+const checkPermission = makeCheckPermission(
+  canAccessFlight,
+  'flight',
+  (a) => new UnauthorizedError(a),
+);
 
 const PUBLIC_SESSION: Session = {
   user: {
@@ -109,10 +92,34 @@ const PUBLIC_SESSION: Session = {
 
 export const flightService = {
 
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams<Prisma.FlightWhereInput>,
+  ): Promise<PaginatedResponse<Awaited<ReturnType<typeof flightRepository.findAll>>[number]>> {
+    checkPermission(session, 'read');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
+    const [data, total] = await Promise.all([
+      flightRepository.findMany({ where, skip, take: limit }),
+      flightRepository.count(where),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  },
+
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
     const flight = await flightRepository.findByIdForRole(id, session.user.role);
-    if (!flight) throw new FlightNotFoundError(id);
+    if (!flight) throw new NotFoundError(`Flight not found: ${id}`);
     return flight;
   },
 
@@ -120,7 +127,7 @@ export const flightService = {
     checkPermission(session, 'read');
     const flightCode = flightCodeSchema.parse(code);
     const flight = await flightRepository.findByCodeForRole(flightCode, session.user.role);
-    if (!flight) throw new FlightNotFoundError(flightCode);
+    if (!flight) throw new NotFoundError(`Flight not found: ${flightCode}`);
     return flight;
   },
 
@@ -147,7 +154,7 @@ export const flightService = {
   async findDetailWithAvailability(params: FlightCodeSearchParams, session: Session) {
     checkPermission(session, 'read');
     const flight = await flightRepository.findDetailByCode(params);
-    if (!flight) throw new FlightNotFoundError(params.flightCode);
+    if (!flight) throw new NotFoundError(`Flight not found: ${params.flightCode}`);
 
     const seatAvailability = await getSeatAvailability(
       flight.id,
@@ -175,7 +182,7 @@ export const flightService = {
     checkPermission(session, 'create');
     const data     = createFlightSchema.parse(input);
     const existing = await flightRepository.findByCode(data.flightCode);
-    if (existing) throw new FlightConflictError(data.flightCode);
+    if (existing) throw new ConflictError(data.flightCode);
     return flightRepository.create(data);
   },
 
@@ -183,10 +190,10 @@ export const flightService = {
     checkPermission(session, 'update');
     const data     = updateFlightSchema.parse(input);
     const existing = await flightRepository.findById(id);
-    if (!existing) throw new FlightNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Flight not found: ${id}`);
     if (data.flightCode && data.flightCode !== existing.flightCode) {
       const conflict = await flightRepository.findByCode(data.flightCode);
-      if (conflict) throw new FlightConflictError(data.flightCode);
+      if (conflict) throw new ConflictError(data.flightCode);
     }
     return flightRepository.update(id, data);
   },
@@ -194,7 +201,7 @@ export const flightService = {
   async updateStatus(id: string, status: UpdateFlightInput['status'], session: Session) {
     checkPermission(session, 'manage-status');
     const existing = await flightRepository.findById(id);
-    if (!existing) throw new FlightNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Flight not found: ${id}`);
     return flightRepository.update(id, { status });
   },
 
@@ -207,14 +214,14 @@ export const flightService = {
 
     const data = changeFlightAircraftSchema.parse(input);
     const existing = await flightRepository.findById(id);
-    if (!existing) throw new FlightNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Flight not found: ${id}`);
 
     if (existing.aircraftId === data.aircraftId) {
-      throw new FlightConflictError('New aircraft must be different from current aircraft');
+      throw new ConflictError('New aircraft must be different from current aircraft');
     }
 
     const newAircraft = await aircraftRepository.findById(data.aircraftId);
-    if (!newAircraft) throw new AircraftNotFoundError(data.aircraftId);
+    if (!newAircraft) throw new NotFoundError(`Aircraft not found: ${data.aircraftId}`);
 
     const layout = await seatRepository.findLayoutByAircraftTypeIataCode(newAircraft.type.iataCode);
     if (!layout) {
@@ -314,7 +321,7 @@ export const flightService = {
       seatAssignments,
     });
 
-    if (!updatedFlight) throw new FlightNotFoundError(id);
+    if (!updatedFlight) throw new NotFoundError(`Flight not found: ${id}`);
 
     const pendingBookingIds = await bookingRepository.markReaccommodationPendingByTicketIds(
       overflowTicketIds,
@@ -336,9 +343,9 @@ export const flightService = {
   async deleteFlight(id: string, session: Session) {
     checkPermission(session, 'delete');
     const existing = await flightRepository.findById(id);
-    if (!existing) throw new FlightNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Flight not found: ${id}`);
     const bookingCount = await flightRepository.countBookings(id);
-    if (bookingCount > 0) throw new FlightInUseError(id);
+    if (bookingCount > 0) throw new ConflictError(`Cannot delete flight with ${bookingCount} booking(s)`);
     return flightRepository.delete(id);
   },
 };

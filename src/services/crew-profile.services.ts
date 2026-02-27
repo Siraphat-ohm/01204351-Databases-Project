@@ -45,17 +45,15 @@ export const crewProfileService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Record<string, unknown>>,
   ): Promise<PaginatedResponse<CrewProfileListItem>> {
     if (!isAdmin(session)) throw new UnauthorizedError('read-all');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      crewProfileRepository.findMany({
-        skip,
-        take: limit,
-      }),
-      crewProfileRepository.count(),
+      crewProfileRepository.findMany({ where, skip, take: limit }),
+      crewProfileRepository.count(where),
     ]);
 
     return {

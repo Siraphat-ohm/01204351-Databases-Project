@@ -54,17 +54,15 @@ export const paymentLogService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Record<string, unknown>>,
   ): Promise<PaginatedResponse<Awaited<ReturnType<typeof paymentLogRepository.findAll>>[number]>> {
     if (!isAdmin(session)) throw new UnauthorizedError('read-all');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      paymentLogRepository.findMany({
-        skip,
-        take: limit,
-      }),
-      paymentLogRepository.count(),
+      paymentLogRepository.findMany({ where, skip, take: limit }),
+      paymentLogRepository.count(where),
     ]);
 
     return {

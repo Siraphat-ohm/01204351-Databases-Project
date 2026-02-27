@@ -10,8 +10,9 @@ import {
 import type { PaginatedResponse } from '@/types/common';
 import { canAccessTicket } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import type { Prisma } from '@/generated/prisma/client';
 import {
-  assertPermission,
+  makeCheckPermission,
   hasPermission,
 } from '@/services/_shared/authorization';
 import {
@@ -23,17 +24,11 @@ type TicketListItem = Awaited<ReturnType<typeof ticketRepository.findAll>>[numbe
 
 import { NotFoundError, ConflictError, BadRequestError, UnauthorizedError } from '@/lib/errors';
 
-const checkPermission = (
-  session: Session,
-  action: 'create' | 'read' | 'update' | 'delete' | 'check-in' | 'read-all',
-) =>
-  assertPermission(
-    session,
-    action,
-    canAccessTicket,
-    'ticket',
-    (a) => new UnauthorizedError(a),
-  );
+const checkPermission = makeCheckPermission(
+  canAccessTicket,
+  'ticket',
+  (a) => new UnauthorizedError(a),
+);
 
 function canReadAll(session: Session) {
   return hasPermission(session, 'read-all', canAccessTicket);
@@ -114,17 +109,15 @@ export const ticketService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.TicketWhereInput>,
   ): Promise<PaginatedResponse<TicketListItem>> {
     checkPermission(session, 'read-all');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      ticketRepository.findMany({
-        skip,
-        take: limit,
-      }),
-      ticketRepository.count(),
+      ticketRepository.findMany({ where, skip, take: limit }),
+      ticketRepository.count(where),
     ]);
 
     return {
