@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ZodError } from 'zod';
+import { NotFoundError } from '@/lib/errors';
 import { crewProfileService } from '@/services/crew-profile.services';
 import { getServerSession } from '@/services/auth.services';
 import {
@@ -31,9 +32,7 @@ export async function GET(req: NextRequest) {
 
     return successResponse(result);
   } catch (err) {
-    if (err instanceof Error && err.name === 'CrewProfileNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
     console.error('[GET /api/v1/crew-profiles/me]', err);
     return errorResponse('Internal server error');
   }
