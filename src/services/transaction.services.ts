@@ -9,6 +9,7 @@ import {
 } from '@/types/payment.type';
 import type { PaginatedResponse } from '@/types/common';
 import { TransactionStatus, TransactionType } from '@/generated/prisma/client';
+import type { Prisma } from '@/generated/prisma/client';
 import { canAccessPayment } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import {
@@ -73,17 +74,15 @@ export const transactionService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.TransactionWhereInput>,
   ): Promise<PaginatedResponse<TransactionListItem>> {
     checkPermission(session, 'read-all');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      paymentRepository.findMany({
-        skip,
-        take: limit,
-      }),
-      paymentRepository.count(),
+      paymentRepository.findMany({ where, skip, take: limit }),
+      paymentRepository.count(where),
     ]);
 
     return {
