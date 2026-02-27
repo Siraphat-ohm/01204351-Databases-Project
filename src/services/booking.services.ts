@@ -28,7 +28,7 @@ import {
 } from '@/generated/prisma/client';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import {
-  assertPermission,
+  makeCheckPermission,
   hasPermission,
 } from '@/services/_shared/authorization';
 import {
@@ -40,17 +40,11 @@ type BookingListItem = Awaited<ReturnType<typeof bookingRepository.findAll>>[num
 
 import { NotFoundError, ConflictError, BadRequestError, UnauthorizedError } from '@/lib/errors';
 
-const checkPermission = (
-  session: Session,
-  action: 'create' | 'read' | 'cancel' | 'read-all',
-) =>
-  assertPermission(
-    session,
-    action,
-    canAccessBooking,
-    'booking',
-    (a) => new UnauthorizedError(a),
-  );
+const checkPermission = makeCheckPermission(
+  canAccessBooking,
+  'booking',
+  (a) => new UnauthorizedError(a),
+);
 
 function canReadAll(session: Session) {
   return hasPermission(session, 'read-all', canAccessBooking);
