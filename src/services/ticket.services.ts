@@ -132,12 +132,17 @@ export const ticketService = {
   },
 
   async checkInTicket(id: string, input: CheckInTicketInput, session: Session) {
-    checkPermission(session, 'check-in');
-
+    // fetch ticket first so we can allow ownership-based check-in for passengers
     const ticket = await ticketRepository.findById(id);
     if (!ticket) throw new NotFoundError(`Ticket not found: ${id}`);
 
-      if (ticket.checkedIn) throw new BadRequestError(`Ticket already checked in: ${id}`);
+    // allow if role has check-in permission (ground staff/admin),
+    // or if the ticket belongs to the current user (passenger checking own ticket)
+    if (!hasPermission(session, 'check-in', canAccessTicket) && ticket.booking.userId !== session.user.id) {
+      throw new UnauthorizedError('check-in');
+    }
+
+    if (ticket.checkedIn) throw new BadRequestError(`Ticket already checked in: ${id}`);
 
     const data = checkInTicketSchema.parse(input);
 

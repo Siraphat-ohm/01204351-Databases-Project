@@ -1,7 +1,7 @@
 "use client";
 
 import { Group, Button, Text, Menu, Avatar, rem, UnstyledButton } from "@mantine/core";
-import { IconLogout, IconChevronDown, IconTicket } from "@tabler/icons-react"; // Added IconTicket
+import { IconLogout, IconChevronDown, IconTicket, IconPlane } from "@tabler/icons-react"; // Added IconPlane
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuthSession, signOutCurrentUser } from "@/services/auth-client.service";
 
@@ -24,13 +24,13 @@ export function Navbar() {
   return (
     <nav style={{ height: rem(60), padding: '0 30px', borderBottom: '1px solid #eee', backgroundColor: 'white' }}>
       <Group justify="space-between" h="100%">
-        <Text fw={900} size="xl" style={{ cursor: 'pointer' }} onClick={() => router.push('/')}>
+        <Text fw={900} size="xl" style={{ cursor: 'pointer', letterSpacing: '1px' }} onClick={() => router.push('/')}>
           YOKAIRLINES
         </Text>
 
         <Group>
           {session ? (
-            <Menu shadow="md" width={200}>
+            <Menu shadow="md" width={200} transitionProps={{ transition: 'pop-top-right' }}>
               <Menu.Target>
                 <UnstyledButton>
                   <Group gap="xs">
@@ -44,7 +44,16 @@ export function Navbar() {
               </Menu.Target>
 
               <Menu.Dropdown>
-                {/* --- ADDED MY TICKETS ITEM --- */}
+                <Menu.Label>Services</Menu.Label>
+                
+                {/* --- ADDED SEARCH FLIGHTS ITEM --- */}
+                <Menu.Item 
+                  leftSection={<IconPlane size={14} />}
+                  onClick={() => router.push('/FlightSearch')}
+                >
+                  Search Flights
+                </Menu.Item>
+
                 <Menu.Item 
                   leftSection={<IconTicket size={14} />}
                   onClick={() => router.push('/history')}
@@ -54,6 +63,7 @@ export function Navbar() {
 
                 <Menu.Divider />
 
+                <Menu.Label>Account</Menu.Label>
                 <Menu.Item 
                   color="red" 
                   leftSection={<IconLogout size={14} />}

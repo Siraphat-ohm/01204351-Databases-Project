@@ -34,6 +34,10 @@ export default function PaymentPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+        if (!session) {
+      router.replace(`/login`);
+      return;
+    }
     const fetchDetails = async () => {
       if (!bookingId) {
         setError("No booking ID provided.");
