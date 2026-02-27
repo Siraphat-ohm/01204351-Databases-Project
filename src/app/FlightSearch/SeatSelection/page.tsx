@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import React from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { 
@@ -32,19 +32,47 @@ const formatDate = (dateString: string) => {
   });
 };
 
-// Updated type: Now includes passenger-specific email
 type PassengerDetails = {
   firstName: string;
   lastName: string;
   email: string;
 };
 
+// 1. Memoized the SeatButton component so it doesn't needlessly re-render
+const SeatButton = React.memo(function SeatButton({ label, isOccupied, isSelected, price, onClick }: any) {
+  return (
+    <Tooltip label={isOccupied ? `Seat ${label} - Occupied` : `Seat ${label} - THB ${price.toLocaleString()}`}>
+      <ActionIcon 
+        size={40} 
+        onClick={() => !isOccupied && onClick()} 
+        style={{
+          backgroundColor: isSelected 
+            ? 'var(--mantine-color-blue-filled)' 
+            : isOccupied 
+              ? 'var(--mantine-color-dark-5)'
+              : 'var(--mantine-color-gray-1)',
+          color: isSelected 
+            ? 'white' 
+            : isOccupied 
+              ? 'var(--mantine-color-dark-2)'
+              : 'var(--mantine-color-blue-6)',
+          border: isSelected || isOccupied ? 'none' : '1px solid var(--mantine-color-gray-4)',
+          cursor: isOccupied ? 'not-allowed' : 'pointer',
+          opacity: isOccupied ? 0.9 : 1
+        }}
+      >
+        <IconArmchair size={20} />
+      </ActionIcon>
+    </Tooltip>
+  );
+});
+
 export default function SeatSelectionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const departFlightCode = searchParams.get("departFlightCode");
   
-const { data: session } = useAuthSession();
+  const { data: session, isPending: isAuthLoading } = useAuthSession();
 
   const [loading, setLoading] = useState(true);
   const [isBooking, setIsBooking] = useState(false);
@@ -53,17 +81,17 @@ const { data: session } = useAuthSession();
   
   const initialSeats = parseInt(searchParams.get("adults") || "1");
   const [requiredSeats, setRequiredSeats] = useState(initialSeats > 0 ? initialSeats : 1);
-  
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   
-  // Passenger Data State
   const [passengerData, setPassengerData] = useState<Record<string, PassengerDetails>>({});
-  
-  // Unified Contact Information State
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
 
   useEffect(() => {
+    // 🚨 1. Add this line: If auth is still checking, do absolutely nothing yet.
+    if (isAuthLoading) return; 
+
+    // 2. NOW check if they are missing a session
     if (!session) {
       router.replace(`/login`);
       return;
@@ -89,22 +117,19 @@ const { data: session } = useAuthSession();
       }
     };
     if (departFlightCode) fetchData();
-  }, [departFlightCode]);
+  }, [departFlightCode, session, router]);
 
-  const getBasePriceForCabin = (cabinName: string) => {
+  // 2. useCallback to cache math functions so they don't rebuild on every keystroke
+  const getBasePriceForCabin = useCallback((cabinName: string) => {
     const cName = cabinName?.toUpperCase();
     const ecoPrice = Number(flight?.basePriceEconomy) || 1500;
     if (cName === "FIRST") return Number(flight?.basePriceFirst) || (ecoPrice * 4);
     if (cName === "BUSINESS") return Number(flight?.basePriceBusiness) || (ecoPrice * 2.5);
     return ecoPrice;
-  };
+  }, [flight]);
 
-const getSeatDetails = (seatLabel: string) => {
-    // 🚨 THE FIX: Added '.layout.' before '.seats' to match your JSON structure!
-    const seatObj = seatMap?.layout?.seats?.find((s: any) => 
-      s.label === seatLabel
-    );
-    
+  const getSeatDetails = useCallback((seatLabel: string) => {
+    const seatObj = seatMap?.layout?.seats?.find((s: any) => s.label === seatLabel);
     const rowNum = parseInt(seatLabel.match(/\d+/)?.[0] || "0", 10);
     
     let cabinClass = "ECONOMY";
@@ -119,25 +144,24 @@ const getSeatDetails = (seatLabel: string) => {
 
     const basePrice = getBasePriceForCabin(cabinClass);
     const surcharge = Number(seatObj?.surcharge || 0);
-    // Fallback safely if seatObj is missing
     const trueBasePrice = seatObj?.price !== undefined ? (Number(seatObj.price) - surcharge) : basePrice;
     const finalPrice = trueBasePrice + surcharge;
-    
-    // Now that we are looking in the right place, this will correctly spot "OCCUPIED"
     const isOccupied = seatObj?.status === "OCCUPIED";
 
     return { cabinClass, trueBasePrice, surcharge, finalPrice, isOccupied };
-  };
+  }, [seatMap, getBasePriceForCabin]);
 
-  const totalPrice = selectedSeats.reduce((total, code) => total + getSeatDetails(code).finalPrice, 0);
+  // 3. useMemo to only calculate total price when selected seats ACTUALLY change
+  const totalPrice = useMemo(() => {
+    return selectedSeats.reduce((total, code) => total + getSeatDetails(code).finalPrice, 0);
+  }, [selectedSeats, getSeatDetails]);
 
-const handleProceedToPayment = async () => {
+  const handleProceedToPayment = async () => {
     if (isBooking) return;
     setIsBooking(true);
     
-    // Construct the precise Payload exactly as requested
     const payload = {
-      userId: session?.user?.id || "", 
+      userId: session?.user?.id,
       flightId: flight?.id || "",
       totalPrice: Number(totalPrice),
       currency: "THB",
@@ -145,14 +169,12 @@ const handleProceedToPayment = async () => {
       contactPhone: contactPhone.trim(),
       tickets: selectedSeats.map(code => {
         const { cabinClass, trueBasePrice, surcharge } = getSeatDetails(code);
-        
-        // 🚨 FIX: Map the UI cabin class to the strict backend Zod Enum
         let backendClass = "ECONOMY";
         if (cabinClass.toUpperCase().includes("FIRST")) backendClass = "FIRST_CLASS";
         else if (cabinClass.toUpperCase().includes("BUSINESS")) backendClass = "BUSINESS";
         
         return {
-          class: backendClass, // Sending the mapped strict string
+          class: backendClass,
           seatNumber: code,
           price: Number(trueBasePrice),
           seatSurcharge: Number(surcharge),
@@ -162,7 +184,7 @@ const handleProceedToPayment = async () => {
         };
       })
     };
-
+    
     try {
       const res = await fetch('/api/v1/bookings', {
         method: 'POST',
@@ -179,28 +201,16 @@ const handleProceedToPayment = async () => {
         throw new Error(text || `Server responded with status ${res.status}`);
       }
 
-      // Handle precise backend errors from your API Route
       if (!res.ok) {
-        console.error("Backend Error Details:", JSON.stringify(result, null, 2));
-
-        // 1. Check for specific API Validation Codes (PRICE_MISMATCH, SEAT_CONFLICT, etc.)
-        if (result.validationCode) {
-           throw new Error(`Booking Error (${result.validationCode}): ${result.error}`);
-        }
-        
-        // 2. Check for Zod Validation Field Errors
+        if (result.validationCode) throw new Error(`Booking Error (${result.validationCode}): ${result.error}`);
         if (result?.error?.details || result?.details) {
           const zodErrors = Object.entries(result.error.details || result.details)
-            .map(([field, msg]) => `- ${field}: ${msg}`)
-            .join("\n");
+            .map(([field, msg]) => `- ${field}: ${msg}`).join("\n");
           throw new Error(`Form Validation Error:\n${zodErrors}`);
         }
-
-        // 3. Fallback error
         throw new Error(result?.error?.message || result?.error || result?.message || "Failed to create booking");
       }
 
-      // Extract ID and go to Payment
       const bookingId = result?.data?.id || result?.id;
       if (bookingId) {
         router.push(`/FlightSearch/Payment?bookingId=${bookingId}`);
@@ -215,15 +225,18 @@ const handleProceedToPayment = async () => {
     }
   };
 
-  const handleSeatClick = (seatCode: string) => {
+  // 4. Wrap handlers in useCallback so they don't recreate on every typing stroke
+  const handleSeatClick = useCallback((seatCode: string) => {
     const { isOccupied } = getSeatDetails(seatCode);
     if (isOccupied) return;
 
     if (selectedSeats.includes(seatCode)) {
       setSelectedSeats(prev => prev.filter(s => s !== seatCode));
-      const newData = { ...passengerData };
-      delete newData[seatCode];
-      setPassengerData(newData);
+      setPassengerData(prev => {
+        const newData = { ...prev };
+        delete newData[seatCode];
+        return newData;
+      });
     } else if (selectedSeats.length < requiredSeats) {
       setSelectedSeats(prev => [...prev, seatCode]);
       setPassengerData(prev => ({
@@ -231,7 +244,7 @@ const handleProceedToPayment = async () => {
         [seatCode]: { firstName: "", lastName: "", email: "" }
       }));
     }
-  };
+  }, [selectedSeats, requiredSeats, getSeatDetails]);
 
   const decreasePassengers = () => {
     if (requiredSeats > 1) {
@@ -239,9 +252,11 @@ const handleProceedToPayment = async () => {
       if (selectedSeats.length > newCount) {
         const seatToRemove = selectedSeats[selectedSeats.length - 1];
         setSelectedSeats(prev => prev.slice(0, -1));
-        const newData = { ...passengerData };
-        delete newData[seatToRemove];
-        setPassengerData(newData);
+        setPassengerData(prev => {
+          const newData = { ...prev };
+          delete newData[seatToRemove];
+          return newData;
+        });
       }
       setRequiredSeats(newCount);
     }
@@ -257,9 +272,40 @@ const handleProceedToPayment = async () => {
     }));
   };
 
-  if (loading) return <Center h="100vh"><Loader size="xl" /></Center>;
+  // 5. THE MAGIC: Cache the ENTIRE Seat Map grid rendering
+  // It will now ONLY re-render if seatMap or selectedSeats change. Typing ignores this block!
+  const renderedSeatMap = useMemo(() => {
+    return seatMap?.layout?.cabins?.map((cabin: any) => (
+      <Box key={cabin.cabin}>
+        <Divider label={`${cabin.cabin} CLASS`} labelPosition="center" mb="md" />
+        <Stack gap="xs" align="center">
+          {Array.from({ length: cabin.rowEnd - cabin.rowStart + 1 }, (_, i) => cabin.rowStart + i).map(row => (
+            <Group key={row} gap="xs">
+              {cabin.columns.map((col: string) => {
+                const code = `${row}${col}`;
+                const { isOccupied, finalPrice } = getSeatDetails(code);
+                return (
+                  <React.Fragment key={code}>
+                    <SeatButton 
+                      label={code} 
+                      isOccupied={isOccupied} 
+                      isSelected={selectedSeats.includes(code)}
+                      price={finalPrice}
+                      onClick={() => handleSeatClick(code)}
+                    />
+                    {cabin.aisleAfter?.includes(col) && <Box w={24} />}
+                  </React.Fragment>
+                );
+              })}
+            </Group>
+          ))}
+        </Stack>
+      </Box>
+    ));
+  }, [seatMap, selectedSeats, getSeatDetails, handleSeatClick]);
+
+  if (loading || isAuthLoading) return <Center h="100vh"><Loader size="xl" /></Center>;
   
-  // Validation Check: All passenger names/emails + Contact email & phone must be filled
   const allPassengersFilled = selectedSeats.length === requiredSeats && selectedSeats.every(s => {
     const p = passengerData[s];
     return p?.firstName?.trim().length > 0 && p?.lastName?.trim().length > 0 && p?.email?.trim().length > 0;
@@ -321,37 +367,11 @@ const handleProceedToPayment = async () => {
         </Paper>
 
         <Grid gutter="xl">
-          {/* Seat Map */}
+          {/* Seat Map - NOW MEMOIZED */}
           <Grid.Col span={{ base: 12, md: 7 }}>
             <Paper withBorder p="xl" radius="lg">
               <Stack gap="xl">
-                {seatMap?.layout?.cabins?.map((cabin: any) => (
-                  <Box key={cabin.cabin}>
-                    <Divider label={`${cabin.cabin} CLASS`} labelPosition="center" mb="md" />
-                    <Stack gap="xs" align="center">
-                      {Array.from({ length: cabin.rowEnd - cabin.rowStart + 1 }, (_, i) => cabin.rowStart + i).map(row => (
-                        <Group key={row} gap="xs">
-                          {cabin.columns.map((col: string) => {
-                            const code = `${row}${col}`;
-                            const { isOccupied, finalPrice } = getSeatDetails(code);
-                            return (
-                              <React.Fragment key={code}>
-                                <SeatButton 
-                                  label={code} 
-                                  isOccupied={isOccupied} 
-                                  isSelected={selectedSeats.includes(code)}
-                                  price={finalPrice}
-                                  onClick={() => handleSeatClick(code)}
-                                />
-                                {cabin.aisleAfter?.includes(col) && <Box w={24} />}
-                              </React.Fragment>
-                            );
-                          })}
-                        </Group>
-                      ))}
-                    </Stack>
-                  </Box>
-                ))}
+                {renderedSeatMap}
               </Stack>
             </Paper>
           </Grid.Col>
@@ -377,7 +397,6 @@ const handleProceedToPayment = async () => {
                 </Alert>
               ) : (
                 <Stack gap="lg">
-                  {/* Map over individual seats for First/Last Names and Email */}
                   {selectedSeats.map(code => {
                     const { cabinClass, finalPrice } = getSeatDetails(code);
                     return (
@@ -424,7 +443,6 @@ const handleProceedToPayment = async () => {
                     );
                   })}
 
-                  {/* Single Contact Information Box */}
                   <Paper withBorder p="sm" radius="md" bg="blue.0" style={{ borderColor: 'var(--mantine-color-blue-2)' }}>
                     <Text fw={700} size="sm" mb="xs" c="blue.9">Booking Contact Information</Text>
                     <Stack gap="xs">
@@ -470,38 +488,5 @@ const handleProceedToPayment = async () => {
         </Grid>
       </Container>
     </>
-  );
-}
-
-function SeatButton({ label, isOccupied, isSelected, price, onClick }: any) {
-  return (
-    <Tooltip label={isOccupied ? `Seat ${label} - Occupied` : `Seat ${label} - THB ${price.toLocaleString()}`}>
-      <ActionIcon 
-        size={40} 
-        // We handle the click block manually instead of using `disabled` so Mantine doesn't wash out our dark colors
-        onClick={() => !isOccupied && onClick()} 
-        style={{
-          // Selected: Solid Blue | Occupied: Dark Grey | Available: Light Grey
-          backgroundColor: isSelected 
-            ? 'var(--mantine-color-blue-filled)' 
-            : isOccupied 
-              ? 'var(--mantine-color-dark-5)' // Dark seat for occupied
-              : 'var(--mantine-color-gray-1)', // Light seat for available
-          
-          // Icon Color Inside the Button
-          color: isSelected 
-            ? 'white' 
-            : isOccupied 
-              ? 'var(--mantine-color-dark-2)' // Dimmed icon inside the dark seat
-              : 'var(--mantine-color-blue-6)', // Blue icon for available
-              
-          border: isSelected || isOccupied ? 'none' : '1px solid var(--mantine-color-gray-4)',
-          cursor: isOccupied ? 'not-allowed' : 'pointer',
-          opacity: isOccupied ? 0.9 : 1
-        }}
-      >
-        <IconArmchair size={20} />
-      </ActionIcon>
-    </Tooltip>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Paper,
@@ -16,82 +16,102 @@ import {
   LoadingOverlay,
   Box,
   Group,
+  Center,
+  Loader
 } from "@mantine/core";
 import { 
   IconAlertCircle, 
+  IconCheck,
   IconAt, 
   IconLock, 
   IconEye, 
   IconEyeOff 
 } from "@tabler/icons-react";
-import { signInWithEmail, signUpWithEmail } from "@/services/auth-client.service";
+// 1. IMPORT useAuthSession here
+import { signInWithEmail, signUpWithEmail, useAuthSession } from "@/services/auth-client.service";
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackURL = searchParams.get("callbackURL") || "/";
 
-  const [type, setType] = useState<"login" | "register">("login");
+  // 2. FETCH SESSION AND LOADING STATE
+  const { data: session, isPending: isAuthLoading } = useAuthSession();
 
+  const [type, setType] = useState<"login" | "register">("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-const [success, setSuccess] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError(null);
-  setSuccess(null); // Clear previous success messages
-
-  if (type === "register" && password !== confirmPassword) {
-    setError("Passwords do not match.");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    if (type === "login") {
-      const result = await signInWithEmail({ email, password, callbackURL });
-      if (result.ok) {
-        router.push(callbackURL);
-        router.refresh();
-      } else {
-        setError(result.error);
-      }
-    } else {
-      // REGISTRATION LOGIC
-      const result = await signUpWithEmail({ 
-        email, 
-        password, 
-        name: email.split('@')[0] 
-      });
-
-      if (result.ok) {
-        // SUCCESS: Switch to login mode
-        setType("login");
-        
-        // IMPORTANT: Clear password fields so they are empty for the login attempt
-        setPassword("");
-        setConfirmPassword("");
-        
-        // Show a success message so the user knows why they were switched
-        setSuccess("Account created successfully! Please log in.");
-      } else {
-        setError(result.error);
-      }
+  // 3. REDIRECT IF ALREADY LOGGED IN
+  useEffect(() => {
+    if (isAuthLoading) return; // Wait for auth to figure itself out
+    
+    if (session) {
+      // If they are already logged in, send them straight to FlightSearch
+      router.replace("/FlightSearch"); 
     }
-  } catch (err) {
-    setError("An unexpected error occurred.");
-  } finally {
-    setLoading(false);
-  }
-};
+  }, [session, isAuthLoading, router]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    if (type === "register" && password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      if (type === "login") {
+        const result = await signInWithEmail({ email, password, callbackURL });
+        if (result.ok) {
+          router.push(callbackURL);
+          router.refresh();
+        } else {
+          setError(result.error);
+        }
+      } else {
+        const result = await signUpWithEmail({ 
+          email, 
+          password, 
+          name: email.split('@')[0] 
+        });
+
+        if (result.ok) {
+          setType("login");
+          setPassword("");
+          setConfirmPassword("");
+          setSuccess("Account created successfully! Please log in.");
+        } else {
+          setError(result.error);
+        }
+      }
+    } catch (err) {
+      setError("An unexpected error occurred.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const renderVisibilityIcon = ({ reveal }: { reveal: boolean }) => 
     reveal ? <IconEyeOff size={18} stroke={1.5} /> : <IconEye size={18} stroke={1.5} />;
+
+  // 4. PREVENT UI FLASHING
+  // If auth is still checking, OR if they are logged in and we are waiting for the redirect to happen, show a loading screen.
+  if (isAuthLoading || session) {
+    return (
+      <Box bg="gray.0" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader size="xl" />
+      </Box>
+    );
+  }
 
   return (
     <Box bg="gray.0" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -103,15 +123,22 @@ const handleSubmit = async (e: React.FormEvent) => {
           {type === "login" ? "Sign in to your account" : "Register for a new account"}
         </Text>
 
-        {/* Fixed width set here (400px) ensures no width-snapping */}
         <Paper withBorder shadow="md" p={30} radius="md" pos="relative" w={400}>
           <LoadingOverlay visible={loading} zIndex={1000} overlayProps={{ radius: "sm", blur: 2 }} />
           
           <form onSubmit={handleSubmit}>
             <Stack gap="md">
+              {/* Error Alert */}
               {error && (
                 <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" py="xs">
                   {error}
+                </Alert>
+              )}
+
+              {/* Success Alert (Added this so your state actually shows up!) */}
+              {success && (
+                <Alert icon={<IconCheck size={16} />} color="green" variant="light" py="xs">
+                  {success}
                 </Alert>
               )}
 
@@ -160,6 +187,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               onClick={() => {
                 setType(type === "login" ? "register" : "login");
                 setError(null);
+                setSuccess(null);
               }}
             >
               {type === "login" ? "Create an account" : "Back to Login"}
