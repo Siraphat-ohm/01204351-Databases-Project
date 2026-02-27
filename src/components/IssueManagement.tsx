@@ -2,11 +2,13 @@
 
 import { 
   Title, Group, Button, Table, Badge, Text, ActionIcon, 
-  TextInput, Paper, Select, Modal, Stack, Textarea, Avatar, Alert, Anchor
+  TextInput, Paper, Select, Modal, Stack, Textarea, Avatar, Alert, LoadingOverlay, Center, Pagination, Box
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Search, Filter, Eye, AlertCircle, CheckCircle, Clock, Paperclip } from 'lucide-react';
-import { useState, useTransition } from 'react';
+import { Search, Filter, Eye, AlertCircle, CheckCircle, Clock, Paperclip, X } from 'lucide-react';
+import { useState, useTransition, useEffect } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { notifications } from '@mantine/notifications';
 import { updateIssueStatusAction } from '@/actions/issue-actions';
 
 // --- Types matching your Zod schema ---
@@ -29,19 +31,31 @@ interface IssueReport {
 
 interface IssueManagementProps {
   initialIssues: IssueReport[];
+  totalPages: number;
+  currentPage: number;
 }
 
-export function IssueManagement({ initialIssues }: IssueManagementProps) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+export function IssueManagement({ initialIssues, totalPages, currentPage }: IssueManagementProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Initialize search states from the URL
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [statusFilter, setStatusFilter] = useState<string | null>(searchParams.get('status'));
+
+  useEffect(() => {
+    setSearchTerm(searchParams.get('search') || '');
+    setStatusFilter(searchParams.get('status'));
+  }, [searchParams]);
   
+  // Transition and Loading State
+  const [isPending, startTransition] = useTransition();
+
   // Modal State
   const [opened, { open, close }] = useDisclosure(false);
   const [selectedIssue, setSelectedIssue] = useState<IssueReport | null>(null);
-  const [adminNote, setAdminNote] = useState(''); // For the optional note when updating
-  
-  // Update State
-  const [isPending, startTransition] = useTransition();
+  const [adminNote, setAdminNote] = useState(''); 
   const [updateError, setUpdateError] = useState<string | null>(null);
 
   // Status Helpers
@@ -68,7 +82,44 @@ export function IssueManagement({ initialIssues }: IssueManagementProps) {
     return text.charAt(0).toUpperCase() + text.slice(1).replace('_', ' ');
   };
 
-  // Handlers
+  // ────────────────────────────────────────────────
+  // EXPLICIT SEARCH & FILTER HANDLERS
+  // ────────────────────────────────────────────────
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams);
+      
+      if (searchTerm.trim()) params.set('search', searchTerm.trim());
+      else params.delete('search');
+
+      if (statusFilter) params.set('status', statusFilter);
+      else params.delete('status');
+
+      params.set('page', '1'); // Always reset to page 1 on new search
+
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  };
+
+  const handlePageChange = (page: number) => {
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams);
+      params.set('page', page.toString());
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter(null);
+    startTransition(() => router.push(pathname));
+  };
+
+  // ────────────────────────────────────────────────
+  // ISSUE MODAL HANDLERS
+  // ────────────────────────────────────────────────
   const handleViewIssue = (issue: IssueReport) => {
     setSelectedIssue(issue);
     setAdminNote('');
@@ -90,27 +141,17 @@ export function IssueManagement({ initialIssues }: IssueManagementProps) {
       if (result?.error) {
         setUpdateError(result.error);
       } else {
-        // Optimistically update local state
+        // Optimistically update local state so the modal reflects the change immediately
         setSelectedIssue({ ...selectedIssue, status: payload.status });
-        setAdminNote(''); // Clear note after success
+        setAdminNote(''); 
+        notifications.show({ title: "Status Updated", message: "Issue status has been saved.", color: "green", icon: <CheckCircle size={18} /> });
+        // Refresh the server data behind the scenes to update the table
+        router.refresh();
       }
     });
   };
 
-  // Filter Logic
-  const filteredIssues = initialIssues.filter(issue => {
-    const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = 
-      issue.category.toLowerCase().includes(searchLower) ||
-      (issue.user?.email || '').toLowerCase().includes(searchLower) ||
-      issue.id.toLowerCase().includes(searchLower);
-    
-    const matchesStatus = statusFilter ? issue.status === statusFilter : true;
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const rows = filteredIssues.map((issue) => (
+  const rows = initialIssues.map((issue) => (
     <Table.Tr key={issue.id}>
       <Table.Td>
         <Group gap="xs">
@@ -157,7 +198,7 @@ export function IssueManagement({ initialIssues }: IssueManagementProps) {
   ));
 
   return (
-    <>
+    <Box>
       <Group justify="space-between" mb="lg">
         <div>
           <Title order={2}>Issue Reports</Title>
@@ -165,35 +206,57 @@ export function IssueManagement({ initialIssues }: IssueManagementProps) {
         </div>
       </Group>
 
-      {/* Filters */}
+      {/* ────────────────────────────────────────────────
+          SEARCH BAR (Submit via Form)
+          ──────────────────────────────────────────────── */}
       <Paper shadow="xs" p="md" mb="lg" withBorder>
-        <Group>
-          <TextInput 
-            placeholder="Search Category, ID, or Reporter..." 
-            leftSection={<Search size={16} />} 
-            style={{ flex: 1 }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.currentTarget.value)}
-          />
-          <Select 
-            placeholder="Filter Status"
-            data={[
-              { value: 'open', label: 'Open' },
-              { value: 'investigating', label: 'Investigating' },
-              { value: 'resolved', label: 'Resolved' },
-              { value: 'closed', label: 'Closed' }
-            ]}
-            value={statusFilter}
-            onChange={setStatusFilter}
-            clearable
-            leftSection={<Filter size={16} />}
-            style={{ width: 200 }}
-          />
-        </Group>
+        <form onSubmit={handleSearch}>
+          <Group align="flex-end">
+            <TextInput 
+              label="Search"
+              placeholder="Category, Email, or ID... (Press Enter)" 
+              leftSection={<Search size={16} />} 
+              style={{ flex: 1 }}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.currentTarget.value)}
+              disabled={isPending}
+            />
+            <Select 
+              label="Status Filter"
+              placeholder="Any Status"
+              data={[
+                { value: 'open', label: 'Open' },
+                { value: 'investigating', label: 'Investigating' },
+                { value: 'resolved', label: 'Resolved' },
+                { value: 'closed', label: 'Closed' }
+              ]}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              clearable
+              leftSection={<Filter size={16} />}
+              style={{ width: 200 }}
+              disabled={isPending}
+            />
+            <Button type="submit" color="blue" leftSection={<Search size={16} />} loading={isPending}>
+              Search
+            </Button>
+            {(searchParams.get('search') || searchParams.get('status')) && (
+              <Button variant="light" color="gray" onClick={clearFilters} disabled={isPending}>
+                Clear
+              </Button>
+            )}
+          </Group>
+        </form>
       </Paper>
 
-      {/* Table */}
-      <Paper shadow="xs" withBorder>
+      {/* 🌟 SAFE LOADING OVERLAY TABLE 🌟 */}
+      <Paper shadow="xs" withBorder pos="relative">
+        <LoadingOverlay 
+          visible={isPending} 
+          zIndex={1000} 
+          overlayProps={{ radius: 'sm', blur: 0, backgroundOpacity: 0 }} 
+        />
+        
         <Table.ScrollContainer minWidth={800}>
           <Table verticalSpacing="sm" striped highlightOnHover layout="fixed">
             <Table.Thead bg="gray.0">
@@ -218,6 +281,18 @@ export function IssueManagement({ initialIssues }: IssueManagementProps) {
         </Table.ScrollContainer>
       </Paper>
 
+      {totalPages > 1 && (
+        <Center mt="md">
+           <Pagination 
+             total={totalPages} 
+             value={currentPage}
+             onChange={handlePageChange}
+             color="blue" 
+             disabled={isPending}
+           />
+        </Center>
+      )}
+
       {/* --- VIEW / EDIT MODAL --- */}
       <Modal 
         opened={opened} 
@@ -228,7 +303,7 @@ export function IssueManagement({ initialIssues }: IssueManagementProps) {
         {selectedIssue && (
           <Stack>
             {updateError && (
-              <Alert color="red" title="Error">
+              <Alert color="red" title="Update Failed" icon={<X size={16} />}>
                 {updateError}
               </Alert>
             )}
@@ -256,7 +331,7 @@ export function IssueManagement({ initialIssues }: IssueManagementProps) {
             </div>
 
             {/* Attachments Display */}
-            {selectedIssue.attachments.length > 0 && (
+            {selectedIssue.attachments && selectedIssue.attachments.length > 0 && (
               <div>
                 <Text size="xs" c="dimmed" fw={600} mb={4}>ATTACHMENTS</Text>
                 <Group gap="xs">
@@ -285,7 +360,7 @@ export function IssueManagement({ initialIssues }: IssueManagementProps) {
               </Paper>
               <Paper p="sm" withBorder bg="gray.0">
                 <Text size="xs" c="dimmed" fw={600}>DATE REPORTED</Text>
-                <Text size="sm">{new Date(selectedIssue.createdAt).toLocaleString()}</Text>
+                <Text size="sm">{new Date(selectedIssue.createdAt).toLocaleString('en-GB')}</Text>
               </Paper>
             </Group>
 
@@ -319,6 +394,6 @@ export function IssueManagement({ initialIssues }: IssueManagementProps) {
           </Stack>
         )}
       </Modal>
-    </>
+    </Box>
   );
 }

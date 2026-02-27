@@ -3,22 +3,45 @@ import { flightOpsLogService } from "@/services/flight-ops-log.services";
 import { getServerSession } from "@/services/auth.services";
 import { redirect } from "next/navigation";
 
-export default async function FlightOpsLogsPage() {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function FlightOpsLogsPage({ searchParams }: PageProps) {
   const session = await getServerSession();
   
   if (!session) {
-    redirect('/login');
+    redirect('/admin/login');
   }
+
+  const resolvedParams = await searchParams;
+  const page = Number(resolvedParams.page) || 1;
+  const limit = 15; // Set pagination limit
+  const search = typeof resolvedParams.search === 'string' ? resolvedParams.search.toLowerCase() : '';
 
   let rawLogs = [];
   try {
-    rawLogs = await flightOpsLogService.findAll(session);
+    // Fetch all logs from the database
+    rawLogs = await flightOpsLogService.findAll(session as any);
   } catch (err) {
-    redirect('/dashboard'); 
+    redirect('/admin/dashboard'); 
   }
 
-  // Sanitize data for the Client Component
-  const sanitizedLogs = rawLogs.map((log: any) => {
+  // 1. Filter data natively on the Server
+  const filteredLogs = rawLogs.filter((log: any) => {
+    if (!search) return true;
+    const flightId = log.flightId?.toString().toLowerCase() || '';
+    const captain = log.captainName?.toLowerCase() || '';
+    return flightId.includes(search) || captain.includes(search);
+  });
+
+  // 2. Handle Pagination Calculation
+  const totalPages = Math.ceil(filteredLogs.length / limit) || 1;
+  const skip = (page - 1) * limit;
+  const paginatedLogs = filteredLogs.slice(skip, skip + limit);
+
+  // 3. Sanitize data strictly for the Client Component (drop hidden buffers)
+  const sanitizedLogs = paginatedLogs.map((log: any) => {
     const lData = typeof log.toJSON === 'function' ? log.toJSON() : log;
 
     return {
@@ -26,7 +49,6 @@ export default async function FlightOpsLogsPage() {
       flightId: lData.flightId?.toString() || 'Unknown',
       captainName: lData.captainName,
       
-      // ✅ FIX: Explicitly extract only the needed fields to drop the hidden `_id` buffer
       gateChanges: (lData.gateChanges || []).map((gc: any) => ({
         from: gc.from,
         to: gc.to,
@@ -34,7 +56,6 @@ export default async function FlightOpsLogsPage() {
         time: new Date(gc.time).toISOString(),
       })),
       
-      // ✅ FIX: Also explicitly extract weather to drop any hidden `_id` buffers
       weatherConditions: lData.weatherConditions ? {
         origin: lData.weatherConditions.origin,
         destination: lData.weatherConditions.destination
@@ -50,6 +71,8 @@ export default async function FlightOpsLogsPage() {
     <FlightOpsLogManagement 
       initialLogs={sanitizedLogs} 
       userRole={session.user.role} 
+      totalPages={totalPages}
+      currentPage={page}
     />
   );
 }

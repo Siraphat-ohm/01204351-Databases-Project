@@ -1,60 +1,74 @@
 import { FlightTable } from "@/components/FlightTable";
 import { redirect } from "next/navigation";
-
 import { flightService } from "@/services/flight.services"; 
 import { getServerSession } from "@/services/auth.services"; 
+import type { Prisma } from "@/generated/prisma/client";
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export default async function FlightsPage({ searchParams }: PageProps) {
-  const resolvedParams = await searchParams;
-
   const session = await getServerSession();
   
   if (!session) {
     redirect('/admin/login');
   }
 
-  // Fetch all flights securely
-  const rawFlights = await flightService.findAll(session as any);
+  const resolvedParams = await searchParams;
 
   // Read URL Parameters
-  const flightCodeSearch = typeof resolvedParams.flightCode === 'string' ? resolvedParams.flightCode.toLowerCase() : '';
-  const originSearch = typeof resolvedParams.origin === 'string' ? resolvedParams.origin.toLowerCase() : '';
-  const destSearch = typeof resolvedParams.destination === 'string' ? resolvedParams.destination.toLowerCase() : '';
+  const flightCodeSearch = typeof resolvedParams.flightCode === 'string' ? resolvedParams.flightCode : '';
+  const originSearch = typeof resolvedParams.origin === 'string' ? resolvedParams.origin : '';
+  const destSearch = typeof resolvedParams.destination === 'string' ? resolvedParams.destination : '';
   const statusFilter = typeof resolvedParams.status === 'string' ? resolvedParams.status : '';
   const dateValue = typeof resolvedParams.date === 'string' ? resolvedParams.date : '';
 
   const page = Number(resolvedParams.page) || 1;
   const limit = 15; // Set pagination limit
 
-  // 1. Handle Search & Filtering natively on the Server
-  const filteredFlights = rawFlights.filter((flight: any) => {
-    let matches = true;
+  // 1. Build the Prisma Where Clause natively
+  const where: Prisma.FlightWhereInput = {};
 
-    if (flightCodeSearch) matches = matches && flight.flightCode.toLowerCase().includes(flightCodeSearch);
-    if (originSearch) matches = matches && flight.route?.origin?.iataCode.toLowerCase() === originSearch;
-    if (destSearch) matches = matches && flight.route?.destination?.iataCode.toLowerCase() === destSearch;
-    if (statusFilter) matches = matches && flight.status === statusFilter;
-    
-    // Simple Date Match (YYYY-MM-DD against ISO String)
-    if (dateValue && flight.departureTime) {
-      const flightDateStr = new Date(flight.departureTime).toISOString().split('T')[0];
-      matches = matches && flightDateStr === dateValue;
+  if (flightCodeSearch) {
+    where.flightCode = { contains: flightCodeSearch, mode: 'insensitive' };
+  }
+
+  if (originSearch || destSearch) {
+    where.route = {};
+    if (originSearch) {
+      where.route.origin = { iataCode: { equals: originSearch, mode: 'insensitive' } };
     }
+    if (destSearch) {
+      where.route.destination = { iataCode: { equals: destSearch, mode: 'insensitive' } };
+    }
+  }
 
-    return matches;
-  });
+  if (statusFilter) {
+    where.status = statusFilter as any; // Cast to FlightStatus enum
+  }
 
-  // 2. Handle Pagination Calculation
-  const totalPages = Math.ceil(filteredFlights.length / limit) || 1;
-  const skip = (page - 1) * limit;
-  const paginatedFlights = filteredFlights.slice(skip, skip + limit);
+  if (dateValue) {
+    // To search by Date in Prisma (which uses exact DateTime), 
+    // we search for any time between the start and end of that specific day (UTC).
+    const startOfDay = new Date(`${dateValue}T00:00:00.000Z`);
+    const endOfDay = new Date(`${dateValue}T23:59:59.999Z`);
+    
+    where.departureTime = {
+      gte: startOfDay,
+      lte: endOfDay,
+    };
+  }
+
+  // 2. Fetch paginated and filtered data directly from the Database
+  const response = await flightService.findAllPaginated(session as any, { 
+    page, 
+    limit, 
+    where 
+  } as any);
 
   // 3. Map Data safely for the UI
-  const tableData = paginatedFlights.map((flight: any) => ({
+  const tableData = response.data.map((flight: any) => ({
     id: flight.id, 
     flightCode: flight.flightCode,
     status: flight.status,
@@ -89,7 +103,7 @@ export default async function FlightsPage({ searchParams }: PageProps) {
   return (
     <FlightTable 
       data={tableData} 
-      totalPages={totalPages} 
+      totalPages={response.meta.totalPages} 
     />
   );
 }
