@@ -11,7 +11,7 @@ import type { PaginatedResponse } from '@/types/common';
 import { canAccessTicket } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import {
-  assertPermission,
+  makeCheckPermission,
   hasPermission,
 } from '@/services/_shared/authorization';
 import {
@@ -23,17 +23,11 @@ type TicketListItem = Awaited<ReturnType<typeof ticketRepository.findAll>>[numbe
 
 import { NotFoundError, ConflictError, BadRequestError, UnauthorizedError } from '@/lib/errors';
 
-const checkPermission = (
-  session: Session,
-  action: 'create' | 'read' | 'update' | 'delete' | 'check-in' | 'read-all',
-) =>
-  assertPermission(
-    session,
-    action,
-    canAccessTicket,
-    'ticket',
-    (a) => new UnauthorizedError(a),
-  );
+const checkPermission = makeCheckPermission(
+  canAccessTicket,
+  'ticket',
+  (a) => new UnauthorizedError(a),
+);
 
 function canReadAll(session: Session) {
   return hasPermission(session, 'read-all', canAccessTicket);
