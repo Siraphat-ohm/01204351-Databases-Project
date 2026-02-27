@@ -11,8 +11,8 @@ import { TransactionStatus, TransactionType, BookingStatus } from "@/generated/p
 import { canAccessPayment } from "@/auth/permissions";
 import type { ServiceSession as Session } from "@/services/_shared/session";
 import {
-  assertPermission,
   hasPermission,
+  makeCheckPermission,
 } from "@/services/_shared/authorization";
 import { NotFoundError, ConflictError, UnauthorizedError } from "@/lib/errors";
 
@@ -20,11 +20,9 @@ const checkPermission = (
   session: Session,
   action: "create" | "read" | "refund" | "read-all",
 ) =>
-  assertPermission(
-    session,
-    action,
+  makeCheckPermission(
     canAccessPayment,
-    "payment",
+    'payment',
     (a) => new UnauthorizedError(a),
   );
 
@@ -101,9 +99,22 @@ export const paymentService = {
     return { url: checkoutSession.url };
   },
 
+  async createPayment(input: { bookingId: string; amount: number; currency: string; method?: string }, session: Session) {
+    checkPermission(session, 'create');
+
+    const payment = await paymentRepository.createPayment({
+      bookingId: input.bookingId,
+      amount: input.amount,
+      currency: input.currency,
+      paymentMethodType: input.method as any,
+    });
+
+    return payment;
+  },
+
   async markPaymentSuccess(
     id: string,
-    input: { stripeChargeId?: string },
+    input: any,
     session: Session,
   ) {
     checkPermission(session, "create");
@@ -119,9 +130,11 @@ export const paymentService = {
       throw new ConflictError("Invalid transaction type");
     }
 
+    const stripeChargeId = input.stripeChargeId ?? input.transactionId ?? input.id ?? undefined;
+
     const data = markPaymentStatusSchema.parse({
       status: TransactionStatus.SUCCESS,
-      stripeChargeId: input.stripeChargeId,
+      stripeChargeId,
     });
 
     const updated = await paymentRepository.updateStatus(id, data);
@@ -194,6 +207,28 @@ export const paymentService = {
       status: TransactionStatus.REFUNDED,
       refundedAt: new Date(),
       refundReason: data.reason,
+    });
+
+    return refund;
+  },
+
+  async refundBookingForReaccommodation(bookingId: string, reason?: string) {
+    const payments = await paymentRepository.findByBookingId(bookingId);
+    const payment = payments.find((p) => p.type === TransactionType.PAYMENT && p.status === TransactionStatus.SUCCESS);
+    if (!payment) throw new NotFoundError(`Payment not found for booking: ${bookingId}`);
+
+    const refund = await paymentRepository.createRefund({
+      bookingId,
+      amount: Number(payment.amount),
+      currency: payment.currency,
+      reason: reason ?? 'Reaccommodation cancellation',
+      originalTransactionId: payment.id,
+    });
+
+    await paymentRepository.updateStatus(payment.id, {
+      status: TransactionStatus.REFUNDED,
+      refundedAt: new Date(),
+      refundReason: reason ?? 'Reaccommodation cancellation',
     });
 
     return refund;
