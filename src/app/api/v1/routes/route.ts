@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ZodError } from 'zod';
+import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 import { routeService } from '@/services/route.services';
 import { getServerSession } from '@/services/auth.services';
 import {
@@ -52,9 +53,7 @@ export async function GET(req: NextRequest) {
     const result = await routeService.searchPaginated(search, serviceSession, { page, limit });
     return successResponse(result);
   } catch (err) {
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
     console.error('[GET /api/v1/routes]', err);
     return errorResponse('Internal server error');
   }
@@ -80,15 +79,9 @@ export async function POST(req: NextRequest) {
 
     return successResponse(created, 201);
   } catch (err) {
-    if (err instanceof ZodError) {
-      return validationErrorResponse(zodFieldErrors(err));
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === 'RouteConflictError') {
-      return errorResponse(err.message, 409);
-    }
+    if (err instanceof ZodError) return validationErrorResponse(zodFieldErrors(err));
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof ConflictError) return errorResponse(err.message, 409);
     console.error('[POST /api/v1/routes]', err);
     return errorResponse('Internal server error');
   }
@@ -118,15 +111,9 @@ export async function PATCH(req: NextRequest) {
 
     return successResponse(updated);
   } catch (err) {
-    if (err instanceof ZodError) {
-      return validationErrorResponse(zodFieldErrors(err));
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === 'RouteNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
+    if (err instanceof ZodError) return validationErrorResponse(zodFieldErrors(err));
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
     console.error('[PATCH /api/v1/routes]', err);
     return errorResponse('Internal server error');
   }
@@ -160,15 +147,9 @@ export async function DELETE(req: NextRequest) {
 
     return successResponse(deleted);
   } catch (err) {
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === 'RouteNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
-    if (err instanceof Error && err.name === 'RouteHasActiveFlightsError') {
-      return errorResponse(err.message, 409);
-    }
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
+    if (err instanceof ConflictError) return errorResponse(err.message, 409);
     console.error('[DELETE /api/v1/routes]', err);
     return errorResponse('Internal server error');
   }
