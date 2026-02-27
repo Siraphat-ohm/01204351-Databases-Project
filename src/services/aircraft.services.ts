@@ -8,6 +8,7 @@ import {
 import { canAccessAircraft } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { PaginatedResponse } from '@/types/common';
+import type { Prisma } from '@/generated/prisma/client';
 import { makeCheckPermission } from '@/services/_shared/authorization';
 import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 import {
@@ -41,14 +42,15 @@ export const aircraftService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.AircraftWhereInput>,
   ): Promise<PaginatedResponse<AircraftListItem>> {
     checkPermission(session, 'read');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      aircraftRepository.findAll({ skip, take: limit }),
-      aircraftRepository.count(),
+      aircraftRepository.findAll({ where, skip, take: limit }),
+      aircraftRepository.count(where),
     ]);
 
     return {
