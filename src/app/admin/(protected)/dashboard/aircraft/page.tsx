@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { aircraftService } from '@/services/aircraft.services'; 
 import { aircraftTypeService } from '@/services/aircraft-type.services'; 
 import { getServerSession } from '@/services/auth.services';
+import type { Prisma } from '@/generated/prisma/client';
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -17,49 +18,41 @@ export default async function AircraftPage({ searchParams }: PageProps) {
 
   const resolvedParams = await searchParams;
   const page = Number(resolvedParams.page) || 1;
-  const limit = 15; // Set your desired items per page here
+  const limit = 15; 
   
-  const search = typeof resolvedParams.search === 'string' ? resolvedParams.search.toLowerCase() : '';
+  const search = typeof resolvedParams.search === 'string' ? resolvedParams.search : '';
   const statusFilter = typeof resolvedParams.status === 'string' ? resolvedParams.status : '';
 
-  let finalData = [];
-  let totalPages = 1;
-
-  // We need the aircraft types regardless of searching
+  // We need the aircraft types for the dropdowns
   const aircraftTypes = await aircraftTypeService.findAll(session as any);
 
-  if (search || statusFilter) {
-    // WORKAROUND: If filtering is applied, fetch all and filter on the server
-    const allAircrafts = await aircraftService.findAll(session as any);
-    
-    const filtered = allAircrafts.filter((ac: any) => {
-      const matchesSearch = search === '' || 
-        ac.tailNumber.toLowerCase().includes(search) ||
-        (ac.type?.model?.toLowerCase() || '').includes(search);
-      
-      const matchesStatus = statusFilter === '' || ac.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    });
-
-    const total = filtered.length;
-    totalPages = Math.ceil(total / limit) || 1;
-    
-    const skip = (page - 1) * limit;
-    finalData = filtered.slice(skip, skip + limit);
-
-  } else {
-    // No filters: Use the native paginated service
-    const response = await aircraftService.findAllPaginated(session as any, { page, limit });
-    finalData = response.data;
-    totalPages = response.meta.totalPages;
+  // 🌟 BUILD THE PRISMA WHERE CLAUSE
+  const where: Prisma.AircraftWhereInput = {};
+  
+  if (search) {
+    where.OR = [
+      { tailNumber: { contains: search, mode: 'insensitive' } },
+      // Assuming relation is 'type' and field is 'model' based on your previous filter
+      { type: { model: { contains: search, mode: 'insensitive' } } } 
+    ];
   }
+
+  if (statusFilter) {
+    where.status = statusFilter as any; // Cast to your Prisma Enum type
+  }
+
+  // 🌟 DELEGATE PAGINATION AND FILTERING DIRECTLY TO THE DATABASE
+  const response = await aircraftService.findAllPaginated(session as any, { 
+    page, 
+    limit, 
+    where 
+  } as any);
 
   return (
     <AircraftManagement 
-      initialAircrafts={finalData as any} 
+      initialAircrafts={response.data as any} 
       aircraftTypes={aircraftTypes as any}
-      totalPages={totalPages}
+      totalPages={response.meta.totalPages}
       currentPage={page}
     />
   );

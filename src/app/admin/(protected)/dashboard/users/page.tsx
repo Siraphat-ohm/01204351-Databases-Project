@@ -1,7 +1,8 @@
 import { UserManagement } from "@/components/UserManagement";
-import { userService } from "@/services/user.services"; // Adjust path if needed
+import { userService } from "@/services/user.services"; 
 import { getServerSession } from '@/services/auth.services'; 
 import { redirect } from "next/navigation";
+import type { Prisma, Role } from '@/generated/prisma/client';
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -18,44 +19,36 @@ export default async function UsersPage({ searchParams }: PageProps) {
   const page = Number(resolvedParams.page) || 1;
   const limit = 15; // Set pagination limit
 
-  const search = typeof resolvedParams.search === 'string' ? resolvedParams.search.toLowerCase() : '';
+  const search = typeof resolvedParams.search === 'string' ? resolvedParams.search : '';
   const roleFilter = typeof resolvedParams.role === 'string' ? resolvedParams.role : '';
 
-  let finalData = [];
-  let totalPages = 1;
+  // 1. Build the database query (where clause)
+  const where: Prisma.UserWhereInput = {};
 
-  if (search || roleFilter) {
-    // WORKAROUND: If filtering is applied, fetch all and filter on the server
-    const allUsers = await userService.findAll(session as any);
-    
-    const filteredUsers = allUsers.filter((u: any) => {
-      const matchesSearch = search === '' || 
-        (u.name || '').toLowerCase().includes(search) ||
-        u.email.toLowerCase().includes(search) ||
-        (u.staffProfile?.employeeId || '').toLowerCase().includes(search);
-      
-      const matchesRole = roleFilter === '' || u.role === roleFilter;
-
-      return matchesSearch && matchesRole;
-    });
-
-    const total = filteredUsers.length;
-    totalPages = Math.ceil(total / limit) || 1;
-    
-    const skip = (page - 1) * limit;
-    finalData = filteredUsers.slice(skip, skip + limit);
-
-  } else {
-    // No filters: Use the native paginated service
-    const response = await userService.findAllPaginated(session as any, { page, limit });
-    finalData = response.data;
-    totalPages = response.meta.totalPages;
+  if (roleFilter) {
+    where.role = roleFilter as Role;
   }
+
+  if (search) {
+    where.OR = [
+      { name: { contains: search, mode: 'insensitive' } },
+      { email: { contains: search, mode: 'insensitive' } },
+      // Search inside the nested relation natively!
+      { staffProfile: { employeeId: { contains: search, mode: 'insensitive' } } }
+    ];
+  }
+
+  // 2. Fetch paginated and filtered data natively from the Database
+  const response = await userService.findAllPaginated(session as any, { 
+    page, 
+    limit, 
+    where 
+  } as any);
 
   return (
     <UserManagement 
-      initialUsers={finalData} 
-      totalPages={totalPages}
+      initialUsers={response.data as any} 
+      totalPages={response.meta.totalPages}
       currentPage={page}
     />
   );

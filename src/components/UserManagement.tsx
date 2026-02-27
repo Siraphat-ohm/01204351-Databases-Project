@@ -3,12 +3,13 @@
 import { 
   Title, Group, Button, Table, Badge, Text, ActionIcon, 
   TextInput, Paper, Select, Pagination, Center, Avatar, Tooltip,
-  Modal, Stack, Alert
+  Modal, Stack, Alert, LoadingOverlay, Box
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Search, Filter, Plus, Trash, ShieldCheck, MapPin, Check } from 'lucide-react';
+import { Search, Filter, Plus, Trash, ShieldCheck, MapPin, Check, X } from 'lucide-react';
 import { useState, useTransition, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { notifications } from '@mantine/notifications';
 
 import { UserAdmin } from '@/types/user.type'; 
 import { Role } from '@/generated/prisma/client';
@@ -40,6 +41,7 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
   const [editingUser, setEditingUser] = useState<UserAdmin | null>(null);
   const [editRole, setEditRole] = useState<string>('');
   
+  // Transition & Loading State
   const [isPending, startTransition] = useTransition();
   const [updateError, setUpdateError] = useState<string | null>(null);
 
@@ -48,24 +50,33 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
   // ────────────────────────────────────────────────
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault(); 
-    
-    const params = new URLSearchParams(searchParams);
-    
-    if (searchTerm.trim()) params.set('search', searchTerm.trim());
-    else params.delete('search');
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams);
+      
+      if (searchTerm.trim()) params.set('search', searchTerm.trim());
+      else params.delete('search');
 
-    if (roleFilter) params.set('role', roleFilter);
-    else params.delete('role');
+      if (roleFilter) params.set('role', roleFilter);
+      else params.delete('role');
 
-    params.set('page', '1'); // Always reset to page 1 on a new search
+      params.set('page', '1'); // Always reset to page 1 on a new search
 
-    router.push(`${pathname}?${params.toString()}`);
+      router.push(`${pathname}?${params.toString()}`);
+    });
   };
 
   const handlePageChange = (page: number) => {
-    const params = new URLSearchParams(searchParams);
-    params.set('page', page.toString());
-    router.push(`${pathname}?${params.toString()}`);
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams);
+      params.set('page', page.toString());
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setRoleFilter(null);
+    startTransition(() => router.push(pathname));
   };
 
   // ────────────────────────────────────────────────
@@ -87,9 +98,11 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
         { role: editRole as Role }
       );
 
-      if (result?.error) {
-        setUpdateError(result.error);
+      if (result && typeof result === 'object' && 'error' in result) {
+        setUpdateError(result.error as string);
+        notifications.show({ title: "Update Failed", message: result.error as string, color: "red", icon: <X size={18}/> });
       } else {
+        notifications.show({ title: "Role Updated", message: `${getDisplayName(editingUser)} is now a ${editRole}.`, color: "green", icon: <Check size={18}/> });
         close();
         router.refresh(); 
       }
@@ -188,7 +201,7 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
   });
 
   return (
-    <>
+    <Box>
       <Group justify="space-between" mb="lg">
         <div>
           <Title order={2}>Users & Crew</Title>
@@ -212,6 +225,7 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
               style={{ flex: 1 }}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.currentTarget.value)}
+              disabled={isPending}
             />
             <Select 
               label="Role"
@@ -222,19 +236,17 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
               clearable
               leftSection={<Filter size={16} />}
               style={{ width: 200 }}
+              disabled={isPending}
             />
-            <Button type="submit" color="blue">
-              Apply Filters
+            <Button type="submit" color="blue" loading={isPending}>
+              Search
             </Button>
             
             {(searchParams.get('search') || searchParams.get('role')) && (
               <Button 
                 variant="default" 
-                onClick={() => {
-                  setSearchTerm('');
-                  setRoleFilter(null);
-                  router.push(pathname); 
-                }}
+                onClick={clearFilters}
+                disabled={isPending}
               >
                 Clear
               </Button>
@@ -243,8 +255,14 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
         </form>
       </Paper>
 
-      {/* Table */}
-      <Paper shadow="xs" withBorder>
+      {/* 🌟 SAFE LOADING OVERLAY TABLE 🌟 */}
+      <Paper shadow="xs" withBorder pos="relative">
+        <LoadingOverlay 
+          visible={isPending} 
+          zIndex={1000} 
+          overlayProps={{ radius: 'sm', blur: 0, backgroundOpacity: 0 }} 
+        />
+
         <Table.ScrollContainer minWidth={800}>
           <Table verticalSpacing="sm" striped highlightOnHover>
             <Table.Thead bg="gray.0">
@@ -277,6 +295,7 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
              value={currentPage} 
              onChange={handlePageChange} 
              color="blue" 
+             disabled={isPending}
            />
         </Center>
       )}
@@ -324,6 +343,6 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
           </Stack>
         )}
       </Modal>
-    </>
+    </Box>
   );
 }

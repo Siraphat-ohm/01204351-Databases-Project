@@ -4,18 +4,19 @@ import {
   Title, Group, Table, Badge, Text, ActionIcon, 
   TextInput, Paper, Modal, Stack, Alert,
   Code, ScrollArea, Button, Accordion, Avatar,
-  ThemeIcon, Divider
+  ThemeIcon, Divider, LoadingOverlay, Center, Pagination, Box
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Search, Eye, AlertTriangle, CloudRain, DoorOpen, Wrench, User, Plane, Plus, CheckCircle, XCircle } from 'lucide-react';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { patchFlightOpsLogAction } from '@/actions/flight-op-actions';
 
 // --- Types matching sanitized data ---
 interface GateChange {
   from: string;
   to: string;
-  time: string; // ISO string
+  time: string; 
   reason: string;
 }
 
@@ -38,24 +39,66 @@ interface ClientOpsLog {
 interface FlightOpsLogManagementProps {
   initialLogs: ClientOpsLog[];
   userRole: string;
+  totalPages: number;
+  currentPage: number;
 }
 
-export function FlightOpsLogManagement({ initialLogs, userRole }: FlightOpsLogManagementProps) {
-  const [searchTerm, setSearchTerm] = useState('');
-  
+export function FlightOpsLogManagement({ initialLogs, userRole, totalPages, currentPage }: FlightOpsLogManagementProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Initialize search state from URL
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+
+  useEffect(() => {
+    setSearchTerm(searchParams.get('search') || '');
+  }, [searchParams]);
+
+  // Loading and Transition State
+  const [isPending, startTransition] = useTransition();
+
   // Modal State
   const [opened, { open, close }] = useDisclosure(false);
   const [selectedLog, setSelectedLog] = useState<ClientOpsLog | null>(null);
   
   // Edit State
-  const [isPending, startTransition] = useTransition();
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [newIncident, setNewIncident] = useState('');
 
-  // Permission Check based on your service logic
   const canWrite = ['ADMIN', 'GROUND_STAFF'].includes(userRole);
 
-  // Handlers
+  // ────────────────────────────────────────────────
+  // EXPLICIT SEARCH & PAGINATION HANDLERS
+  // ────────────────────────────────────────────────
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams);
+      if (searchTerm.trim()) params.set('search', searchTerm.trim());
+      else params.delete('search');
+      
+      params.set('page', '1'); // Reset to page 1 on new search
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  };
+
+  const handlePageChange = (page: number) => {
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams);
+      params.set('page', page.toString());
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    startTransition(() => router.push(pathname));
+  };
+
+  // ────────────────────────────────────────────────
+  // MODAL HANDLERS
+  // ────────────────────────────────────────────────
   const handleViewLog = (log: ClientOpsLog) => {
     setSelectedLog(log);
     setNewIncident('');
@@ -79,20 +122,13 @@ export function FlightOpsLogManagement({ initialLogs, userRole }: FlightOpsLogMa
         // Optimistic update
         setSelectedLog({ ...selectedLog, incidents: updatedIncidents });
         setNewIncident('');
+        router.refresh(); // Refresh background data
       }
     });
   };
 
-  // Filter Logic
-  const filteredLogs = initialLogs.filter(log => {
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      log.flightId.toLowerCase().includes(searchLower) ||
-      log.captainName.toLowerCase().includes(searchLower)
-    );
-  });
-
-  const rows = filteredLogs.map((log) => (
+  // Map directly from server-provided initialLogs
+  const rows = initialLogs.map((log) => (
     <Table.Tr key={log.id}>
       <Table.Td>
         <Group gap="xs">
@@ -145,7 +181,7 @@ export function FlightOpsLogManagement({ initialLogs, userRole }: FlightOpsLogMa
   ));
 
   return (
-    <>
+    <Box>
       <Group justify="space-between" mb="lg">
         <div>
           <Title order={2}>Flight Operation Logs</Title>
@@ -153,19 +189,40 @@ export function FlightOpsLogManagement({ initialLogs, userRole }: FlightOpsLogMa
         </div>
       </Group>
 
-      {/* Filters */}
+      {/* ────────────────────────────────────────────────
+          SEARCH BAR (Submit via Form)
+          ──────────────────────────────────────────────── */}
       <Paper shadow="xs" p="md" mb="lg" withBorder>
-        <TextInput 
-          placeholder="Search by Flight ID or Captain Name..." 
-          leftSection={<Search size={16} />} 
-          style={{ maxWidth: '400px' }}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.currentTarget.value)}
-        />
+        <form onSubmit={handleSearch}>
+          <Group align="flex-end">
+            <TextInput 
+              placeholder="Search by Flight ID or Captain Name... (Press Enter)" 
+              leftSection={<Search size={16} />} 
+              style={{ flex: 1, maxWidth: '500px' }}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.currentTarget.value)}
+              disabled={isPending}
+            />
+            <Button type="submit" color="blue" leftSection={<Search size={16} />} loading={isPending}>
+              Search
+            </Button>
+            {searchParams.get('search') && (
+              <Button variant="light" color="gray" onClick={clearFilters} disabled={isPending}>
+                Clear
+              </Button>
+            )}
+          </Group>
+        </form>
       </Paper>
 
-      {/* Table */}
-      <Paper shadow="xs" withBorder>
+      {/* 🌟 SAFE LOADING OVERLAY TABLE 🌟 */}
+      <Paper shadow="xs" withBorder pos="relative">
+        <LoadingOverlay 
+          visible={isPending} 
+          zIndex={1000} 
+          overlayProps={{ radius: 'sm', blur: 0, backgroundOpacity: 0 }} 
+        />
+        
         <Table.ScrollContainer minWidth={800}>
           <Table verticalSpacing="sm" striped highlightOnHover>
             <Table.Thead bg="gray.0">
@@ -190,6 +247,18 @@ export function FlightOpsLogManagement({ initialLogs, userRole }: FlightOpsLogMa
           </Table>
         </Table.ScrollContainer>
       </Paper>
+
+      {totalPages > 1 && (
+        <Center mt="md">
+           <Pagination 
+             total={totalPages} 
+             value={currentPage}
+             onChange={handlePageChange}
+             color="blue" 
+             disabled={isPending}
+           />
+        </Center>
+      )}
 
       {/* --- VIEW MODAL --- */}
       <Modal 
@@ -239,7 +308,6 @@ export function FlightOpsLogManagement({ initialLogs, userRole }: FlightOpsLogMa
                     <Text size="sm" c="dimmed" mb="md">No incidents reported.</Text>
                   )}
 
-                  {/* Add Incident Form (Only if has write permission) */}
                   {canWrite && (
                     <Group align="flex-end">
                       <TextInput 
@@ -322,10 +390,7 @@ export function FlightOpsLogManagement({ initialLogs, userRole }: FlightOpsLogMa
                   {selectedLog.maintenanceChecklist && Object.keys(selectedLog.maintenanceChecklist).length > 0 ? (
                     <Stack gap="sm">
                       {Object.entries(selectedLog.maintenanceChecklist).map(([key, value]) => {
-                        // Format the camelCase keys (e.g., "fuelChecked" -> "Fuel Checked")
                         const formattedKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                        
-                        // Check if the value is truthy (checked) or falsy
                         const isChecked = Boolean(value);
 
                         return (
@@ -349,24 +414,12 @@ export function FlightOpsLogManagement({ initialLogs, userRole }: FlightOpsLogMa
                   ) : (
                     <Text size="sm" c="dimmed">No maintenance records available.</Text>
                   )}
-                  
-                  {/* Keep the raw JSON view available for complex nested objects or debugging
-                  {canWrite && (
-                    <>
-                      <Divider my="md" label="Raw Data" labelPosition="center" />
-                      <ScrollArea h={120} type="hover">
-                        <Code block style={{ whiteSpace: 'pre-wrap' }}>
-                          {JSON.stringify(selectedLog.maintenanceChecklist, null, 2)}
-                        </Code>
-                      </ScrollArea>
-                    </>
-                  )} */}
                 </Accordion.Panel>
               </Accordion.Item>
             </Accordion>
           </Stack>
         )}
       </Modal>
-    </>
+    </Box>
   );
 }
