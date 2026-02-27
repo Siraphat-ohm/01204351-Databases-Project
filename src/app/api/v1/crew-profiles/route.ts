@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ZodError } from 'zod';
+import { ConflictError, UnauthorizedError } from '@/lib/errors';
 import { crewProfileService } from '@/services/crew-profile.services';
 import { getServerSession } from '@/services/auth.services';
 import {
@@ -35,9 +36,7 @@ export async function GET(req: NextRequest) {
 
     return successResponse(result);
   } catch (err) {
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
     console.error('[GET /api/v1/crew-profiles]', err);
     return errorResponse('Internal server error');
   }
@@ -64,15 +63,9 @@ export async function POST(req: NextRequest) {
 
     return successResponse(created, 201);
   } catch (err) {
-    if (err instanceof ZodError) {
-      return validationErrorResponse(zodFieldErrors(err));
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === 'CrewProfileConflictError') {
-      return errorResponse(err.message, 409);
-    }
+    if (err instanceof ZodError) return validationErrorResponse(zodFieldErrors(err));
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof ConflictError) return errorResponse(err.message, 409);
     console.error('[POST /api/v1/crew-profiles]', err);
     return errorResponse('Internal server error');
   }
