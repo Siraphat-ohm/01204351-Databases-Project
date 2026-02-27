@@ -1,0 +1,406 @@
+"use client";
+
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import {
+  Container,
+  Stack,
+  Group,
+  Box,
+  Text,
+  Paper,
+  Badge,
+  Divider,
+  Center,
+  Loader,
+  Button,
+} from "@mantine/core";
+import {
+  IconPlaneDeparture,
+  IconChevronLeft,
+  IconCheck,
+} from "@tabler/icons-react";
+import { useAuthSession } from "@/services/auth-client.service";
+import { Navbar } from "@/components/Navbar";
+import { notifications } from "@mantine/notifications";
+import "@mantine/core/styles.css";
+import "@mantine/notifications/styles.css";
+
+export default function BookingDetailsPage() {
+  const { ref } = useParams();
+  const router = useRouter();
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [checkingInId, setCheckingInId] = useState<string | null>(null);
+  const { data: session } = useAuthSession();
+
+  const fetchBookingDetails = async () => {
+    try {
+      const res = await fetch("/api/v1/tickets");
+      const data = await res.json();
+      const filtered = data.filter((t: any) => t.booking?.bookingRef === ref);
+      setTickets(filtered);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const formatUTCTime = (dateString: string) => {
+  if (!dateString) return "...";
+  const d = new Date(dateString);
+  return d.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "UTC",
+  }) ;
+};
+
+const getBoardingTimeUTC = (dateString: string) => {
+  if (!dateString) return "...";
+  const d = new Date(dateString);
+  // Aviation standard: Boarding starts ~40 mins before departure
+  const boarding = new Date(d.getTime() - 40 * 60000); 
+  return boarding.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "UTC",
+  }) ;
+};
+
+  useEffect(() => {
+    if (!session) {
+      router.replace(`/login`);
+      return;
+    }
+    fetchBookingDetails();
+  }, [ref, session, router]);
+
+const handleCheckIn = async (ticket: any) => { // Pass the whole ticket object
+    setCheckingInId(ticket.id);
+    try {
+      const res = await fetch(`/api/v1/tickets/${ticket.id}/check-in`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        // Send the existing ticket data so Zod validation passes
+        body: JSON.stringify({
+          firstName: ticket.firstName,
+          lastName: ticket.lastName,
+          seatNumber: ticket.seatNumber,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Check-in failed");
+      }
+
+      notifications?.show({
+        title: "Success",
+        message: "Check-in completed!",
+        color: "green",
+      });
+
+      await fetchBookingDetails();
+    } catch (e: any) {
+      console.error(e);
+      notifications?.show({
+        title: "Error",
+        message: e.message || "Check-in failed. Please try again.",
+        color: "red",
+      });
+    } finally {
+      setCheckingInId(null);
+    }
+  };
+
+  if (loading)
+    return (
+      <>
+        <Navbar />
+        <Center h="80vh">
+          <Loader size="xl" />
+        </Center>
+      </>
+    );
+
+  return (
+    <>
+      <Navbar />
+      <Container size="md" py="xl">
+        <Button
+          variant="subtle"
+          leftSection={<IconChevronLeft size={16} />}
+          onClick={() => router.back()}
+          mb="xl"
+        >
+          Back to History
+        </Button>
+
+        <Stack gap={50}>
+          {tickets.map((ticket) => (
+            <Stack key={ticket.id} gap="md">
+              {/* --- YOUR ORIGINAL TICKET UI --- */}
+              <Paper
+                shadow="md"
+                radius="lg"
+                style={{ overflow: "hidden", border: "1px solid #e0e0e0" }}
+              >
+                {/* Blue Header Bar */}
+                <Group justify="space-between" bg="blue.6" p="md" c="white">
+                  <Group gap="xs">
+                    <IconPlaneDeparture size={24} />
+                    <Text fw={900} style={{ letterSpacing: "1px" }}>
+                      YOK AIRLINES
+                    </Text>
+                  </Group>
+                  <Text fw={700}>BOARDING PASS</Text>
+                </Group>
+
+                <Group gap={0} align="stretch" wrap="nowrap">
+                  <Box
+                    style={{
+                      width: "60px",
+                      position: "relative",
+                      backgroundColor: "#fff",
+                      borderRight: "1px solid #f0f0f0",
+                    }}
+                  >
+                    <Box
+                      style={{
+                        position: "absolute",
+                        top: "50%",
+                        left: "50%",
+                        transform: "translate(-50%, -50%) rotate(-90deg)",
+                        width: "240px",
+                        height: "40px",
+                        background: `repeating-linear-gradient(90deg, #000, #000 2px, transparent 2px, transparent 4px, #000 4px, #000 5px, transparent 5px, transparent 8px)`,
+                        opacity: 0.8,
+                      }}
+                    />
+                  </Box>
+
+                  <Stack p="xl" style={{ flex: 2, position: "relative" }}>
+                    <Group justify="space-between">
+                      <Stack gap={0}>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                          Passenger Name
+                        </Text>
+                        <Text size="lg" fw={800}>
+                          {ticket.firstName} {ticket.lastName}
+                        </Text>
+                      </Stack>
+                      <Stack gap={0}>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                          Flight No
+                        </Text>
+                        <Text size="lg" fw={800} c="blue.7">
+                          {ticket.flight?.flightCode}
+                        </Text>
+                      </Stack>
+                      <Stack gap={0}>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                          Seat Number
+                        </Text>
+                        <Text size="lg" fw={800} c="blue.7">
+                          {ticket.seatNumber}
+                        </Text>
+                      </Stack>
+                    </Group>
+
+<Group mt="xl" justify="space-between" align="center">
+  {/* Departure Column */}
+  <div>
+    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+      From
+    </Text>
+    <Text size="xl" fw={900} lh={1}>
+      {ticket.flight?.route?.origin?.iataCode}
+    </Text>
+    <Text size="sm">{ticket.flight?.route?.origin?.city}</Text>
+    {/* Added Departure Time */}
+    <Text size="md" fw={700} c="blue.7" mt={4}>
+      {formatUTCTime(ticket.flight?.departureTime)}
+    </Text>
+  </div>
+
+  <Box style={{ textAlign: "center", opacity: 0.2 }}>
+    <IconPlaneDeparture size={32} />
+    <Divider w={80} />
+  </Box>
+
+  {/* Arrival Column */}
+  <div style={{ textAlign: "right" }}>
+    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+      To
+    </Text>
+    <Text size="xl" fw={900} lh={1}>
+      {ticket.flight?.route?.destination?.iataCode}
+    </Text>
+    <Text size="sm">
+      {ticket.flight?.route?.destination?.city}
+    </Text>
+    {/* Added Arrival Time */}
+    <Text size="md" fw={700} c="blue.7" mt={4}>
+      {formatUTCTime(ticket.flight?.arrivalTime)}
+    </Text>
+  </div>
+</Group>
+
+                    <Divider variant="dashed" my="lg" />
+
+                    <Group grow>
+                      <div>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                          Date
+                        </Text>
+                        <Text fw={700}>
+                          {new Date(ticket.flight?.departureTime).toLocaleDateString()}
+                        </Text>
+                      </div>
+                      <div>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                          Gate
+                        </Text>
+                        <Text fw={700}>{ticket.flight?.gate || "A1"}</Text>
+                      </div>
+                      <div>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                          Boarding Time
+                        </Text>
+                        <Text fw={700} c="blue.7">
+                          {getBoardingTimeUTC(ticket.flight?.departureTime)}
+                        </Text>
+                      </div>
+                    </Group>
+                  </Stack>
+
+                  <Stack
+                    p="xl"
+                    bg="gray.0"
+                    style={{
+                      flex: 1,
+                      borderLeft: "2px dashed #e0e0e0",
+                      justifyContent: "space-between",
+                      minWidth: "240px",
+                    }}
+                  >
+                    <Stack gap="xs">
+                      <div>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                          Passenger
+                        </Text>
+                        <Text
+                          size="sm"
+                          fw={800}
+                          style={{ textTransform: "uppercase" }}
+                        >
+                          {ticket.firstName} {ticket.lastName}
+                        </Text>
+                      </div>
+
+                      <Group justify="space-between" mt="xs">
+                        <div>
+                          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                            From
+                          </Text>
+                          <Text size="md" fw={900}>
+                            {ticket.flight?.route?.origin?.iataCode}
+                          </Text>
+                        </div>
+                        <IconPlaneDeparture
+                          size={14}
+                          color="#adb5bd"
+                          style={{ marginTop: "10px" }}
+                        />
+                        <div style={{ textAlign: "right" }}>
+                          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                            To
+                          </Text>
+                          <Text size="md" fw={900}>
+                            {ticket.flight?.route?.destination?.iataCode}
+                          </Text>
+                        </div>
+                      </Group>
+                    </Stack>
+
+                    <Group mt="md" justify="space-between" align="flex-end">
+                      <Stack gap={0}>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                          Seat
+                        </Text>
+                        <Text size="38px" fw={900} lh={1} c="blue.9">
+                          {ticket.seatNumber}
+                        </Text>
+                      </Stack>
+                      <Badge variant="light" color="blue" radius="sm" mb="4px">
+                        {ticket.class}
+                      </Badge>
+                    </Group>
+
+                    <Stack gap={10} mt="md">
+                      <div>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                          Reference
+                        </Text>
+                        <Text size="xs" fw={800}>
+                          {ref}
+                        </Text>
+                      </div>
+
+                      <Box
+                        style={{
+                          width: "100%",
+                          height: "45px",
+                          background: `repeating-linear-gradient(90deg, #000, #000 1px, transparent 1px, transparent 2px, #000 2px, #000 3px, transparent 3px, transparent 5px, #000 5px, #000 6px, transparent 6px, transparent 8px)`,
+                          opacity: 0.9,
+                        }}
+                      />
+
+                      <Text
+                        ta="center"
+                        size="8px"
+                        fw={600}
+                        style={{ letterSpacing: "3px", marginTop: "-6px" }}
+                      >
+                        {ref?.toString().toUpperCase()}
+                      </Text>
+                    </Stack>
+                  </Stack>
+                </Group>
+              </Paper>
+
+              {/* --- INDIVIDUAL CHECK-IN BUTTON AT THE END OF EACH TICKET --- */}
+              <Group justify="flex-end">
+                {ticket.checkedIn ? (
+                  <Badge
+                    size="lg"
+                    color="green"
+                    variant="light"
+                    leftSection={<IconCheck size={14} />}
+                  >
+                    Successfully Checked In
+                  </Badge>
+                ) : (
+                // Inside your tickets.map loop:
+                <Button
+                color="orange"
+                radius="md"
+                size="md"
+                loading={checkingInId === ticket.id}
+                onClick={() => handleCheckIn(ticket)} // Pass ticket instead of ticket.id
+                style={{ minWidth: 200 }}
+                >
+                Check In for {ticket.firstName}
+                </Button>
+                )}
+              </Group>
+            </Stack>
+          ))}
+        </Stack>
+      </Container>
+    </>
+  );
+}

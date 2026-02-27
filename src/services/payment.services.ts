@@ -66,7 +66,7 @@ export const paymentService = {
         price_data: {
           currency: booking.currency.toLowerCase(),
           product_data: {
-            name: `Flight ${ticket.flightId} - Seat ${
+            name: `Flight ${booking.bookingRef} - Seat ${
               ticket.seatNumber || "Unassigned"
             }`,
             description: `${ticket.firstName} ${ticket.lastName}`,
