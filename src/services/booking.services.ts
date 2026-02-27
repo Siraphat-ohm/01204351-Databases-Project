@@ -38,73 +38,12 @@ import {
 
 type BookingListItem = Awaited<ReturnType<typeof bookingRepository.findAll>>[number];
 
-export class BookingNotFoundError extends Error {
-  constructor(identifier: string) {
-    super(`Booking not found: ${identifier}`);
-    this.name = 'BookingNotFoundError';
-  }
-}
+import { NotFoundError, ConflictError, BadRequestError, UnauthorizedError } from '@/lib/errors';
 
-export class BookingConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'BookingConflictError';
-  }
-}
-
-export class BookingAlreadyCancelledError extends Error {
-  constructor(id: string) {
-    super(`Booking already cancelled: ${id}`);
-    this.name = 'BookingAlreadyCancelledError';
-  }
-}
-
-export class BookingChangeNotAllowedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'BookingChangeNotAllowedError';
-  }
-}
-
-export class BookingReaccommodationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'BookingReaccommodationError';
-  }
-}
-
-export class BookingSeatConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'BookingSeatConflictError';
-  }
-}
-
-export class BookingPassengerLimitError extends Error {
-  constructor(limit: number) {
-    super(`Too many passengers in one booking. Maximum allowed: ${limit}`);
-    this.name = 'BookingPassengerLimitError';
-  }
-}
-
-export class BookingPriceMismatchError extends Error {
-  constructor(expectedTotal: number, providedTotal: number) {
-    super(`Total price mismatch. Expected ${expectedTotal}, got ${providedTotal}`);
-    this.name = 'BookingPriceMismatchError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on booking`);
-    this.name = 'UnauthorizedError';
-  }
-}
-
-function checkPermission(
+const checkPermission = (
   session: Session,
   action: 'create' | 'read' | 'cancel' | 'read-all',
-) {
+) =>
   assertPermission(
     session,
     action,
@@ -112,7 +51,6 @@ function checkPermission(
     'booking',
     (a) => new UnauthorizedError(a),
   );
-}
 
 function canReadAll(session: Session) {
   return hasPermission(session, 'read-all', canAccessBooking);
@@ -139,7 +77,7 @@ async function generateUniqueBookingRef() {
     const exists = await bookingRepository.findByBookingRef(bookingRef);
     if (!exists) return bookingRef;
   }
-  throw new BookingConflictError('Could not generate unique booking reference');
+  throw new ConflictError('Could not generate unique booking reference');
 }
 
 function assertNoDuplicateSeatAssignments(tickets: BookingTicketInput[]) {
@@ -148,7 +86,7 @@ function assertNoDuplicateSeatAssignments(tickets: BookingTicketInput[]) {
     if (!t.seatNumber) continue;
     const seat = t.seatNumber.trim().toUpperCase();
     if (seen.has(seat)) {
-      throw new BookingSeatConflictError(`Duplicate seat in request: ${seat}`);
+      throw new ConflictError(`Duplicate seat in request: ${seat}`);
     }
     seen.add(seat);
   }
@@ -164,14 +102,14 @@ const MAX_PASSENGERS_PER_BOOKING = 9;
 
 function assertPassengerLimit(tickets: BookingTicketInput[]) {
   if (tickets.length > MAX_PASSENGERS_PER_BOOKING) {
-    throw new BookingPassengerLimitError(MAX_PASSENGERS_PER_BOOKING);
+    throw new BadRequestError(`Too many passengers in one booking. Maximum allowed: ${MAX_PASSENGERS_PER_BOOKING}`);
   }
 }
 
 function assertBookingTotalMatchesTickets(totalPrice: number, tickets: BookingTicketInput[]) {
   const expected = tickets.reduce((sum, t) => sum + t.price + (t.seatSurcharge ?? 0), 0);
   if (Math.abs(expected - totalPrice) > 0.01) {
-    throw new BookingPriceMismatchError(expected, totalPrice);
+    throw new BadRequestError(`Total price mismatch. Expected ${expected}, got ${totalPrice}`);
   }
 }
 
@@ -180,7 +118,7 @@ export const bookingService = {
     checkPermission(session, 'read');
 
     const booking = await bookingRepository.findById(id);
-    if (!booking) throw new BookingNotFoundError(id);
+    if (!booking) throw new NotFoundError(`Booking not found: ${id}`);
 
     if (!canReadAll(session) && booking.userId !== session.user.id) {
       throw new UnauthorizedError('read');
@@ -193,7 +131,7 @@ export const bookingService = {
     checkPermission(session, 'read');
 
     const booking = await bookingRepository.findByBookingRef(bookingRef);
-    if (!booking) throw new BookingNotFoundError(bookingRef);
+    if (!booking) throw new NotFoundError(`Booking not found: ${bookingRef}`);
 
     if (!canReadAll(session) && booking.userId !== session.user.id) {
       throw new UnauthorizedError('read');
@@ -267,12 +205,12 @@ export const bookingService = {
     }
 
     const flight = await flightRepository.findById(data.flightId);
-    if (!flight) throw new BookingNotFoundError(`flight:${data.flightId}`);
+    if (!flight) throw new NotFoundError(`Booking not found: flight:${data.flightId}`);
 
     const bookingRef = data.bookingRef ?? (await generateUniqueBookingRef());
 
     const existingByRef = await bookingRepository.findByBookingRef(bookingRef);
-    if (existingByRef) throw new BookingConflictError('Booking reference already exists');
+    if (existingByRef) throw new ConflictError('Booking reference already exists');
 
     return bookingRepository.create({ ...data, bookingRef });
   },
@@ -290,7 +228,7 @@ export const bookingService = {
     assertBookingTotalMatchesTickets(data.totalPrice, data.tickets);
 
     const flight = await flightRepository.findById(data.flightId);
-    if (!flight) throw new BookingNotFoundError(`flight:${data.flightId}`);
+    if (!flight) throw new NotFoundError(`Booking not found: flight:${data.flightId}`);
 
     assertNoDuplicateSeatAssignments(data.tickets);
 
@@ -305,15 +243,13 @@ export const bookingService = {
           .map((s) => s.seatNumber)
           .filter((s): s is string => Boolean(s))
           .sort();
-        throw new BookingSeatConflictError(
-          `Seat already assigned: ${occupiedSeatList.join(', ')}`,
-        );
+        throw new ConflictError(`Seat already assigned: ${occupiedSeatList.join(', ')}`);
       }
     }
 
     const bookingRef = data.bookingRef ?? (await generateUniqueBookingRef());
     const existingByRef = await bookingRepository.findByBookingRef(bookingRef);
-    if (existingByRef) throw new BookingConflictError('Booking reference already exists');
+    if (existingByRef) throw new ConflictError('Booking reference already exists');
 
     return bookingRepository.createWithTickets({
       booking: {
@@ -333,11 +269,11 @@ export const bookingService = {
     const data = createGuestBookingSchema.parse(input);
 
     const flight = await flightRepository.findById(data.flightId);
-    if (!flight) throw new BookingNotFoundError(`flight:${data.flightId}`);
+    if (!flight) throw new NotFoundError(`Booking not found: flight:${data.flightId}`);
 
     const bookingRef = data.bookingRef ?? (await generateUniqueBookingRef());
     const existingByRef = await bookingRepository.findByBookingRef(bookingRef);
-    if (existingByRef) throw new BookingConflictError('Booking reference already exists');
+    if (existingByRef) throw new ConflictError('Booking reference already exists');
 
     const guestUser = await userRepository.createGuestUser({
       email: makeGuestEmail(data.contactEmail),
@@ -363,7 +299,7 @@ export const bookingService = {
     assertBookingTotalMatchesTickets(data.totalPrice, data.tickets);
 
     const flight = await flightRepository.findById(data.flightId);
-    if (!flight) throw new BookingNotFoundError(`flight:${data.flightId}`);
+    if (!flight) throw new NotFoundError(`Booking not found: flight:${data.flightId}`);
 
     assertNoDuplicateSeatAssignments(data.tickets);
 
@@ -378,15 +314,13 @@ export const bookingService = {
           .map((s) => s.seatNumber)
           .filter((s): s is string => Boolean(s))
           .sort();
-        throw new BookingSeatConflictError(
-          `Seat already assigned: ${occupiedSeatList.join(', ')}`,
-        );
+        throw new ConflictError(`Seat already assigned: ${occupiedSeatList.join(', ')}`);
       }
     }
 
     const bookingRef = data.bookingRef ?? (await generateUniqueBookingRef());
     const existingByRef = await bookingRepository.findByBookingRef(bookingRef);
-    if (existingByRef) throw new BookingConflictError('Booking reference already exists');
+    if (existingByRef) throw new ConflictError('Booking reference already exists');
 
     const guestUser = await userRepository.createGuestUser({
       email: makeGuestEmail(data.contactEmail),
@@ -412,14 +346,14 @@ export const bookingService = {
     checkPermission(session, 'cancel');
 
     const booking = await bookingRepository.findById(id);
-    if (!booking) throw new BookingNotFoundError(id);
+    if (!booking) throw new NotFoundError(`Booking not found: ${id}`);
 
     if (!canReadAll(session) && booking.userId !== session.user.id) {
       throw new UnauthorizedError('cancel');
     }
 
     if (booking.status === BookingStatus.CANCELLED) {
-      throw new BookingAlreadyCancelledError(id);
+      throw new ConflictError(`Booking already cancelled: ${id}`);
     }
 
     const { status } = updateBookingStatusSchema.parse({ status: BookingStatus.CANCELLED });
@@ -432,18 +366,18 @@ export const bookingService = {
     checkPermission(session, 'create');
 
     const booking = await bookingRepository.findById(id);
-    if (!booking) throw new BookingNotFoundError(id);
+    if (!booking) throw new NotFoundError(`Booking not found: ${id}`);
 
     if (!canReadAll(session) && booking.userId !== session.user.id) {
       throw new UnauthorizedError('change-flight');
     }
 
     if (booking.status === BookingStatus.CANCELLED) {
-      throw new BookingAlreadyCancelledError(id);
+      throw new ConflictError(`Booking already cancelled: ${id}`);
     }
 
     if (!canForceChangeFromStatus(booking.flight.status)) {
-      throw new BookingChangeNotAllowedError(
+      throw new ConflictError(
         `Flight change is only allowed for disrupted flights. Current status: ${booking.flight.status}`,
       );
     }
@@ -451,14 +385,14 @@ export const bookingService = {
     const data = changeFlightSchema.parse(input);
 
     if (data.newFlightId === booking.flightId) {
-      throw new BookingConflictError('New flight must be different from current flight');
+      throw new ConflictError('New flight must be different from current flight');
     }
 
     const newFlight = await flightRepository.findById(data.newFlightId);
-    if (!newFlight) throw new BookingNotFoundError(`flight:${data.newFlightId}`);
+    if (!newFlight) throw new NotFoundError(`Booking not found: flight:${data.newFlightId}`);
 
     if (newFlight.status !== FlightStatus.SCHEDULED) {
-      throw new BookingChangeNotAllowedError('New flight must be SCHEDULED');
+      throw new ConflictError('New flight must be SCHEDULED');
     }
 
     const newBookingRef = await generateUniqueBookingRef();
@@ -472,7 +406,7 @@ export const bookingService = {
       keepSeatAssignments: data.keepSeatAssignments,
     });
 
-    if (!changedBooking) throw new BookingNotFoundError(id);
+    if (!changedBooking) throw new NotFoundError(`Booking not found: ${id}`);
     return changedBooking;
   },
 
@@ -482,29 +416,27 @@ export const bookingService = {
     checkPermission(session, 'create');
 
     const booking = await bookingRepository.findById(id);
-    if (!booking) throw new BookingNotFoundError(id);
+    if (!booking) throw new NotFoundError(`Booking not found: ${id}`);
 
     if (!canReadAll(session) && booking.userId !== session.user.id) {
       throw new UnauthorizedError('accept-reaccommodation');
     }
 
     if (booking.status !== BookingStatus.REACCOMMODATION_PENDING) {
-      throw new BookingReaccommodationError(
-        `Booking is not pending reaccommodation: ${booking.status}`,
-      );
+      throw new ConflictError(`Booking is not pending reaccommodation: ${booking.status}`);
     }
 
     const data = acceptReaccommodationSchema.parse(input);
 
     if (data.newFlightId === booking.flightId) {
-      throw new BookingConflictError('New flight must be different from current flight');
+      throw new ConflictError('New flight must be different from current flight');
     }
 
     const newFlight = await flightRepository.findById(data.newFlightId);
-    if (!newFlight) throw new BookingNotFoundError(`flight:${data.newFlightId}`);
+    if (!newFlight) throw new NotFoundError(`Booking not found: flight:${data.newFlightId}`);
 
     if (newFlight.status !== FlightStatus.SCHEDULED) {
-      throw new BookingReaccommodationError('Selected flight is not available for reaccommodation');
+      throw new ConflictError('Selected flight is not available for reaccommodation');
     }
 
     const newBookingRef = await generateUniqueBookingRef();
@@ -517,7 +449,7 @@ export const bookingService = {
       keepSeatAssignments: false,
     });
 
-    if (!changedBooking) throw new BookingNotFoundError(id);
+    if (!changedBooking) throw new NotFoundError(`Booking not found: ${id}`);
     return changedBooking;
   },
 
@@ -530,16 +462,14 @@ export const bookingService = {
     checkPermission(session, 'read');
 
     const booking = await bookingRepository.findById(id);
-    if (!booking) throw new BookingNotFoundError(id);
+    if (!booking) throw new NotFoundError(`Booking not found: ${id}`);
 
     if (!canReadAll(session) && booking.userId !== session.user.id) {
       throw new UnauthorizedError('cancel-reaccommodation');
     }
 
     if (booking.status !== BookingStatus.REACCOMMODATION_PENDING) {
-      throw new BookingReaccommodationError(
-        `Booking is not pending reaccommodation: ${booking.status}`,
-      );
+      throw new ConflictError(`Booking is not pending reaccommodation: ${booking.status}`);
     }
 
     const { reason } = cancelReaccommodationSchema.parse(input ?? {});

@@ -105,6 +105,7 @@ export const paymentRepository = {
     id: string,
     data: {
       status: TransactionStatus;
+      stripePaymentIntentId?: string;
       stripeChargeId?: string;
       failureCode?: string;
       failureMessage?: string;

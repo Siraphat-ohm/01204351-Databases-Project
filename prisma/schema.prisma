@@ -304,6 +304,8 @@ model Transaction {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  stripeSessionId String? @unique
+
   booking Booking @relation(fields: [bookingId], references: [id])
 
   @@index([bookingId])

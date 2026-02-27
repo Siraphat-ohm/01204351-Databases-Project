@@ -19,26 +19,7 @@ import {
 
 type CrewProfileListItem = Awaited<ReturnType<typeof crewProfileRepository.findAll>>[number];
 
-export class CrewProfileNotFoundError extends Error {
-  constructor(userId: string) {
-    super(`Crew profile not found for user: ${userId}`);
-    this.name = 'CrewProfileNotFoundError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on crew profile`);
-    this.name = 'UnauthorizedError';
-  }
-}
-
-export class CrewProfileConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'CrewProfileConflictError';
-  }
-}
+import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 
 function isAdmin(session: Session) {
   return hasAnyRole(session, ['ADMIN']);
@@ -92,13 +73,13 @@ export const crewProfileService = {
     assertCanRead(session, userId);
 
     const profile = await crewProfileRepository.findByUserId(userId);
-    if (!profile) throw new CrewProfileNotFoundError(userId);
+    if (!profile) throw new NotFoundError(`Crew profile not found for user: ${userId}`);
     return profile;
   },
 
   async findMyProfile(session: Session) {
     const profile = await crewProfileRepository.findByUserId(session.user.id);
-    if (!profile) throw new CrewProfileNotFoundError(session.user.id);
+    if (!profile) throw new NotFoundError(`Crew profile not found for user: ${session.user.id}`);
     return profile;
   },
 
@@ -113,7 +94,7 @@ export const crewProfileService = {
     const data = createCrewProfileSchema.parse(input);
     const existing = await crewProfileRepository.findByUserId(data.userId);
     if (existing) {
-      throw new CrewProfileConflictError('Crew profile already exists for this user');
+      throw new ConflictError('Crew profile already exists for this user');
     }
 
     return crewProfileRepository.create(data);
@@ -124,7 +105,7 @@ export const crewProfileService = {
 
     const data = patchCrewProfileSchema.parse(input);
     const updated = await crewProfileRepository.patchByUserId(userId, data);
-    if (!updated) throw new CrewProfileNotFoundError(userId);
+    if (!updated) throw new NotFoundError(`Crew profile not found for user: ${userId}`);
     return updated;
   },
 
@@ -133,7 +114,7 @@ export const crewProfileService = {
 
     const data = updateCrewProfileSchema.parse(input);
     const updated = await crewProfileRepository.updateByUserId(userId, data);
-    if (!updated) throw new CrewProfileNotFoundError(userId);
+    if (!updated) throw new NotFoundError(`Crew profile not found for user: ${userId}`);
     return updated;
   },
 
@@ -141,7 +122,7 @@ export const crewProfileService = {
     if (!isAdmin(session)) throw new UnauthorizedError('delete');
 
     const deleted = await crewProfileRepository.deleteByUserId(userId);
-    if (!deleted) throw new CrewProfileNotFoundError(userId);
+    if (!deleted) throw new NotFoundError(`Crew profile not found for user: ${userId}`);
     return deleted;
   },
 };

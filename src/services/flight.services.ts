@@ -88,10 +88,10 @@ function buildSeatsByClass(layout: NonNullable<Awaited<ReturnType<typeof seatRep
   return byClass;
 }
 
-function checkPermission(
+const checkPermission = (
   session: Session,
   action: 'create' | 'read' | 'update' | 'delete' | 'manage-status',
-) {
+) =>
   assertPermission(
     session,
     action,
@@ -99,7 +99,6 @@ function checkPermission(
     'flight',
     (a) => new UnauthorizedError(a),
   );
-}
 
 const PUBLIC_SESSION: Session = {
   user: {

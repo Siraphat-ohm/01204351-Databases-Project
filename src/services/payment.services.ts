@@ -1,160 +1,104 @@
-import { bookingRepository } from '@/repositories/booking.repository';
-import { paymentRepository } from '@/repositories/payment.repository';
+import { stripe } from "@/lib/stripe";
+import { bookingRepository } from "@/repositories/booking.repository";
+import { paymentRepository } from "@/repositories/payment.repository";
+import { ticketService } from "@/services/ticket.services";
 import {
-  createPaymentSchema,
   markPaymentStatusSchema,
   refundPaymentSchema,
-  type CreatePaymentInput,
   type RefundPaymentInput,
-} from '@/types/payment.type';
-import type { PaginatedResponse } from '@/types/common';
-import {
-  TransactionStatus,
-  TransactionType,
-} from '@/generated/prisma/client';
-import { canAccessPayment } from '@/auth/permissions';
-import type { ServiceSession as Session } from '@/services/_shared/session';
+} from "@/types/payment.type";
+import { TransactionStatus, TransactionType, BookingStatus } from "@/generated/prisma/client";
+import { canAccessPayment } from "@/auth/permissions";
+import type { ServiceSession as Session } from "@/services/_shared/session";
 import {
   assertPermission,
   hasPermission,
-} from '@/services/_shared/authorization';
-import {
-  resolvePagination,
-  type PaginationParams,
-} from '@/services/_shared/pagination';
+} from "@/services/_shared/authorization";
+import { NotFoundError, ConflictError, UnauthorizedError } from "@/lib/errors";
 
-type PaymentListItem = Awaited<ReturnType<typeof paymentRepository.findAll>>[number];
-
-export class PaymentNotFoundError extends Error {
-  constructor(identifier: string) {
-    super(`Payment not found: ${identifier}`);
-    this.name = 'PaymentNotFoundError';
-  }
-}
-
-export class PaymentConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'PaymentConflictError';
-  }
-}
-
-export class BookingNotFoundError extends Error {
-  constructor(identifier: string) {
-    super(`Booking not found: ${identifier}`);
-    this.name = 'BookingNotFoundError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on payment`);
-    this.name = 'UnauthorizedError';
-  }
-}
-
-function checkPermission(
+const checkPermission = (
   session: Session,
-  action: 'create' | 'read' | 'refund' | 'read-all',
-) {
+  action: "create" | "read" | "refund" | "read-all",
+) =>
   assertPermission(
     session,
     action,
     canAccessPayment,
-    'payment',
+    "payment",
     (a) => new UnauthorizedError(a),
   );
-}
 
 function canReadAll(session: Session) {
-  return hasPermission(session, 'read-all', canAccessPayment);
+  return hasPermission(session, "read-all", canAccessPayment);
 }
 
 export const paymentService = {
-  async findById(id: string, session: Session) {
-    checkPermission(session, 'read');
 
-    const payment = await paymentRepository.findById(id);
-    if (!payment) throw new PaymentNotFoundError(id);
-
-    if (!canReadAll(session) && payment.booking.userId !== session.user.id) {
-      throw new UnauthorizedError('read');
-    }
-
-    return payment;
-  },
-
-  async findByBookingId(bookingId: string, session: Session) {
-    checkPermission(session, 'read');
+  async createCheckoutSession(
+    bookingId: string,
+    origin: string,
+    session: Session,
+  ) {
+    checkPermission(session, "create");
 
     const booking = await bookingRepository.findById(bookingId);
-    if (!booking) throw new BookingNotFoundError(bookingId);
+    if (!booking) throw new NotFoundError(`Booking not found: ${bookingId}`);
 
     if (!canReadAll(session) && booking.userId !== session.user.id) {
-      throw new UnauthorizedError('read');
+      throw new UnauthorizedError("create");
     }
 
-    return paymentRepository.findByBookingId(bookingId);
-  },
+    const tickets = await ticketService.findByBookingId(booking.id, session);
 
-  async findMine(session: Session) {
-    checkPermission(session, 'read');
-    return paymentRepository.findByUserId(session.user.id);
-  },
+    const transaction = await paymentRepository.createPayment({
+      bookingId: booking.id,
+      amount: Number(booking.totalPrice),
+      currency: booking.currency,
+    });
 
-  async findAll(session: Session) {
-    checkPermission(session, 'read-all');
-    return paymentRepository.findAll();
-  },
+    const lineItems = tickets.map((ticket) => {
+      const total = Number(ticket.price) + Number(ticket.seatSurcharge);
 
-  async findAllPaginated(
-    session: Session,
-    params?: PaginationParams,
-  ): Promise<PaginatedResponse<PaymentListItem>> {
-    checkPermission(session, 'read-all');
+      return {
+        price_data: {
+          currency: booking.currency.toLowerCase(),
+          product_data: {
+            name: `Flight ${ticket.flightId} - Seat ${
+              ticket.seatNumber || "Unassigned"
+            }`,
+            description: `${ticket.firstName} ${ticket.lastName}`,
+          },
+          unit_amount: Math.round(total * 100),
+        },
+        quantity: 1,
+      };
+    });
 
-    const { page, limit, skip } = resolvePagination(params);
-    const [data, total] = await Promise.all([
-      paymentRepository.findMany({
-        skip,
-        take: limit,
-      }),
-      paymentRepository.count(),
-    ]);
-
-    return {
-      data,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+    const checkoutSession = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card", "promptpay"],
+      line_items: lineItems,
+      success_url: `${origin}/confirmation?bookingId=${booking.id}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/payment?bookingId=${booking.id}&canceled=true`,
+      client_reference_id: transaction.id,
+      metadata: {
+        bookingId: booking.id,
+        transactionId: transaction.id,
       },
-    };
-  },
+      payment_intent_data: {
+        metadata: {
+          bookingId: booking.id,
+          transactionId: transaction.id,
+        },
+      },
+    });
 
-  async createPayment(input: CreatePaymentInput, session: Session) {
-    checkPermission(session, 'create');
+    await paymentRepository.updateStatus(transaction.id, {
+      stripePaymentIntentId: checkoutSession.payment_intent as string,
+      status: TransactionStatus.PENDING,
+    });
 
-    const data = createPaymentSchema.parse(input);
-
-    const booking = await bookingRepository.findById(data.bookingId);
-    if (!booking) throw new BookingNotFoundError(data.bookingId);
-
-    if (!canReadAll(session) && booking.userId !== session.user.id) {
-      throw new UnauthorizedError('create');
-    }
-
-    if (data.stripePaymentIntentId) {
-      const existing = await paymentRepository.findByStripePaymentIntentId(
-        data.stripePaymentIntentId,
-      );
-      if (existing) {
-        throw new PaymentConflictError('Payment intent already exists');
-      }
-    }
-
-    return paymentRepository.createPayment(data);
+    return { url: checkoutSession.url };
   },
 
   async markPaymentSuccess(
@@ -162,13 +106,17 @@ export const paymentService = {
     input: { stripeChargeId?: string },
     session: Session,
   ) {
-    checkPermission(session, 'create');
+    checkPermission(session, "create");
 
     const existing = await paymentRepository.findById(id);
-    if (!existing) throw new PaymentNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Payment not found: ${id}`);
+
+    if (existing.status === TransactionStatus.SUCCESS) {
+      return existing;
+    }
 
     if (existing.type !== TransactionType.PAYMENT) {
-      throw new PaymentConflictError('Only payment transaction can be marked success');
+      throw new ConflictError("Invalid transaction type");
     }
 
     const data = markPaymentStatusSchema.parse({
@@ -176,7 +124,11 @@ export const paymentService = {
       stripeChargeId: input.stripeChargeId,
     });
 
-    return paymentRepository.updateStatus(id, data);
+    const updated = await paymentRepository.updateStatus(id, data);
+
+    await bookingRepository.updateStatus(existing.bookingId, BookingStatus.CONFIRMED);
+
+    return updated;
   },
 
   async markPaymentFailed(
@@ -184,44 +136,51 @@ export const paymentService = {
     input: { failureCode?: string; failureMessage?: string },
     session: Session,
   ) {
-    checkPermission(session, 'create');
+    checkPermission(session, "create");
 
     const existing = await paymentRepository.findById(id);
-    if (!existing) throw new PaymentNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Payment not found: ${id}`);
 
-    if (existing.type !== TransactionType.PAYMENT) {
-      throw new PaymentConflictError('Only payment transaction can be marked failed');
+    if (existing.status === TransactionStatus.FAILED) {
+      return existing;
     }
 
-    const data = markPaymentStatusSchema.parse({
+    return paymentRepository.updateStatus(id, {
       status: TransactionStatus.FAILED,
       failureCode: input.failureCode,
       failureMessage: input.failureMessage,
     });
-
-    return paymentRepository.updateStatus(id, data);
   },
 
   async refundPayment(id: string, input: RefundPaymentInput, session: Session) {
-    checkPermission(session, 'refund');
+    checkPermission(session, "refund");
 
     const payment = await paymentRepository.findById(id);
-    if (!payment) throw new PaymentNotFoundError(id);
-
-    if (payment.type !== TransactionType.PAYMENT) {
-      throw new PaymentConflictError('Only payment transaction can be refunded');
-    }
+    if (!payment) throw new NotFoundError(`Payment not found: ${id}`);
 
     if (payment.status !== TransactionStatus.SUCCESS) {
-      throw new PaymentConflictError('Only successful payments can be refunded');
+      throw new ConflictError("Only successful payments can be refunded");
+    }
+
+    if (!payment.stripeChargeId) {
+      throw new ConflictError("Missing Stripe payment_intent id");
     }
 
     const data = refundPaymentSchema.parse(input);
     const refundAmount = data.amount ?? Number(payment.amount);
 
     if (refundAmount > Number(payment.amount)) {
-      throw new PaymentConflictError('Refund amount exceeds original payment amount');
+      throw new ConflictError("Refund exceeds original amount");
     }
+
+    // 🔥 Real Stripe refund
+    const stripeRefund = await stripe.refunds.create({
+      payment_intent: payment.stripeChargeId,
+      amount: Math.round(refundAmount * 100),
+      metadata: {
+        transactionId: payment.id,
+      },
+    });
 
     const refund = await paymentRepository.createRefund({
       bookingId: payment.bookingId,
@@ -238,36 +197,5 @@ export const paymentService = {
     });
 
     return refund;
-  },
-
-  async refundBookingForReaccommodation(bookingId: string, reason?: string) {
-    const booking = await bookingRepository.findById(bookingId);
-    if (!booking) throw new BookingNotFoundError(bookingId);
-
-    const payments = await paymentRepository.findByBookingId(bookingId);
-    const refundablePayments = payments.filter(
-      (p) => p.type === TransactionType.PAYMENT && p.status === TransactionStatus.SUCCESS,
-    );
-
-    for (const payment of refundablePayments) {
-      await paymentRepository.createRefund({
-        bookingId: payment.bookingId,
-        amount: Number(payment.amount),
-        currency: payment.currency,
-        reason: reason ?? 'Passenger cancelled during reaccommodation',
-        originalTransactionId: payment.id,
-      });
-
-      await paymentRepository.updateStatus(payment.id, {
-        status: TransactionStatus.REFUNDED,
-        refundedAt: new Date(),
-        refundReason: reason ?? 'Passenger cancelled during reaccommodation',
-      });
-    }
-
-    return {
-      bookingId,
-      refundedCount: refundablePayments.length,
-    };
   },
 };

@@ -14,19 +14,7 @@ import {
 
 type UserListItem = Awaited<ReturnType<typeof userRepository.findAllAdmin>>[number];
 
-export class UserNotFoundError extends Error {
-  constructor(identifier: string) {
-    super(`User not found: ${identifier}`);
-    this.name = 'UserNotFoundError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on user`);
-    this.name = 'UnauthorizedError';
-  }
-}
+import { NotFoundError, UnauthorizedError } from '@/lib/errors';
 
 function assertAdmin(session: Session, action: string) {
   if (session.user.role !== 'ADMIN') {
@@ -37,7 +25,7 @@ function assertAdmin(session: Session, action: string) {
 export const userService = {
   async findMe(session: Session) {
     const user = await userRepository.findByIdSelf(session.user.id);
-    if (!user) throw new UserNotFoundError(session.user.id);
+    if (!user) throw new NotFoundError(`User not found: ${session.user.id}`);
     return user;
   },
 
@@ -45,7 +33,7 @@ export const userService = {
     assertAdmin(session, 'read');
 
     const user = await userRepository.findByIdAdmin(id);
-    if (!user) throw new UserNotFoundError(id);
+    if (!user) throw new NotFoundError(`User not found: ${id}`);
     return user;
   },
 
@@ -80,7 +68,7 @@ export const userService = {
   async updateMyProfile(input: UpdateMyProfileInput, session: Session) {
     const data = updateMyProfileSchema.parse(input);
     const existing = await userRepository.findByIdSelf(session.user.id);
-    if (!existing) throw new UserNotFoundError(session.user.id);
+    if (!existing) throw new NotFoundError(`User not found: ${session.user.id}`);
 
     return userRepository.updateMyProfile(session.user.id, data);
   },
@@ -90,7 +78,7 @@ export const userService = {
 
     const data = updateUserRoleSchema.parse(input);
     const existing = await userRepository.findByIdAdmin(id);
-    if (!existing) throw new UserNotFoundError(id);
+    if (!existing) throw new NotFoundError(`User not found: ${id}`);
 
     return userRepository.updateRole(id, data.role);
   },
