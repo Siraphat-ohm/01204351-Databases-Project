@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ZodError } from 'zod';
+import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 import { ticketService } from '@/services/ticket.services';
 import { getServerSession } from '@/services/auth.services';
 import {
@@ -37,21 +38,10 @@ export async function PATCH(
 
     return successResponse(row);
   } catch (err) {
-    if (err instanceof ZodError) {
-      return validationErrorResponse(zodFieldErrors(err));
-    }
-    if (err instanceof Error && err.name === 'TicketNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === 'TicketAlreadyCheckedInError') {
-      return errorResponse(err.message, 409);
-    }
-    if (err instanceof Error && err.name === 'TicketConflictError') {
-      return errorResponse(err.message, 409);
-    }
+    if (err instanceof ZodError) return validationErrorResponse(zodFieldErrors(err));
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof ConflictError) return errorResponse(err.message, 409);
     console.error('[PATCH /api/v1/tickets/[id]/check-in]', err);
     return errorResponse('Internal server error');
   }
