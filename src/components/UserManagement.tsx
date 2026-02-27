@@ -2,41 +2,101 @@
 
 import { 
   Title, Group, Button, Table, Badge, Text, ActionIcon, 
-  TextInput, Paper, Select, Pagination, Center, Avatar, Tooltip, Stack 
+  TextInput, Paper, Select, Pagination, Center, Avatar, Tooltip,
+  Modal, Stack, Alert
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Search, Filter, Plus, Pencil, Trash, UserCog, ShieldCheck, MapPin } from 'lucide-react';
-import { useState } from 'react';
+import { Search, Filter, Plus, Trash, ShieldCheck, MapPin, Check } from 'lucide-react';
+import { useState, useTransition, useEffect } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
-// --- Types based on Schema ---
-type Role = 'PASSENGER' | 'ADMIN' | 'PILOT' | 'CABIN_CREW' | 'GROUND_STAFF' | 'MECHANIC';
-type Rank = 'CAPTAIN' | 'FIRST_OFFICER' | 'PURSER' | 'CREW' | 'MANAGER' | 'SUPERVISOR' | 'STAFF';
-
-interface StaffProfile {
-  employeeId: string;
-  rank: Rank | null;
-  baseAirport: { iataCode: string; city: string } | null;
-}
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  role: Role;
-  staffProfile: StaffProfile | null;
-}
+import { UserAdmin } from '@/types/user.type'; 
+import { Role } from '@/generated/prisma/client';
+import { adminUpdateUserRoleAction } from '@/actions/user-actions';
 
 interface UserManagementProps {
-  initialUsers: User[];
+  initialUsers: UserAdmin[];
+  totalPages: number;
+  currentPage: number;
 }
 
-export function UserManagement({ initialUsers }: UserManagementProps) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string | null>(null);
+export function UserManagement({ initialUsers, totalPages, currentPage }: UserManagementProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  // Helper: Role Colors
+  // Initialize Search & Filter from URL
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [roleFilter, setRoleFilter] = useState<string | null>(searchParams.get('role') || null);
+
+  // Sync state if the user uses the browser's Back/Forward buttons
+  useEffect(() => {
+    setSearchTerm(searchParams.get('search') || '');
+    setRoleFilter(searchParams.get('role') || null);
+  }, [searchParams]);
+
+  // --- ROLE EDIT MODAL STATE ---
+  const [opened, { open, close }] = useDisclosure(false);
+  const [editingUser, setEditingUser] = useState<UserAdmin | null>(null);
+  const [editRole, setEditRole] = useState<string>('');
+  
+  const [isPending, startTransition] = useTransition();
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
+  // ────────────────────────────────────────────────
+  // EXPLICIT SEARCH HANDLER
+  // ────────────────────────────────────────────────
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault(); 
+    
+    const params = new URLSearchParams(searchParams);
+    
+    if (searchTerm.trim()) params.set('search', searchTerm.trim());
+    else params.delete('search');
+
+    if (roleFilter) params.set('role', roleFilter);
+    else params.delete('role');
+
+    params.set('page', '1'); // Always reset to page 1 on a new search
+
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
+  const handlePageChange = (page: number) => {
+    const params = new URLSearchParams(searchParams);
+    params.set('page', page.toString());
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
+  // ────────────────────────────────────────────────
+  // ROLE EDIT HANDLERS
+  // ────────────────────────────────────────────────
+  const handleEditRoleClick = (user: UserAdmin) => {
+    setEditingUser(user);
+    setEditRole(user.role);
+    setUpdateError(null);
+    open();
+  };
+
+  const handleSaveRole = () => {
+    if (!editingUser) return;
+
+    startTransition(async () => {
+      const result = await adminUpdateUserRoleAction(
+        editingUser.id,
+        { role: editRole as Role }
+      );
+
+      if (result?.error) {
+        setUpdateError(result.error);
+      } else {
+        close();
+        router.refresh(); 
+      }
+    });
+  };
+
+  // Helpers
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'ADMIN': return 'red';
@@ -48,96 +108,84 @@ export function UserManagement({ initialUsers }: UserManagementProps) {
     }
   };
 
-  // Helper: Formatted Name
-  const getFullName = (user: User) => {
-    if (user.firstName && user.lastName) return `${user.firstName} ${user.lastName}`;
-    return user.username;
+  const getDisplayName = (user: UserAdmin) => {
+    if (user.name) return user.name;
+    return user.email.split('@')[0];
   };
 
-  // Filter Logic
-  const filteredUsers = initialUsers.filter(user => {
-    const matchesSearch = 
-      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (user.staffProfile?.employeeId || '').toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesRole = roleFilter ? user.role === roleFilter : true;
+  // ────────────────────────────────────────────────
+  // RENDER ROWS (Directly from Server Payload)
+  // ────────────────────────────────────────────────
+  const rows = initialUsers.map((user) => {
+    const displayName = getDisplayName(user);
+    const location = user.staffProfile?.baseAirport || user.staffProfile?.station;
 
-    return matchesSearch && matchesRole;
-  });
+    return (
+      <Table.Tr key={user.id}>
+        <Table.Td>
+          <Group gap="sm">
+            <Avatar radius="xl" color="blue" src={user.image || null} alt={displayName}>
+              {displayName.charAt(0).toUpperCase()}
+            </Avatar>
+            <div>
+              <Text size="sm" fw={500}>{displayName}</Text>
+              <Text size="xs" c="dimmed">{user.email}</Text>
+            </div>
+          </Group>
+        </Table.Td>
 
-  const rows = filteredUsers.map((user) => (
-    <Table.Tr key={user.id}>
-      <Table.Td>
-        <Group gap="sm">
-          <Avatar radius="xl" color="blue" src={null} alt={user.username}>
-            {user.username.substring(0, 2).toUpperCase()}
-          </Avatar>
-          <div>
-            <Text size="sm" fw={500}>{getFullName(user)}</Text>
-            <Text size="xs" c="dimmed">{user.email}</Text>
-          </div>
-        </Group>
-      </Table.Td>
+        <Table.Td>
+          <Badge color={getRoleColor(user.role)} variant="light">
+            {user.role.replace('_', ' ')}
+          </Badge>
+        </Table.Td>
 
-      <Table.Td>
-        <Badge color={getRoleColor(user.role)} variant="light">
-          {user.role.replace('_', ' ')}
-        </Badge>
-      </Table.Td>
-
-      <Table.Td>
-        {user.staffProfile ? (
-          <Group gap={4}>
+        <Table.Td>
+          {user.staffProfile ? (
             <Badge variant="outline" color="gray" size="sm">
               {user.staffProfile.employeeId}
             </Badge>
-          </Group>
-        ) : (
-          <Text size="xs" c="dimmed">-</Text>
-        )}
-      </Table.Td>
-
-      <Table.Td>
-        {user.staffProfile?.rank ? (
-           <Text size="sm" fw={500}>{user.staffProfile.rank.replace('_', ' ')}</Text>
-        ) : (
-           <Text size="xs" c="dimmed">-</Text>
-        )}
-      </Table.Td>
-
-      <Table.Td>
-         {user.staffProfile?.baseAirport ? (
-            <Group gap={4}>
-               <MapPin size={14} color="gray" />
-               <Text size="sm">{user.staffProfile.baseAirport.iataCode}</Text>
-            </Group>
-         ) : (
+          ) : (
             <Text size="xs" c="dimmed">-</Text>
-         )}
-      </Table.Td>
+          )}
+        </Table.Td>
 
-      <Table.Td>
-        <Group gap={4} justify="flex-end">
-          <Tooltip label="Manage Roles">
-            <ActionIcon variant="subtle" color="blue">
-              <ShieldCheck size={16} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Edit Profile">
-            <ActionIcon variant="subtle" color="gray">
-              <Pencil size={16} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Deactivate">
-            <ActionIcon variant="subtle" color="red">
-              <Trash size={16} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
-      </Table.Td>
-    </Table.Tr>
-  ));
+        <Table.Td>
+          {user.staffProfile?.rank ? (
+             <Text size="sm" fw={500}>{user.staffProfile.rank.replace('_', ' ')}</Text>
+          ) : (
+             <Text size="xs" c="dimmed">-</Text>
+          )}
+        </Table.Td>
+
+        <Table.Td>
+           {location ? (
+              <Group gap={4}>
+                 <MapPin size={14} color="gray" />
+                 <Text size="sm">{location.iataCode}</Text>
+              </Group>
+           ) : (
+              <Text size="xs" c="dimmed">-</Text>
+           )}
+        </Table.Td>
+
+        <Table.Td>
+          <Group gap={4} justify="flex-end">
+            <Tooltip label="Manage Role">
+              <ActionIcon variant="subtle" color="blue" onClick={() => handleEditRoleClick(user)}>
+                <ShieldCheck size={16} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="Deactivate">
+              <ActionIcon variant="subtle" color="red">
+                <Trash size={16} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        </Table.Td>
+      </Table.Tr>
+    );
+  });
 
   return (
     <>
@@ -151,26 +199,48 @@ export function UserManagement({ initialUsers }: UserManagementProps) {
         </Button>
       </Group>
 
-      {/* Filters */}
+      {/* ────────────────────────────────────────────────
+          SEARCH BAR (Submit via Form)
+          ──────────────────────────────────────────────── */}
       <Paper shadow="xs" p="md" mb="lg" withBorder>
-        <Group>
-          <TextInput 
-            placeholder="Search Name, Email, or Employee ID..." 
-            leftSection={<Search size={16} />} 
-            style={{ flex: 1 }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.currentTarget.value)}
-          />
-          <Select 
-            placeholder="Filter Role"
-            data={['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'PASSENGER']}
-            value={roleFilter}
-            onChange={setRoleFilter}
-            clearable
-            leftSection={<Filter size={16} />}
-            style={{ width: 200 }}
-          />
-        </Group>
+        <form onSubmit={handleSearch}>
+          <Group align="flex-end">
+            <TextInput 
+              label="Search"
+              placeholder="Name, Email, or Employee ID... (Press Enter)" 
+              leftSection={<Search size={16} />} 
+              style={{ flex: 1 }}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.currentTarget.value)}
+            />
+            <Select 
+              label="Role"
+              placeholder="All Roles"
+              data={['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC', 'PASSENGER']}
+              value={roleFilter}
+              onChange={setRoleFilter}
+              clearable
+              leftSection={<Filter size={16} />}
+              style={{ width: 200 }}
+            />
+            <Button type="submit" color="blue">
+              Apply Filters
+            </Button>
+            
+            {(searchParams.get('search') || searchParams.get('role')) && (
+              <Button 
+                variant="default" 
+                onClick={() => {
+                  setSearchTerm('');
+                  setRoleFilter(null);
+                  router.push(pathname); 
+                }}
+              >
+                Clear
+              </Button>
+            )}
+          </Group>
+        </form>
       </Paper>
 
       {/* Table */}
@@ -200,9 +270,60 @@ export function UserManagement({ initialUsers }: UserManagementProps) {
         </Table.ScrollContainer>
       </Paper>
       
-      <Center mt="md">
-         <Pagination total={1} color="blue" />
-      </Center>
+      {totalPages > 1 && (
+        <Center mt="md">
+           <Pagination 
+             total={totalPages} 
+             value={currentPage} 
+             onChange={handlePageChange} 
+             color="blue" 
+           />
+        </Center>
+      )}
+
+      {/* --- ROLE EDIT MODAL --- */}
+      <Modal
+        opened={opened} 
+        onClose={close} 
+        title={<Group gap="xs"><ShieldCheck size={20} /><Text fw={700} size="lg">Manage User Role</Text></Group>}
+        centered
+      >
+        {editingUser && (
+          <Stack>
+            {updateError && (
+              <Alert color="red" title="Error">
+                {updateError}
+              </Alert>
+            )}
+
+            <Paper p="sm" bg="gray.0" radius="md" mb="xs">
+              <Text size="xs" c="dimmed" fw={600}>USER DETAILS</Text>
+              <Text size="sm" fw={500}>{getDisplayName(editingUser)}</Text>
+              <Text size="sm" c="dimmed">{editingUser.email}</Text>
+            </Paper>
+
+            <Select
+              label="System Role"
+              description="Warning: Changing a user's role alters their dashboard access."
+              data={['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC', 'PASSENGER']}
+              value={editRole}
+              onChange={(val) => setEditRole(val || '')}
+              allowDeselect={false}
+              disabled={isPending}
+            />
+
+            <Button 
+              mt="md" 
+              fullWidth 
+              onClick={handleSaveRole} 
+              loading={isPending}
+              leftSection={!isPending && <Check size={16} />}
+            >
+              Update Role
+            </Button>
+          </Stack>
+        )}
+      </Modal>
     </>
   );
 }

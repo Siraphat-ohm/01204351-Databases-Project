@@ -2,12 +2,13 @@
 
 import { 
   Title, Group, Button, Table, Badge, Text, ActionIcon, 
-  TextInput, Paper, Modal, Select, Stack, Alert, LoadingOverlay
+  TextInput, Paper, Modal, Select, Stack, Alert, LoadingOverlay, Center, Pagination
 } from '@mantine/core';
 import { useDisclosure, useSetState } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Plus, Search, Pencil, Trash, Plane, Filter, AlertTriangle, Check, X } from 'lucide-react';
-import { useState, useMemo } from 'react'; // Added useMemo
+import { useState, useEffect } from 'react'; 
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AircraftStatus } from '@/generated/prisma/client'; 
 import { deleteAircraftAction } from '@/actions/aircraft-actions';
@@ -28,24 +29,33 @@ interface Aircraft {
 }
 
 interface AircraftManagementProps {
-  initialAircrafts: any[]; 
+  initialAircrafts: Aircraft[]; 
   aircraftTypes: AircraftType[];
+  totalPages: number;
+  currentPage: number;
 }
 
-export function AircraftManagement({ initialAircrafts, aircraftTypes }: AircraftManagementProps) {
-  const [aircrafts, setAircrafts] = useState<Aircraft[]>(initialAircrafts as Aircraft[]);
+export function AircraftManagement({ initialAircrafts, aircraftTypes, totalPages, currentPage }: AircraftManagementProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  // Removed addOpened since we will navigate to a new page instead
+  // Initialize Search & Filter from URL
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+  const [statusFilter, setStatusFilter] = useState<string | null>(searchParams.get('status') || null);
+
+  // Sync state if the user uses the browser's Back/Forward buttons
+  useEffect(() => {
+    setSearchTerm(searchParams.get('search') || '');
+    setStatusFilter(searchParams.get('status') || null);
+  }, [searchParams]);
+
   const [deleteOpened, { open: openDelete, close: closeDelete }] = useDisclosure(false);
-
   const [aircraftToDelete, setAircraftToDelete] = useState<Aircraft | null>(null);
   const [deleteState, setDeleteState] = useSetState({
     isDeleting: false,
     error: null as string | null,
   });
-
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -54,6 +64,31 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
       case 'RETIRED':    return 'gray';
       default:           return 'gray';
     }
+  };
+
+  // ────────────────────────────────────────────────
+  // EXPLICIT SEARCH HANDLER
+  // ────────────────────────────────────────────────
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault(); // Prevent page reload
+    
+    const params = new URLSearchParams(searchParams);
+    
+    if (searchTerm.trim()) params.set('search', searchTerm.trim());
+    else params.delete('search');
+
+    if (statusFilter) params.set('status', statusFilter);
+    else params.delete('status');
+
+    params.set('page', '1'); // Always reset to page 1 on a new search
+
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
+  const handlePageChange = (page: number) => {
+    const params = new URLSearchParams(searchParams);
+    params.set('page', page.toString());
+    router.push(`${pathname}?${params.toString()}`);
   };
 
   // ────────────────────────────────────────────────
@@ -77,9 +112,6 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
         throw new Error(result.error);
       }
 
-      // Remove from local state (optimistic update)
-      setAircrafts(prev => prev.filter(a => a.id !== aircraftToDelete.id));
-
       notifications.show({
         title: "Aircraft deleted",
         message: `${aircraftToDelete.tailNumber} has been removed`,
@@ -90,6 +122,7 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
 
       closeDelete();
       setAircraftToDelete(null);
+      router.refresh(); 
 
     } catch (err: any) {
       const msg = err.message || "Something went wrong. Please try again.";
@@ -115,22 +148,9 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
   };
 
   // ────────────────────────────────────────────────
-  // Filtering (OPTIMIZED WITH useMemo)
+  // Render
   // ────────────────────────────────────────────────
-  const filteredAircrafts = useMemo(() => {
-    return aircrafts.filter(ac => {
-      // Added Optional Chaining (?) to prevent crashes if type is ever null
-      const matchesSearch = 
-        ac.tailNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (ac.type?.model?.toLowerCase() || '').includes(searchTerm.toLowerCase());
-      
-      const matchesStatus = statusFilter ? ac.status === statusFilter : true;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [aircrafts, searchTerm, statusFilter]);
-
-  const rows = filteredAircrafts.map((ac) => (
+  const rows = initialAircrafts.map((ac) => (
     <Table.Tr key={ac.id}>
       <Table.Td>
         <Group gap="sm">
@@ -183,7 +203,6 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
           <Title order={2}>Fleet Management</Title>
           <Text c="dimmed" size="sm">Manage aircraft status and fleet additions</Text>
         </div>
-        {/* Changed from onClick={openAdd} to a Link for better UX */}
         <Button 
           component={Link} 
           href="/admin/dashboard/aircraft/new" 
@@ -193,26 +212,48 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
         </Button>
       </Group>
 
-      {/* Search & Filter */}
+      {/* ────────────────────────────────────────────────
+          NEW SEARCH BAR (Submit via Form)
+          ──────────────────────────────────────────────── */}
       <Paper shadow="xs" p="md" mb="lg" withBorder>
-        <Group>
-          <TextInput
-            placeholder="Search Tail Number or Model..."
-            leftSection={<Search size={16} />}
-            style={{ flex: 1 }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.currentTarget.value)}
-          />
-          <Select
-            placeholder="Filter by Status"
-            data={['ACTIVE', 'MAINTENANCE', 'RETIRED']}
-            value={statusFilter}
-            onChange={setStatusFilter}
-            clearable
-            leftSection={<Filter size={16} />}
-            style={{ width: 200 }}
-          />
-        </Group>
+        <form onSubmit={handleSearch}>
+          <Group align="flex-end">
+            <TextInput
+              label="Search"
+              placeholder="Tail Number or Model... (Press Enter)"
+              leftSection={<Search size={16} />}
+              style={{ flex: 1 }}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.currentTarget.value)}
+            />
+            <Select
+              label="Status"
+              placeholder="All Statuses"
+              data={['ACTIVE', 'MAINTENANCE', 'RETIRED']}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              clearable
+              leftSection={<Filter size={16} />}
+              style={{ width: 200 }}
+            />
+            <Button type="submit" color="blue">
+              Apply Filters
+            </Button>
+            {/* Optional "Clear" button if search/filter exists in URL */}
+            {(searchParams.get('search') || searchParams.get('status')) && (
+              <Button 
+                variant="default" 
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter(null);
+                  router.push(pathname); // Clear URL completely
+                }}
+              >
+                Clear
+              </Button>
+            )}
+          </Group>
+        </form>
       </Paper>
 
       <Paper shadow="xs" withBorder pos="relative">
@@ -240,6 +281,17 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes }: Aircraft
           </Table>
         </Table.ScrollContainer>
       </Paper>
+
+      {totalPages > 1 && (
+        <Center mt="md">
+           <Pagination 
+             total={totalPages} 
+             value={currentPage}
+             onChange={handlePageChange}
+             color="blue" 
+           />
+        </Center>
+      )}
 
       {/* ──── DELETE CONFIRMATION ───── */}
       <Modal

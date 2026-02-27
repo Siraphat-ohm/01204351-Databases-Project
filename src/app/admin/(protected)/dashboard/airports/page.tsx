@@ -1,31 +1,54 @@
-import { AirportManagement, Airport } from '@/components/AirportManagement';
+import { AirportManagement } from '@/components/AirportManagement';
+import { airportService } from '@/services/airport.services'; 
+import { getServerSession } from '@/services/auth.services'; 
+import { redirect } from 'next/navigation';
 
-// --- Mock Service (Simulating Database Call) ---
-async function getAirports(): Promise<Airport[]> {
-  // Simulate Network Latency
-  await new Promise((resolve) => setTimeout(resolve, 600));
-
-  // Mock Data based on your Prisma Schema
-  return [
-    { id: 1, iataCode: 'BKK', name: 'Suvarnabhumi Airport', city: 'Bangkok', country: 'Thailand' },
-    { id: 2, iataCode: 'DMK', name: 'Don Mueang International Airport', city: 'Bangkok', country: 'Thailand' },
-    { id: 3, iataCode: 'CNX', name: 'Chiang Mai International Airport', city: 'Chiang Mai', country: 'Thailand' },
-    { id: 4, iataCode: 'HKT', name: 'Phuket International Airport', city: 'Phuket', country: 'Thailand' },
-    { id: 5, iataCode: 'NRT', name: 'Narita International Airport', city: 'Tokyo', country: 'Japan' },
-    { id: 6, iataCode: 'HND', name: 'Haneda Airport', city: 'Tokyo', country: 'Japan' },
-    { id: 7, iataCode: 'SIN', name: 'Changi Airport', city: 'Singapore', country: 'Singapore' },
-    { id: 8, iataCode: 'LHR', name: 'Heathrow Airport', city: 'London', country: 'United Kingdom' },
-    { id: 9, iataCode: 'CDG', name: 'Charles de Gaulle Airport', city: 'Paris', country: 'France' },
-    { id: 10, iataCode: 'JFK', name: 'John F. Kennedy International Airport', city: 'New York', country: 'United States' },
-  ];
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-export default async function AirportsPage() {
-  // 1. Fetch data on the server
-  const airportData = await getAirports();
+export default async function AirportsPage({ searchParams }: PageProps) {
+  const session = await getServerSession();
+  if (!session) redirect('/admin/login');
 
-  // 2. Pass data to Client Component
+  const resolvedParams = await searchParams;
+  const page = Number(resolvedParams.page) || 1;
+  const limit = 15; // 👈 Fixed limit set to 15
+  const search = typeof resolvedParams.search === 'string' ? resolvedParams.search.toLowerCase() : '';
+
+  let finalData = [];
+  let totalPages = 1;
+
+  if (search) {
+    // WORKAROUND: Because the service doesn't support search, we fetch all 
+    // and filter + paginate manually on the server.
+    const allAirports = await airportService.findAll(session as any);
+    
+    const filtered = allAirports.filter(a => 
+      a.iataCode.toLowerCase().includes(search) ||
+      a.name.toLowerCase().includes(search) ||
+      a.city.toLowerCase().includes(search) ||
+      a.country.toLowerCase().includes(search)
+    );
+
+    const total = filtered.length;
+    totalPages = Math.ceil(total / limit) || 1;
+    
+    const skip = (page - 1) * limit;
+    finalData = filtered.slice(skip, skip + limit);
+
+  } else {
+    // If no search, use the native paginated service
+    const response = await airportService.findAllPaginated(session as any, { page, limit });
+    finalData = response.data;
+    totalPages = response.meta.totalPages;
+  }
+
   return (
-    <AirportManagement initialAirports={airportData} />
+    <AirportManagement 
+      initialAirports={finalData as any} 
+      totalPages={totalPages}
+      currentPage={page}
+    />
   );
 }

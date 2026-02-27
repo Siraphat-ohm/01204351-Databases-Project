@@ -2,22 +2,22 @@
 import { useDisclosure } from '@mantine/hooks';
 import { 
   Table, Badge, Text, ActionIcon, Group, Paper, TextInput, Button, Title, 
-  Pagination, Center, Select, Avatar, ThemeIcon, Divider, Autocomplete, Stack, Box, Grid, Modal, Alert
+  Pagination, Center, Select, Avatar, ThemeIcon, Divider, Autocomplete, Stack, Box, Grid, Modal, Alert, Tooltip
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
 import { 
   Pencil, Trash, Search, Filter, Plus, PlaneTakeoff, X, ChevronUp, 
-  ChevronDown, User, Clock, ChevronRight, MapPin, Gauge, DollarSign, Plane, Calendar, AlertTriangle, Check
+  ChevronDown, User, Clock, ChevronRight, MapPin, Gauge, DollarSign, Plane, Calendar, AlertTriangle, Check, Ticket
 } from 'lucide-react';
 import { useRouter, useSearchParams, usePathname} from 'next/navigation';
-import { useState, useMemo, Fragment, useTransition } from 'react';
+import { useState, useMemo, Fragment, useTransition, useEffect } from 'react';
 import Link from 'next/link';
 import { FlightStatus } from '@/generated/prisma/client';
 import '@mantine/dates/styles.css';
 import { deleteFlightAction } from '@/actions/flight-actions';
 
-// --- Types (Fixed ID to string) ---
+// --- Types ---
 export interface FlightTableRow {
   id: string; 
   flightCode: string;
@@ -83,7 +83,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
 
   const [expandedRows, setExpandedRows] = useState<string[]>([]);
   
-  // Filter States
+  // Filter States initialized from URL
   const [flightCodeSearch, setFlightCodeSearch] = useState(searchParams.get('flightCode') || '');
   const [originSearch, setOriginSearch] = useState(searchParams.get('origin') || '');
   const [destSearch, setDestSearch] = useState(searchParams.get('destination') || '');
@@ -93,6 +93,15 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
   );
 
   const [statusFilter, setStatusFilter] = useState<string | null>(searchParams.get('status'));
+
+  // Keep state in sync with URL if user clicks browser back/forward
+  useEffect(() => {
+    setFlightCodeSearch(searchParams.get('flightCode') || '');
+    setOriginSearch(searchParams.get('origin') || '');
+    setDestSearch(searchParams.get('destination') || '');
+    setStatusFilter(searchParams.get('status'));
+    setDateValue(searchParams.get('date') ? new Date(searchParams.get('date')!) : null);
+  }, [searchParams]);
 
   // Sorting State
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
@@ -125,6 +134,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
         });
         closeDelete();
         setFlightToDelete(null);
+        router.refresh();
       }
     });
   };
@@ -173,9 +183,12 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
     router.push(`${pathname}?${params.toString()}`);
   };
 
-  const applyFilters = () => {
+  // Explicit Form Submission
+  const applyFilters = (e: React.FormEvent) => {
+    e.preventDefault();
     const params = new URLSearchParams(searchParams);
-    params.set('page', '1');
+    params.set('page', '1'); // Always reset to page 1 on search
+    
     if (flightCodeSearch) params.set('flightCode', flightCodeSearch); else params.delete('flightCode');
     if (originSearch) params.set('origin', originSearch); else params.delete('origin');
     if (destSearch) params.set('destination', destSearch); else params.delete('destination');
@@ -193,7 +206,11 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
   };
 
   const clearFilters = () => {
-    setFlightCodeSearch(''); setOriginSearch(''); setDestSearch(''); setDateValue(null); setStatusFilter(null);
+    setFlightCodeSearch(''); 
+    setOriginSearch(''); 
+    setDestSearch(''); 
+    setDateValue(null); 
+    setStatusFilter(null);
     router.push(pathname);
   };
 
@@ -214,7 +231,6 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
           </Table.Td>
           
           <Table.Td>
-            {/* 🔒 FIX: LOCKED ROUTE COLUMN WITH FIXED WIDTHS */}
             <Group gap="sm" align="center" wrap="nowrap">
               <Box w={80} style={{ textAlign: 'right' }}>
                 <Text fw={700} lh={1}>{flight.route?.origin?.iataCode}</Text>
@@ -240,16 +256,31 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
           </Table.Td>
           <Table.Td>
             <Group gap={4} justify="flex-end">
-              <ActionIcon component={Link} href={`/admin/dashboard/flights/${flight.id}/edit`} variant="subtle" color="blue" onClick={(e) => e.stopPropagation()}>
-                <Pencil size={16} />
-              </ActionIcon>
-              <ActionIcon 
-                variant="subtle" 
-                color="red" 
-                onClick={(e) => handleDeleteClick(flight, e)}
-              >
-                <Trash size={16} />
-              </ActionIcon>
+              <Tooltip label="View Tickets">
+                <ActionIcon 
+                  component={Link} 
+                  href={`/admin/dashboard/flights/${flight.id}/tickets`} 
+                  variant="subtle" 
+                  color="grape" 
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Ticket size={16} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="Edit Flight">
+                <ActionIcon component={Link} href={`/admin/dashboard/flights/${flight.id}/edit`} variant="subtle" color="blue" onClick={(e) => e.stopPropagation()}>
+                  <Pencil size={16} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="Delete Flight">
+                <ActionIcon 
+                  variant="subtle" 
+                  color="red" 
+                  onClick={(e) => handleDeleteClick(flight, e)}
+                >
+                  <Trash size={16} />
+                </ActionIcon>
+              </Tooltip>
             </Group>
           </Table.Td>
         </Table.Tr>
@@ -349,64 +380,66 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
         </Button>
       </Group>
 
-      {/* --- SEARCH BAR --- */}
+      {/* --- SEARCH BAR (Wrapped in a form to prevent overload) --- */}
       <Paper shadow="xs" p="md" mb="lg" withBorder>
-        <Group align="end" gap="sm" w="100%">
-          <TextInput 
-            label="Flight Code" 
-            placeholder="TG101" 
-            leftSection={<Search size={16} />} 
-            value={flightCodeSearch} 
-            onChange={(e) => setFlightCodeSearch(e.currentTarget.value)}
-            style={{ flex: 1, minWidth: '110px' }} 
-          />
-          <Autocomplete
-            label="Origin" 
-            placeholder="BKK"
-            data={AIRPORT_SUGGESTIONS}
-            leftSection={<MapPin size={16} />}
-            value={originSearch} 
-            onChange={setOriginSearch}
-            style={{ flex: 1, minWidth: '110px' }}
-          />
-          <Autocomplete
-            label="Dest" 
-            placeholder="NRT"
-            data={AIRPORT_SUGGESTIONS}
-            leftSection={<MapPin size={16} />}
-            value={destSearch} 
-            onChange={setDestSearch}
-            style={{ flex: 1, minWidth: '110px' }}
-          />
-          <DatePickerInput
-            label="Date"
-            placeholder="Select date"
-            leftSection={<Calendar size={16} />}
-            value={dateValue}
-            onChange={(e) => setDateValue(e ? new Date(e) : null)}
-            clearable
-            style={{ flex: 1, minWidth: '130px' }}
-          />
-          <Select
-            label="Status" 
-            placeholder="All"
-            data={['SCHEDULED', 'BOARDING', 'DELAYED', 'DEPARTED', 'ARRIVED', 'CANCELLED']}
-            value={statusFilter} 
-            onChange={setStatusFilter}
-            clearable 
-            style={{ flex: 1, minWidth: '130px' }}
-          />
-          <Group justify="flex-end" gap="xs">
-            {(flightCodeSearch || originSearch || destSearch || dateValue || statusFilter) && (
-              <Button variant="default" color="gray" onClick={clearFilters}>
-                Clear
+        <form onSubmit={applyFilters}>
+          <Group align="end" gap="sm" w="100%">
+            <TextInput 
+              label="Flight Code" 
+              placeholder="TG101" 
+              leftSection={<Search size={16} />} 
+              value={flightCodeSearch} 
+              onChange={(e) => setFlightCodeSearch(e.currentTarget.value)}
+              style={{ flex: 1, minWidth: '110px' }} 
+            />
+            <Autocomplete
+              label="Origin" 
+              placeholder="BKK"
+              data={AIRPORT_SUGGESTIONS}
+              leftSection={<MapPin size={16} />}
+              value={originSearch} 
+              onChange={setOriginSearch}
+              style={{ flex: 1, minWidth: '110px' }}
+            />
+            <Autocomplete
+              label="Dest" 
+              placeholder="NRT"
+              data={AIRPORT_SUGGESTIONS}
+              leftSection={<MapPin size={16} />}
+              value={destSearch} 
+              onChange={setDestSearch}
+              style={{ flex: 1, minWidth: '110px' }}
+            />
+            <DatePickerInput
+              label="Date"
+              placeholder="Select date"
+              leftSection={<Calendar size={16} />}
+              value={dateValue}
+              onChange={(e) => setDateValue(e ? new Date(e) : null)}
+              clearable
+              style={{ flex: 1, minWidth: '130px' }}
+            />
+            <Select
+              label="Status" 
+              placeholder="All"
+              data={['SCHEDULED', 'BOARDING', 'DELAYED', 'DEPARTED', 'ARRIVED', 'CANCELLED']}
+              value={statusFilter} 
+              onChange={setStatusFilter}
+              clearable 
+              style={{ flex: 1, minWidth: '130px' }}
+            />
+            <Group justify="flex-end" gap="xs">
+              {(searchParams.get('flightCode') || searchParams.get('origin') || searchParams.get('destination') || searchParams.get('date') || searchParams.get('status')) && (
+                <Button variant="default" color="gray" onClick={clearFilters}>
+                  Clear
+                </Button>
+              )}
+              <Button type="submit" variant="filled" leftSection={<Filter size={16} />}>
+                Filter
               </Button>
-            )}
-            <Button variant="filled" leftSection={<Filter size={16} />} onClick={applyFilters}>
-              Filter
-            </Button>
+            </Group>
           </Group>
-        </Group>
+        </form>
       </Paper>
 
       <Paper shadow="xs" withBorder mb="lg">
@@ -415,7 +448,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
             <Table.Thead bg="gray.0">
               <Table.Tr>
                 <Table.Th onClick={() => handleSort('flightCode')} style={{ cursor: 'pointer' }}><Group gap={4}>Flight / Aircraft <SortIcon columnKey="flightCode" /></Group></Table.Th>
-                <Table.Th onClick={() => handleSort('route')} style={{ cursor: 'pointer', minWidth: '220px' }}><Group gap={4}>Route <SortIcon columnKey="route" /></Group></Table.Th>
+                <Table.Th onClick={() => handleSort('route')} style={{ cursor: 'pointer', minWidth: '220px' }}><Group gap={4} ml={50}>Route <SortIcon columnKey="route" /></Group></Table.Th>
                 <Table.Th onClick={() => handleSort('departureTime')} style={{ cursor: 'pointer' }}><Group gap={4}>STD <SortIcon columnKey="departureTime" /></Group></Table.Th>
                 <Table.Th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}><Group gap={4}>Status <SortIcon columnKey="status" /></Group></Table.Th>
                 <Table.Th>Gate</Table.Th>

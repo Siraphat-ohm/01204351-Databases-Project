@@ -1,128 +1,62 @@
 import { UserManagement } from "@/components/UserManagement";
+import { userService } from "@/services/user.services"; // Adjust path if needed
+import { getServerSession } from '@/services/auth.services'; 
+import { redirect } from "next/navigation";
 
-// --- Types mirroring Prisma Result ---
-type Role = 'PASSENGER' | 'ADMIN' | 'PILOT' | 'CABIN_CREW' | 'GROUND_STAFF' | 'MECHANIC';
-type Rank = 'CAPTAIN' | 'FIRST_OFFICER' | 'PURSER' | 'CREW' | 'MANAGER' | 'SUPERVISOR' | 'STAFF';
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  role: Role;
-  // Relation
-  staffProfile: {
-    employeeId: string;
-    rank: Rank | null;
-    baseAirport: {
-      iataCode: string;
-      city: string;
-    } | null;
-  } | null;
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-// --- Mock Service ---
-async function getUsers(): Promise<User[]> {
-  // Simulate Network Latency
-  await new Promise((resolve) => setTimeout(resolve, 600));
+export default async function UsersPage({ searchParams }: PageProps) {
+  const session = await getServerSession();
+  
+  if (!session || session.user.role !== 'ADMIN') {
+    redirect('/admin/login'); 
+  }
 
-  // Mock Data
-  return [
-    {
-      id: 1,
-      username: 'admin_sys',
-      email: 'admin@yokairline.com',
-      firstName: 'System',
-      lastName: 'Administrator',
-      role: 'ADMIN',
-      staffProfile: {
-        employeeId: 'ADM-001',
-        rank: 'MANAGER',
-        baseAirport: { iataCode: 'BKK', city: 'Bangkok' }
-      }
-    },
-    {
-      id: 2,
-      username: 'capt_maverick',
-      email: 'maverick@yokairline.com',
-      firstName: 'Pete',
-      lastName: 'Mitchell',
-      role: 'PILOT',
-      staffProfile: {
-        employeeId: 'PLT-101',
-        rank: 'CAPTAIN',
-        baseAirport: { iataCode: 'BKK', city: 'Bangkok' }
-      }
-    },
-    {
-      id: 3,
-      username: 'fo_goose',
-      email: 'goose@yokairline.com',
-      firstName: 'Nick',
-      lastName: 'Bradshaw',
-      role: 'PILOT',
-      staffProfile: {
-        employeeId: 'PLT-102',
-        rank: 'FIRST_OFFICER',
-        baseAirport: { iataCode: 'CNX', city: 'Chiang Mai' }
-      }
-    },
-    {
-      id: 4,
-      username: 'sarah_crew',
-      email: 'sarah.c@yokairline.com',
-      firstName: 'Sarah',
-      lastName: 'Connor',
-      role: 'CABIN_CREW',
-      staffProfile: {
-        employeeId: 'CC-205',
-        rank: 'PURSER',
-        baseAirport: { iataCode: 'NRT', city: 'Tokyo' }
-      }
-    },
-    {
-      id: 5,
-      username: 'john_mechanic',
-      email: 'john.m@yokairline.com',
-      firstName: 'John',
-      lastName: 'McClane',
-      role: 'MECHANIC',
-      staffProfile: {
-        employeeId: 'MEC-099',
-        rank: 'SUPERVISOR',
-        baseAirport: { iataCode: 'LHR', city: 'London' }
-      }
-    },
-    {
-      id: 6,
-      username: 'passenger_01',
-      email: 'traveler@gmail.com',
-      firstName: 'Alice',
-      lastName: 'Wonderland',
-      role: 'PASSENGER',
-      staffProfile: null // Regular users have no staff profile
-    },
-    {
-      id: 7,
-      username: 'gate_staff_01',
-      email: 'gate.bkk@yokairline.com',
-      firstName: 'Somchai',
-      lastName: 'Dee',
-      role: 'GROUND_STAFF',
-      staffProfile: {
-        employeeId: 'GND-555',
-        rank: 'STAFF',
-        baseAirport: { iataCode: 'BKK', city: 'Bangkok' }
-      }
-    },
-  ];
-}
+  const resolvedParams = await searchParams;
+  const page = Number(resolvedParams.page) || 1;
+  const limit = 15; // Set pagination limit
 
-export default async function UsersPage() {
-  const usersData = await getUsers();
+  const search = typeof resolvedParams.search === 'string' ? resolvedParams.search.toLowerCase() : '';
+  const roleFilter = typeof resolvedParams.role === 'string' ? resolvedParams.role : '';
+
+  let finalData = [];
+  let totalPages = 1;
+
+  if (search || roleFilter) {
+    // WORKAROUND: If filtering is applied, fetch all and filter on the server
+    const allUsers = await userService.findAll(session as any);
+    
+    const filteredUsers = allUsers.filter((u: any) => {
+      const matchesSearch = search === '' || 
+        (u.name || '').toLowerCase().includes(search) ||
+        u.email.toLowerCase().includes(search) ||
+        (u.staffProfile?.employeeId || '').toLowerCase().includes(search);
+      
+      const matchesRole = roleFilter === '' || u.role === roleFilter;
+
+      return matchesSearch && matchesRole;
+    });
+
+    const total = filteredUsers.length;
+    totalPages = Math.ceil(total / limit) || 1;
+    
+    const skip = (page - 1) * limit;
+    finalData = filteredUsers.slice(skip, skip + limit);
+
+  } else {
+    // No filters: Use the native paginated service
+    const response = await userService.findAllPaginated(session as any, { page, limit });
+    finalData = response.data;
+    totalPages = response.meta.totalPages;
+  }
 
   return (
-    <UserManagement initialUsers={usersData} />
+    <UserManagement 
+      initialUsers={finalData} 
+      totalPages={totalPages}
+      currentPage={page}
+    />
   );
 }
