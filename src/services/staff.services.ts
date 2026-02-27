@@ -8,6 +8,7 @@ import {
 import { canAccessStaff } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { PaginatedResponse } from '@/types/common';
+import type { Prisma } from '@/generated/prisma/client';
 import { makeCheckPermission } from '@/services/_shared/authorization';
 import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 import {
@@ -39,14 +40,15 @@ export const staffService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.StaffProfileWhereInput>,
   ): Promise<PaginatedResponse<StaffListItem>> {
     checkPermission(session, 'read');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      staffRepository.findAll({ skip, take: limit }),
-      staffRepository.count(),
+      staffRepository.findAll({ where, skip, take: limit }),
+      staffRepository.count(where),
     ]);
 
     return {
