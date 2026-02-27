@@ -9,7 +9,7 @@ import {
 } from '@/types/route.type';
 import type { PaginatedResponse } from '@/types/common';
 import type { ServiceSession as Session } from '@/services/_shared/session';
-import { assertPermission } from '@/services/_shared/authorization';
+import { makeCheckPermission } from '@/services/_shared/authorization';
 import {
   resolvePagination,
   type PaginationParams,
@@ -21,17 +21,11 @@ type RouteListItem = Awaited<ReturnType<typeof routeRepository.findAll>>[number]
 import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 
 
-const checkPermission = (
-  session: Session,
-  action: 'create' | 'read' | 'update' | 'delete',
-) =>
-  assertPermission(
-    session,
-    action,
-    canAccessRoute,
-    'route',
-    (a) => new UnauthorizedError(a),
-  );
+const checkPermission = makeCheckPermission(
+  canAccessRoute,
+  'route',
+  (a) => new UnauthorizedError(a),
+);
 
 
 export const routeService = {
