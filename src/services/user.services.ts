@@ -6,6 +6,7 @@ import {
   type UpdateUserRoleInput,
 } from '@/types/user.type';
 import type { ServiceSession as Session } from '@/services/_shared/session';
+import type { Prisma } from '@/generated/prisma/client';
 import type { PaginatedResponse } from '@/types/common';
 import {
   resolvePagination,
@@ -44,14 +45,15 @@ export const userService = {
 
   async findAllPaginated(
     session: Session,
-    params?: PaginationParams,
+    params?: PaginationParams<Prisma.UserWhereInput>,
   ): Promise<PaginatedResponse<UserListItem>> {
     assertAdmin(session, 'read-all');
 
     const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      userRepository.findAllAdmin({ skip, take: limit }),
-      userRepository.count(),
+      userRepository.findAllAdmin({ where, skip, take: limit }),
+      userRepository.count(where),
     ]);
 
     return {
