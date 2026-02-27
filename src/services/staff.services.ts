@@ -8,7 +8,8 @@ import {
 import { canAccessStaff } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { PaginatedResponse } from '@/types/common';
-import { assertPermission } from '@/services/_shared/authorization';
+import { makeCheckPermission } from '@/services/_shared/authorization';
+import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 import {
   resolvePagination,
   type PaginationParams,
@@ -16,52 +17,18 @@ import {
 
 type StaffListItem = Awaited<ReturnType<typeof staffRepository.findAll>>[number];
 
-export class StaffNotFoundError extends Error {
-  constructor(identifier: string) {
-    super(`Staff not found: ${identifier}`);
-    this.name = 'StaffNotFoundError';
-  }
-}
-
-export class StaffConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'StaffConflictError';
-  }
-}
-
-export class StaffInUseError extends Error {
-  constructor(staffId: string) {
-    super(`Cannot delete staff with active flights: ${staffId}`);
-    this.name = 'StaffInUseError';
-  }
-}
-
-export class UnauthorizedError extends Error {
-  constructor(action: string) {
-    super(`Unauthorized: cannot perform "${action}" on staff`);
-    this.name = 'UnauthorizedError';
-  }
-}
-
-const checkPermission = (
-  session: Session,
-  action: 'create' | 'read' | 'update' | 'delete',
-) =>
-  assertPermission(
-    session,
-    action,
-    canAccessStaff,
-    'staff',
-    (a) => new UnauthorizedError(a),
-  );
+const checkPermission = makeCheckPermission(
+  canAccessStaff,
+  'staff',
+  (a) => new UnauthorizedError(a),
+);
 
 export const staffService = {
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
 
     const staff = await staffRepository.findById(id);
-    if (!staff) throw new StaffNotFoundError(id);
+    if (!staff) throw new NotFoundError(`Staff not found: ${id}`);
     return staff;
   },
 
@@ -104,10 +71,10 @@ export const staffService = {
     ]);
 
     if (existingUser) {
-      throw new StaffConflictError('User already has a staff profile');
+      throw new ConflictError('User already has a staff profile');
     }
     if (existingEmployee) {
-      throw new StaffConflictError('Employee ID already exists');
+      throw new ConflictError('Employee ID already exists');
     }
 
     return staffRepository.create(data);
@@ -118,11 +85,11 @@ export const staffService = {
 
     const data = updateStaffSchema.parse(input);
     const existing = await staffRepository.findById(id);
-    if (!existing) throw new StaffNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Staff not found: ${id}`);
 
     if (data.employeeId && data.employeeId !== existing.employeeId) {
       const conflict = await staffRepository.findByEmployeeId(data.employeeId);
-      if (conflict) throw new StaffConflictError('Employee ID already exists');
+      if (conflict) throw new ConflictError('Employee ID already exists');
     }
 
     return staffRepository.update(id, data);
@@ -132,10 +99,10 @@ export const staffService = {
     checkPermission(session, 'delete');
 
     const existing = await staffRepository.findById(id);
-    if (!existing) throw new StaffNotFoundError(id);
+    if (!existing) throw new NotFoundError(`Staff not found: ${id}`);
 
     const flightCount = await staffRepository.countPilotedFlights(id);
-    if (flightCount > 0) throw new StaffInUseError(id);
+    if (flightCount > 0) throw new ConflictError(`Cannot delete staff with active flights: ${id}`);
 
     return staffRepository.delete(id);
   },
