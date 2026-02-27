@@ -44,6 +44,13 @@ export const userRepository = {
       select: userAdminSelect,
     }),
 
+  update: (id: string, data: UpdateMyProfileInput) =>
+    prisma.user.update({
+      where: { id },
+      data,
+      select: userAdminSelect,
+    }),
+
   createGuestUser: (data: { email: string; name: string; phone?: string | null }) =>
     prisma.user.create({
       data: {
