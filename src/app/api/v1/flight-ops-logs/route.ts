@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { ZodError } from 'zod';
+import { NotFoundError, UnauthorizedError } from '@/lib/errors';
 import { flightOpsLogService } from '@/services/flight-ops-log.services';
 import { getServerSession } from '@/services/auth.services';
 import {
@@ -38,15 +39,8 @@ export async function GET(req: NextRequest) {
     const result = await flightOpsLogService.findAllPaginated(s, { page, limit });
     return successResponse(result);
   } catch (err) {
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (
-      err instanceof Error &&
-      (err.name === 'FlightOpsLogNotFoundError' || err.name === 'FlightNotFoundError')
-    ) {
-      return errorResponse(err.message, 404);
-    }
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
     console.error('[GET /api/v1/flight-ops-logs]', err);
     return errorResponse('Internal server error');
   }
@@ -75,15 +69,9 @@ export async function PUT(req: NextRequest) {
 
     return successResponse(row);
   } catch (err) {
-    if (err instanceof ZodError) {
-      return validationErrorResponse(zodFieldErrors(err));
-    }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
-      return unauthorizedResponse();
-    }
-    if (err instanceof Error && err.name === 'FlightNotFoundError') {
-      return errorResponse(err.message, 404);
-    }
+    if (err instanceof ZodError) return validationErrorResponse(zodFieldErrors(err));
+    if (err instanceof UnauthorizedError) return unauthorizedResponse();
+    if (err instanceof NotFoundError) return errorResponse(err.message, 404);
     console.error('[PUT /api/v1/flight-ops-logs]', err);
     return errorResponse('Internal server error');
   }
