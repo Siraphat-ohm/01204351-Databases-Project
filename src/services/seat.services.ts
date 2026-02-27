@@ -13,9 +13,8 @@ export async function getSeatAvailability(
   flightId: string,
   aircraftTypeIataCode: string,
 ): Promise<SeatAvailability | null> {
-  const layout = await seatRepository.findLayoutByAircraftTypeIataCode(
-    aircraftTypeIataCode,
-  );
+  const layout =
+    await seatRepository.findLayoutByAircraftTypeIataCode(aircraftTypeIataCode);
 
   if (!layout) return null;
 
@@ -42,16 +41,18 @@ export async function getBulkSeatAvailability(
 
   const uniqueTypes = [...new Set(flights.map((f) => f.aircraftTypeIataCode))];
 
-  const layouts = await seatRepository.findLayoutsByAircraftTypeIataCodes(
-    uniqueTypes,
-  );
+  const layouts =
+    await seatRepository.findLayoutsByAircraftTypeIataCodes(uniqueTypes);
 
   const layoutMap = new Map(layouts.map((l) => [l.aircraftType.iataCode, l]));
 
   const flightIds = flights.map((f) => f.id);
   const bookedCounts = await seatRepository.countOccupiedByFlights(flightIds);
 
-  const occupiedByFlight = new Map<string, Partial<Record<CabinClass, number>>>();
+  const occupiedByFlight = new Map<
+    string,
+    Partial<Record<CabinClass, number>>
+  >();
   for (const row of bookedCounts) {
     if (!occupiedByFlight.has(row.flightId)) {
       occupiedByFlight.set(row.flightId, {});
@@ -88,17 +89,16 @@ export async function getFlightSeatLayout(
   if (!flight) return null;
 
   const aircraftTypeCode = flight.aircraft.type.iataCode;
-
-  const layout = await seatRepository.findLayoutByAircraftTypeIataCode(
-    aircraftTypeCode,
-  );
-
+  const layout =
+    await seatRepository.findLayoutByAircraftTypeIataCode(aircraftTypeCode);
   if (!layout) return null;
 
   const bookedTickets = await seatRepository.findOccupiedTicketsByFlight(
     flight.id,
   );
-  const occupiedSeats = new Set(bookedTickets.map((t) => t.seatNumber).filter(Boolean));
+  const occupiedSeats = new Set(
+    bookedTickets.map((t) => t.seatNumber).filter(Boolean),
+  );
 
   const occupantsBySeat = options?.includeOccupants
     ? Object.fromEntries(
@@ -127,43 +127,57 @@ export async function getFlightSeatLayout(
     blockedSeats: c.blockedSeats,
   }));
 
-  const seats: {
-    label: string;
-    cabin: string;
-    row: number;
-    column: string;
-    type: string;
-    status: string;
-    surcharge: number;
-  }[] = [];
+  // ─── Only store seats that differ from the default (available, no surcharge) ───
+  const seatOverrides: Record<string, { status?: string; surcharge?: number }> =
+    {};
+  let totalSeats = 0;
+  let availableSeats = 0;
+  let occupiedCount = 0;
 
   for (const cabin of cabins) {
     const blockedSet = new Set(cabin.blockedSeats);
+
     for (let row = cabin.rowStart; row <= cabin.rowEnd; row++) {
       for (const col of cabin.columns) {
         const label = `${row}${col}`;
         const isBlocked = blockedSet.has(label);
         const isOccupied = occupiedSeats.has(label);
 
-        const type = classifySeatType(col, cabin.columns, cabin.aisleAfter, row, cabin.exitRows);
-        const surcharge = isBlocked ? 0 : computeSurcharge(type, cabin.cabin, row, cabin.rowStart);
+        if (isBlocked) {
+          // Blocked seats are excluded from totals and stored as overrides
+          seatOverrides[label] = { status: "BLOCKED" };
+          continue;
+        }
 
-        seats.push({
-          label,
-          cabin: cabin.cabin,
+        totalSeats++;
+
+        if (isOccupied) {
+          occupiedCount++;
+          seatOverrides[label] = { status: "OCCUPIED" };
+        } else {
+          availableSeats++;
+        }
+
+        // Only store surcharge if it's non-zero
+        const type = classifySeatType(
+          col,
+          cabin.columns,
+          cabin.aisleAfter,
           row,
-          column: col,
+          cabin.exitRows,
+        );
+        const surcharge = computeSurcharge(
           type,
-          status: isBlocked ? "BLOCKED" : isOccupied ? "OCCUPIED" : "AVAILABLE",
-          surcharge,
-        });
+          cabin.cabin,
+          row,
+          cabin.rowStart,
+        );
+        if (surcharge !== 0) {
+          seatOverrides[label] = { ...seatOverrides[label], surcharge };
+        }
       }
     }
   }
-
-  const totalSeats = seats.filter((s) => s.status !== "BLOCKED").length;
-  const availableSeats = seats.filter((s) => s.status === "AVAILABLE").length;
-  const occupiedCount = seats.filter((s) => s.status === "OCCUPIED").length;
 
   return {
     flight: {
@@ -182,7 +196,7 @@ export async function getFlightSeatLayout(
     },
     layout: {
       cabins,
-      seats,
+      seatOverrides, // ← sparse map instead of 180-item array
       totalSeats,
       availableSeats,
       occupiedSeats: occupiedCount,
@@ -190,4 +204,3 @@ export async function getFlightSeatLayout(
     },
   };
 }
-

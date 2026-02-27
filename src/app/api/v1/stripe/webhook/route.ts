@@ -6,7 +6,6 @@ import type Stripe from "stripe";
 
 export const runtime = "nodejs";
 
-
 const systemSession: ServiceSession = {
   user: { id: "system", role: "SYSTEM" },
 };
@@ -28,36 +27,11 @@ export async function POST(req: NextRequest) {
       process.env.STRIPE_WEBHOOK_SECRET!,
     );
   } catch (err) {
-    console.error("Invalid webhook signature:", err);
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
   try {
     switch (event.type) {
-      // ✅ Checkout finished
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-
-        const transactionId =
-          session.metadata?.transactionId ?? session.client_reference_id;
-
-        if (!transactionId) break;
-
-        await paymentService.markPaymentSuccess(
-          transactionId,
-          {
-            stripeChargeId:
-              typeof session.payment_intent === "string"
-                ? session.payment_intent
-                : undefined,
-          },
-          systemSession,
-        );
-
-        break;
-      }
-
-      // ✅ PaymentIntent success (extra safety)
       case "payment_intent.succeeded": {
         const intent = event.data.object as Stripe.PaymentIntent;
 
@@ -67,7 +41,10 @@ export async function POST(req: NextRequest) {
         await paymentService.markPaymentSuccess(
           transactionId,
           {
-            stripeChargeId: intent.id,
+            stripeChargeId:
+              typeof intent.latest_charge === "string"
+                ? intent.latest_charge
+                : intent.latest_charge?.id,
           },
           systemSession,
         );
@@ -75,7 +52,6 @@ export async function POST(req: NextRequest) {
         break;
       }
 
-      // ❌ Payment failed
       case "payment_intent.payment_failed": {
         const intent = event.data.object as Stripe.PaymentIntent;
 
@@ -95,12 +71,11 @@ export async function POST(req: NextRequest) {
       }
 
       default:
-        console.log("Unhandled event:", event.type);
+        break;
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error("Webhook handler error:", error);
     return NextResponse.json(
       { error: "Webhook processing failed" },
       { status: 500 },

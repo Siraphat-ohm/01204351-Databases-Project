@@ -24,10 +24,10 @@ type TransactionListItem = Awaited<ReturnType<typeof paymentRepository.findAll>>
 
 import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 
-function checkPermission(
+const checkPermission = (
   session: Session,
   action: 'create' | 'read' | 'refund' | 'read-all',
-) {
+) =>
   assertPermission(
     session,
     action,
@@ -35,7 +35,6 @@ function checkPermission(
     'payment',
     (a) => new UnauthorizedError(a),
   );
-}
 
 function canReadAll(session: Session) {
   return hasPermission(session, 'read-all', canAccessPayment);

@@ -1,7 +1,7 @@
-import { NextRequest } from 'next/server';
-import { ZodError } from 'zod';
-import { ticketService } from '@/services/ticket.services';
-import { getServerSession } from '@/services/auth.services';
+import { NextRequest } from "next/server";
+import { ZodError } from "zod";
+import { ticketService } from "@/services/ticket.services";
+import { getServerSession } from "@/services/auth.services";
 import {
   successResponse,
   errorResponse,
@@ -9,8 +9,8 @@ import {
   tooManyRequestsResponse,
   validationErrorResponse,
   zodFieldErrors,
-} from '@/lib/utils/api-response';
-import { enforceApiRateLimit } from '@/lib/utils/rate-limit';
+} from "@/lib/utils/api-response";
+import { enforceApiRateLimit } from "@/lib/utils/rate-limit";
 
 export async function GET(
   req: NextRequest,
@@ -22,9 +22,9 @@ export async function GET(
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
-      namespace: 'api:v1:tickets:id',
+      namespace: "api:v1:tickets:id",
       userId: session.user.id,
-      action: 'read',
+      action: "read",
     });
     if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
@@ -35,14 +35,14 @@ export async function GET(
 
     return successResponse(row);
   } catch (err) {
-    if (err instanceof Error && err.name === 'TicketNotFoundError') {
+    if (err instanceof Error && err.name === "TicketNotFoundError") {
       return errorResponse(err.message, 404);
     }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
+    if (err instanceof Error && err.name === "UnauthorizedError") {
       return unauthorizedResponse();
     }
-    console.error('[GET /api/v1/tickets/[id]]', err);
-    return errorResponse('Internal server error');
+    console.error("[GET /api/v1/tickets/[id]]", err);
+    return errorResponse("Internal server error");
   }
 }
 
@@ -56,9 +56,9 @@ export async function PATCH(
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
-      namespace: 'api:v1:tickets:id',
+      namespace: "api:v1:tickets:id",
       userId: session.user.id,
-      action: 'write',
+      action: "write",
     });
     if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
@@ -74,17 +74,17 @@ export async function PATCH(
     if (err instanceof ZodError) {
       return validationErrorResponse(zodFieldErrors(err));
     }
-    if (err instanceof Error && err.name === 'TicketNotFoundError') {
+    if (err instanceof Error && err.name === "TicketNotFoundError") {
       return errorResponse(err.message, 404);
     }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
+    if (err instanceof Error && err.name === "UnauthorizedError") {
       return unauthorizedResponse();
     }
-    if (err instanceof Error && err.name === 'TicketConflictError') {
+    if (err instanceof Error && err.name === "TicketConflictError") {
       return errorResponse(err.message, 409);
     }
-    console.error('[PATCH /api/v1/tickets/[id]]', err);
-    return errorResponse('Internal server error');
+    console.error("[PATCH /api/v1/tickets/[id]]", err);
+    return errorResponse("Internal server error");
   }
 }
 
@@ -98,9 +98,9 @@ export async function DELETE(
 
     const limited = enforceApiRateLimit({
       headers: req.headers,
-      namespace: 'api:v1:tickets:id',
+      namespace: "api:v1:tickets:id",
       userId: session.user.id,
-      action: 'write',
+      action: "write",
     });
     if (!limited.ok) return tooManyRequestsResponse(limited.retryAfterMs);
 
@@ -111,13 +111,13 @@ export async function DELETE(
 
     return successResponse(row);
   } catch (err) {
-    if (err instanceof Error && err.name === 'TicketNotFoundError') {
+    if (err instanceof Error && err.name === "TicketNotFoundError") {
       return errorResponse(err.message, 404);
     }
-    if (err instanceof Error && err.name === 'UnauthorizedError') {
+    if (err instanceof Error && err.name === "UnauthorizedError") {
       return unauthorizedResponse();
     }
-    console.error('[DELETE /api/v1/tickets/[id]]', err);
-    return errorResponse('Internal server error');
+    console.error("[DELETE /api/v1/tickets/[id]]", err);
+    return errorResponse("Internal server error");
   }
 }

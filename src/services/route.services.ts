@@ -21,10 +21,10 @@ type RouteListItem = Awaited<ReturnType<typeof routeRepository.findAll>>[number]
 import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 
 
-function checkPermission(
+const checkPermission = (
   session: Session,
   action: 'create' | 'read' | 'update' | 'delete',
-) {
+) =>
   assertPermission(
     session,
     action,
@@ -32,7 +32,6 @@ function checkPermission(
     'route',
     (a) => new UnauthorizedError(a),
   );
-}
 
 
 export const routeService = {

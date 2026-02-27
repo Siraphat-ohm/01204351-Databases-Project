@@ -118,7 +118,7 @@ export const issueReportService = {
       resolvedBy: session.user.id,
     });
 
-    if (!updated) throw new IssueReportNotFoundError(id);
+    if (!updated) throw new NotFoundError(`Issue report not found: ${id}`);
     return updated;
   },
 
@@ -131,7 +131,7 @@ export const issueReportService = {
       resolvedBy: session.user.id,
     });
 
-    if (!updated) throw new IssueReportNotFoundError(id);
+    if (!updated) throw new NotFoundError(`Issue report not found: ${id}`);
     return updated;
   },
 
@@ -139,7 +139,7 @@ export const issueReportService = {
     if (!isAdmin(session)) throw new UnauthorizedError('delete');
 
     const deleted = await issueReportRepository.deleteById(id);
-    if (!deleted) throw new IssueReportNotFoundError(id);
+    if (!deleted) throw new NotFoundError(`Issue report not found: ${id}`);
     return deleted;
   },
 };

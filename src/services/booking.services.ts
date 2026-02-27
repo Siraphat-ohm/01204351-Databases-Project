@@ -40,10 +40,10 @@ type BookingListItem = Awaited<ReturnType<typeof bookingRepository.findAll>>[num
 
 import { NotFoundError, ConflictError, BadRequestError, UnauthorizedError } from '@/lib/errors';
 
-function checkPermission(
+const checkPermission = (
   session: Session,
   action: 'create' | 'read' | 'cancel' | 'read-all',
-) {
+) =>
   assertPermission(
     session,
     action,
@@ -51,7 +51,6 @@ function checkPermission(
     'booking',
     (a) => new UnauthorizedError(a),
   );
-}
 
 function canReadAll(session: Session) {
   return hasPermission(session, 'read-all', canAccessBooking);
@@ -300,7 +299,7 @@ export const bookingService = {
     assertBookingTotalMatchesTickets(data.totalPrice, data.tickets);
 
     const flight = await flightRepository.findById(data.flightId);
-    if (!flight) throw new BookingNotFoundError(`flight:${data.flightId}`);
+    if (!flight) throw new NotFoundError(`Booking not found: flight:${data.flightId}`);
 
     assertNoDuplicateSeatAssignments(data.tickets);
 
