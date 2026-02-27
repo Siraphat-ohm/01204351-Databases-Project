@@ -2,7 +2,7 @@
 import { useDisclosure } from '@mantine/hooks';
 import { 
   Table, Badge, Text, ActionIcon, Group, Paper, TextInput, Button, Title, 
-  Pagination, Center, Select, Avatar, ThemeIcon, Divider, Autocomplete, Stack, Box, Grid, Modal, Alert, Tooltip
+  Pagination, Center, Select, Avatar, ThemeIcon, Divider, Autocomplete, Stack, Box, Grid, Modal, Alert, Tooltip, LoadingOverlay
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
@@ -108,7 +108,9 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
 
   const [deleteOpened, { open: openDelete, close: closeDelete }] = useDisclosure(false);
   const [flightToDelete, setFlightToDelete] = useState<FlightTableRow | null>(null);
-  const [isDeleting, startDeleteTransition] = useTransition();
+  
+  // 🌟 Handle transitions and explicit error states
+  const [isPending, startTransition] = useTransition();
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleDeleteClick = (flight: FlightTableRow, e: React.MouseEvent) => {
@@ -120,11 +122,25 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
 
   const confirmDelete = () => {
     if (!flightToDelete) return;
+    
+    setDeleteError(null); // Clear previous errors
 
-    startDeleteTransition(async () => {
+    startTransition(async () => {
       const result = await deleteFlightAction(flightToDelete.id);
+      
       if (result?.error) {
-        setDeleteError(result.error);
+        // 🌟 NORMALIZE THE ERROR MESSAGE
+        let friendlyError = result.error;
+        
+        if (friendlyError.includes("with bookings")) {
+          friendlyError = `Cannot delete flight ${flightToDelete.flightCode} because there are passengers already booked on this flight. You must cancel or move the bookings first.`;
+        } else if (friendlyError.includes(flightToDelete.id)) {
+           // Strip ugly IDs if it's a generic error
+           friendlyError = friendlyError.replace(flightToDelete.id, flightToDelete.flightCode);
+        }
+
+        setDeleteError(friendlyError);
+        notifications.show({ title: "Delete Failed", message: "See details in the modal.", color: "red", icon: <X size={18} /> });
       } else {
         notifications.show({
           title: "Flight Deleted",
@@ -137,6 +153,13 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
         router.refresh();
       }
     });
+  };
+
+  const handleCloseDeleteModal = () => {
+    if (isPending) return;
+    closeDelete();
+    setFlightToDelete(null);
+    setDeleteError(null);
   };
 
   const toggleRow = (id: string) => {
@@ -178,31 +201,35 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
   };
 
   const handlePageChange = (page: number) => {
-    const params = new URLSearchParams(searchParams);
-    params.set('page', page.toString());
-    router.push(`${pathname}?${params.toString()}`);
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams);
+      params.set('page', page.toString());
+      router.push(`${pathname}?${params.toString()}`);
+    });
   };
 
   // Explicit Form Submission
   const applyFilters = (e: React.FormEvent) => {
     e.preventDefault();
-    const params = new URLSearchParams(searchParams);
-    params.set('page', '1'); // Always reset to page 1 on search
-    
-    if (flightCodeSearch) params.set('flightCode', flightCodeSearch); else params.delete('flightCode');
-    if (originSearch) params.set('origin', originSearch); else params.delete('origin');
-    if (destSearch) params.set('destination', destSearch); else params.delete('destination');
-    
-    if (dateValue) {
-      const offset = dateValue.getTimezoneOffset();
-      const localDate = new Date(dateValue.getTime() - (offset*60*1000));
-      params.set('date', localDate.toISOString().split('T')[0]);
-    } else {
-      params.delete('date');
-    }
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams);
+      params.set('page', '1'); 
+      
+      if (flightCodeSearch) params.set('flightCode', flightCodeSearch); else params.delete('flightCode');
+      if (originSearch) params.set('origin', originSearch); else params.delete('origin');
+      if (destSearch) params.set('destination', destSearch); else params.delete('destination');
+      
+      if (dateValue) {
+        const offset = dateValue.getTimezoneOffset();
+        const localDate = new Date(dateValue.getTime() - (offset*60*1000));
+        params.set('date', localDate.toISOString().split('T')[0]);
+      } else {
+        params.delete('date');
+      }
 
-    if (statusFilter) params.set('status', statusFilter); else params.delete('status');
-    router.push(`${pathname}?${params.toString()}`);
+      if (statusFilter) params.set('status', statusFilter); else params.delete('status');
+      router.push(`${pathname}?${params.toString()}`);
+    });
   };
 
   const clearFilters = () => {
@@ -211,7 +238,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
     setDestSearch(''); 
     setDateValue(null); 
     setStatusFilter(null);
-    router.push(pathname);
+    startTransition(() => router.push(pathname));
   };
 
   const rows = sortedData.map((flight) => {
@@ -380,7 +407,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
         </Button>
       </Group>
 
-      {/* --- SEARCH BAR (Wrapped in a form to prevent overload) --- */}
+      {/* --- SEARCH BAR --- */}
       <Paper shadow="xs" p="md" mb="lg" withBorder>
         <form onSubmit={applyFilters}>
           <Group align="end" gap="sm" w="100%">
@@ -391,6 +418,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
               value={flightCodeSearch} 
               onChange={(e) => setFlightCodeSearch(e.currentTarget.value)}
               style={{ flex: 1, minWidth: '110px' }} 
+              disabled={isPending}
             />
             <Autocomplete
               label="Origin" 
@@ -400,6 +428,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
               value={originSearch} 
               onChange={setOriginSearch}
               style={{ flex: 1, minWidth: '110px' }}
+              disabled={isPending}
             />
             <Autocomplete
               label="Dest" 
@@ -409,6 +438,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
               value={destSearch} 
               onChange={setDestSearch}
               style={{ flex: 1, minWidth: '110px' }}
+              disabled={isPending}
             />
             <DatePickerInput
               label="Date"
@@ -418,6 +448,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
               onChange={(e) => setDateValue(e ? new Date(e) : null)}
               clearable
               style={{ flex: 1, minWidth: '130px' }}
+              disabled={isPending}
             />
             <Select
               label="Status" 
@@ -427,14 +458,15 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
               onChange={setStatusFilter}
               clearable 
               style={{ flex: 1, minWidth: '130px' }}
+              disabled={isPending}
             />
             <Group justify="flex-end" gap="xs">
               {(searchParams.get('flightCode') || searchParams.get('origin') || searchParams.get('destination') || searchParams.get('date') || searchParams.get('status')) && (
-                <Button variant="default" color="gray" onClick={clearFilters}>
+                <Button variant="default" color="gray" onClick={clearFilters} disabled={isPending}>
                   Clear
                 </Button>
               )}
-              <Button type="submit" variant="filled" leftSection={<Filter size={16} />}>
+              <Button type="submit" variant="filled" leftSection={<Filter size={16} />} loading={isPending}>
                 Filter
               </Button>
             </Group>
@@ -442,7 +474,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
         </form>
       </Paper>
 
-      <Paper shadow="xs" withBorder mb="lg">
+      <Paper shadow="xs" withBorder mb="lg" pos="relative" >
         <Table.ScrollContainer minWidth={900}>
           <Table verticalSpacing="sm" striped highlightOnHover>
             <Table.Thead bg="gray.0">
@@ -460,40 +492,53 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
         </Table.ScrollContainer>
       </Paper>
 
-      <Center>
-        <Pagination total={totalPages} value={Number(searchParams.get('page')) || 1} onChange={handlePageChange} color="blue" radius="md" withEdges />
-      </Center>
+      {totalPages > 1 && (
+        <Center>
+          <Pagination 
+            total={totalPages} 
+            value={Number(searchParams.get('page')) || 1} 
+            onChange={handlePageChange} 
+            color="blue" 
+            radius="md" 
+            withEdges 
+            disabled={isPending}
+          />
+        </Center>
+      )}
 
       {/* ──── DELETE CONFIRMATION ───── */}
       <Modal 
         opened={deleteOpened} 
-        onClose={closeDelete} 
+        onClose={handleCloseDeleteModal} 
         title={<Group gap="xs" c="red"><AlertTriangle size={20} /> Confirm Flight Deletion</Group>}
         centered
+        closeButtonProps={{ disabled: isPending }}
       >
         <Stack>
+          {/* 🌟 NEW: Error Alert Box */}
+          {deleteError && (
+            <Alert color="red" title="Cannot Delete Flight" icon={<X size={16} />}>
+              {deleteError}
+            </Alert>
+          )}
+
           <Text size="sm">
             Are you sure you want to delete flight <strong>{flightToDelete?.flightCode}</strong>?
           </Text>
           
           <Alert variant="light" color="red" title="Warning" icon={<AlertTriangle size={16}/>}>
-            This action cannot be undone. Associated bookings and data will be removed.
+            This action cannot be undone. Associated data will be removed.
           </Alert>
 
-          {deleteError && (
-            <Alert color="red" title="Error" icon={<X size={16} />}>
-              {deleteError}
-            </Alert>
-          )}
-          
           <Group justify="flex-end" mt="md">
-            <Button variant="default" onClick={closeDelete} disabled={isDeleting}>
+            <Button variant="default" onClick={handleCloseDeleteModal} disabled={isPending}>
               Cancel
             </Button>
             <Button 
               color="red" 
               onClick={confirmDelete} 
-              loading={isDeleting}
+              loading={isPending}
+              leftSection={!isPending && <Trash size={16} />}
             >
               Delete Flight
             </Button>
