@@ -8,13 +8,13 @@ import { Prisma } from '@/generated/prisma/client';
 
 export const staffRepository = {
   findById: (id: string, include?: Prisma.StaffProfileInclude) =>
-    prisma.staffProfile.findUnique({ where: { id }, include }),
+    prisma.staffProfile.findUniqueOrThrow({ where: { id }, include }),
 
   findByUserId: (userId: string, include?: Prisma.StaffProfileInclude) =>
-    prisma.staffProfile.findUnique({ where: { userId }, include }),
+    prisma.staffProfile.findUniqueOrThrow({ where: { userId }, include }),
 
   findByEmployeeId: (employeeId: string, include?: Prisma.StaffProfileInclude) =>
-    prisma.staffProfile.findUnique({ where: { employeeId }, include }),
+    prisma.staffProfile.findUniqueOrThrow({ where: { employeeId }, include }),
 
   findAll: (args?: { where?: Prisma.StaffProfileWhereInput; skip?: number; take?: number }) =>
     prisma.staffProfile.findMany({

@@ -17,10 +17,10 @@ type PaymentFindManyArgs = {
 
 export const paymentRepository = {
   findById: (id: string, include?: Prisma.TransactionInclude) =>
-    prisma.transaction.findUnique({ where: { id }, include }),
+    prisma.transaction.findUniqueOrThrow({ where: { id }, include }),
 
   findByStripePaymentIntentId: (stripePaymentIntentId: string, include?: Prisma.TransactionInclude) =>
-    prisma.transaction.findUnique({ where: { stripePaymentIntentId }, include }),
+    prisma.transaction.findUniqueOrThrow({ where: { stripePaymentIntentId }, include }),
 
   findByBookingId: (bookingId: string) =>
     prisma.transaction.findMany({

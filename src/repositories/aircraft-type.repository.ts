@@ -8,10 +8,10 @@ import { Prisma } from '@/generated/prisma/client';
 
 export const aircraftTypeRepository = {
   findById: (id: string, include?: Prisma.AircraftTypeInclude) =>
-    prisma.aircraftType.findUnique({ where: { id }, include }),
+    prisma.aircraftType.findUniqueOrThrow({ where: { id }, include }),
 
   findByIataCode: (iataCode: string, include?: Prisma.AircraftTypeInclude) =>
-    prisma.aircraftType.findUnique({ where: { iataCode }, include }),
+    prisma.aircraftType.findUniqueOrThrow({ where: { iataCode }, include }),
 
   findAll: (args?: { where?: Prisma.AircraftTypeWhereInput; skip?: number; take?: number }) =>
     prisma.aircraftType.findMany({
