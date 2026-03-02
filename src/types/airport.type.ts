@@ -37,6 +37,8 @@ export const updateAirportSchema = z
 
 export type CreateAirportInput = z.infer<typeof createAirportSchema>;
 export type UpdateAirportInput = z.infer<typeof updateAirportSchema>;
+export type AirportServiceAction = 'create' | 'read' | 'update' | 'delete';
+export type AirportListItem = AirportPublic;
 
 export const airportPublicSelect = {
   id: true,

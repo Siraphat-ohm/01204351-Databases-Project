@@ -21,6 +21,12 @@ export const updateUserRoleSchema = z.object({
 
 export type UpdateMyProfileInput = z.infer<typeof updateMyProfileSchema>;
 export type UpdateUserRoleInput = z.infer<typeof updateUserRoleSchema>;
+export type UserServiceAction =
+  | 'read'
+  | 'read-all'
+  | 'update-role'
+  | 'update'
+  | 'delete';
 
 export const userAdminSelect = {
   id: true,

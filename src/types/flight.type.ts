@@ -48,6 +48,13 @@ export const changeFlightAircraftSchema = z.object({
 export type CreateFlightInput = z.infer<typeof createFlightSchema>;
 export type UpdateFlightInput = z.infer<typeof updateFlightSchema>;
 export type ChangeFlightAircraftInput = z.infer<typeof changeFlightAircraftSchema>;
+export type FlightServiceAction =
+  | 'create'
+  | 'read'
+  | 'update'
+  | 'delete'
+  | 'manage-status';
+export type FlightListItem = FlightAdmin;
 
 export const flightAdminInclude = {
   route: {

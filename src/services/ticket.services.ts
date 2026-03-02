@@ -3,18 +3,18 @@ import {
   checkInTicketSchema,
   ticketCreateSchema,
   updateTicketSchema,
+  ticketAdminInclude,
   type CheckInTicketInput,
   type CreateTicketInput,
+  type TicketAdmin,
+  type TicketServiceAction,
   type UpdateTicketInput,
 } from '@/types/ticket.type';
 import type { PaginatedResponse } from '@/types/common';
 import { canAccessTicket } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { Prisma } from '@/generated/prisma/client';
-import {
-  makeCheckPermission,
-  hasPermission,
-} from '@/services/_shared/authorization';
+import { makePermissionHelpers } from '@/services/_shared/authorization';
 import {
   resolvePagination,
   type PaginationParams,
@@ -24,15 +24,14 @@ type TicketListItem = Awaited<ReturnType<typeof ticketRepository.findAll>>[numbe
 
 import { NotFoundError, ConflictError, BadRequestError, UnauthorizedError } from '@/lib/errors';
 
-const checkPermission = makeCheckPermission(
+const {
+  checkPermission,
+  hasPermission: hasTicketPermission,
+} = makePermissionHelpers<TicketServiceAction>(
   canAccessTicket,
   'ticket',
   (a) => new UnauthorizedError(a),
 );
-
-function canReadAll(session: Session) {
-  return hasPermission(session, 'read-all', canAccessTicket);
-}
 
 export const ticketService = {
   async createTicket(input: CreateTicketInput, session: Session) {
@@ -50,16 +49,15 @@ export const ticketService = {
         }
     }
 
-    return ticketRepository.create(data);
+    return ticketRepository.create(data, ticketAdminInclude);
   },
 
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
 
-    const ticket = await ticketRepository.findById(id);
-    if (!ticket) throw new NotFoundError(`Ticket not found: ${id}`);
+    const ticket = await ticketRepository.findById(id, ticketAdminInclude) as TicketAdmin;
 
-    if (!canReadAll(session) && ticket.booking.userId !== session.user.id) {
+    if (!hasTicketPermission(session, 'read-all') && ticket.booking.userId !== session.user.id) {
       throw new UnauthorizedError('read');
     }
 
@@ -68,26 +66,23 @@ export const ticketService = {
 
   async findMine(session: Session) {
     checkPermission(session, 'read');
-    return ticketRepository.findByUserId(session.user.id);
+    return ticketRepository.findByUserId(session.user.id, ticketAdminInclude) as Promise<TicketAdmin[]>;
   },
 
   async findByBookingId(bookingId: string, session: Session) {
     checkPermission(session, 'read');
 
-    const tickets = canReadAll(session)
-      ? await ticketRepository.findByBookingId(bookingId)
-      : (await ticketRepository.findByBookingId(bookingId)).filter(
-          (t) => t.booking.userId === session.user.id,
-        );
+    const tickets = await ticketRepository.findByBookingId(bookingId, ticketAdminInclude) as TicketAdmin[];
+    if (hasTicketPermission(session, 'read-all')) return tickets;
 
-    return tickets;
+    return tickets.filter((t) => t.booking.userId === session.user.id);
   },
 
   async findByFlightId(flightId: string, session: Session) {
     checkPermission(session, 'read');
 
-    const tickets = await ticketRepository.findByFlightId(flightId);
-    if (canReadAll(session)) return tickets;
+    const tickets = await ticketRepository.findByFlightId(flightId, ticketAdminInclude) as TicketAdmin[];
+    if (hasTicketPermission(session, 'read-all')) return tickets;
 
     return tickets.filter((t) => t.booking.userId === session.user.id);
   },
@@ -96,15 +91,15 @@ export const ticketService = {
     checkPermission(session, 'read');
 
     const normalizedCode = flightCode.trim().toUpperCase();
-    const tickets = await ticketRepository.findByFlightCode(normalizedCode);
-    if (canReadAll(session)) return tickets;
+    const tickets = await ticketRepository.findByFlightCode(normalizedCode, ticketAdminInclude) as TicketAdmin[];
+    if (hasTicketPermission(session, 'read-all')) return tickets;
 
     return tickets.filter((t) => t.booking.userId === session.user.id);
   },
 
   async findAll(session: Session) {
     checkPermission(session, 'read-all');
-    return ticketRepository.findAll();
+    return ticketRepository.findAll({ include: ticketAdminInclude });
   },
 
   async findAllPaginated(
@@ -116,7 +111,7 @@ export const ticketService = {
     const { page, limit, skip } = resolvePagination(params);
     const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      ticketRepository.findMany({ where, skip, take: limit }),
+      ticketRepository.findMany({ where, skip, take: limit, include: ticketAdminInclude }),
       ticketRepository.count(where),
     ]);
 
@@ -133,12 +128,9 @@ export const ticketService = {
 
   async checkInTicket(id: string, input: CheckInTicketInput, session: Session) {
     // fetch ticket first so we can allow ownership-based check-in for passengers
-    const ticket = await ticketRepository.findById(id);
-    if (!ticket) throw new NotFoundError(`Ticket not found: ${id}`);
-
-    // allow if role has check-in permission (ground staff/admin),
+    const ticket = await ticketRepository.findById(id, ticketAdminInclude) as TicketAdmin;
     // or if the ticket belongs to the current user (passenger checking own ticket)
-    if (!hasPermission(session, 'check-in', canAccessTicket) && ticket.booking.userId !== session.user.id) {
+    if (!hasTicketPermission(session, 'check-in') && ticket.booking.userId !== session.user.id) {
       throw new UnauthorizedError('check-in');
     }
 
@@ -156,14 +148,13 @@ export const ticketService = {
       }
     }
 
-    return ticketRepository.checkIn(id, data);
+    return ticketRepository.checkIn(id, data, ticketAdminInclude);
   },
 
   async updateTicket(id: string, input: UpdateTicketInput, session: Session) {
     checkPermission(session, 'update');
 
-    const ticket = await ticketRepository.findById(id);
-    if (!ticket) throw new NotFoundError(`Ticket not found: ${id}`);
+    const ticket = await ticketRepository.findById(id, ticketAdminInclude);
 
     const data = updateTicketSchema.parse(input);
 
@@ -177,14 +168,13 @@ export const ticketService = {
       }
     }
 
-    return ticketRepository.update(id, data);
+    return ticketRepository.update(id, data, ticketAdminInclude);
   },
 
   async deleteTicket(id: string, session: Session) {
     checkPermission(session, 'delete');
 
-    const ticket = await ticketRepository.findById(id);
-    if (!ticket) throw new NotFoundError(`Ticket not found: ${id}`);
+    await ticketRepository.findById(id);
 
     return ticketRepository.delete(id);
   },

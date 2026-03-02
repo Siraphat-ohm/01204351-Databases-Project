@@ -29,6 +29,8 @@ export const iataCodeSchema = z
 
 export type CreateRouteInput = z.infer<typeof createRouteSchema>;
 export type UpdateRouteInput = z.infer<typeof updateRouteSchema>;
+export type RouteServiceAction = 'create' | 'read' | 'update' | 'delete';
+export type RouteListItem = RouteAdmin;
 
 
 export const routePublicSelect = {

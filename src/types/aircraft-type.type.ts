@@ -34,6 +34,8 @@ export const updateAircraftTypeSchema = z
 
 export type CreateAircraftTypeInput = z.infer<typeof createAircraftTypeSchema>;
 export type UpdateAircraftTypeInput = z.infer<typeof updateAircraftTypeSchema>;
+export type AircraftTypeServiceAction = 'create' | 'read' | 'update' | 'delete';
+export type AircraftTypeListItem = AircraftTypeAdmin;
 
 export const aircraftTypeAdminInclude = {
   seatLayout: {

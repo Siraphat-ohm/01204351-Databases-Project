@@ -29,6 +29,8 @@ export const refundPaymentSchema = z.object({
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
 export type MarkPaymentStatusInput = z.infer<typeof markPaymentStatusSchema>;
 export type RefundPaymentInput = z.infer<typeof refundPaymentSchema>;
+export type PaymentServiceAction = 'create' | 'read' | 'refund' | 'read-all';
+export type PaymentListItem = PaymentAdmin;
 
 export const paymentAdminInclude = {
   booking: {
