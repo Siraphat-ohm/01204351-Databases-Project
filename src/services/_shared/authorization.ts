@@ -53,3 +53,21 @@ export function makeCheckPermission<Action extends string>(
   return (session: ServiceSession, action: Action) =>
     assertPermission(session, action, canAccess, resource, unauthorizedFactory);
 }
+
+/**
+ * Create pre-bound permission helpers for a specific resource and `canAccess` predicate.
+ * Services can call:
+ * - `checkPermission(session, 'read')`
+ * - `hasPermission(session, 'read-all')`
+ */
+export function makePermissionHelpers<Action extends string>(
+  canAccess: CanAccessFn<Action>,
+  resource: string,
+  unauthorizedFactory?: UnauthorizedFactory<Action>,
+) {
+  return {
+    checkPermission: makeCheckPermission(canAccess, resource, unauthorizedFactory),
+    hasPermission: (session: ServiceSession, action: Action) =>
+      hasPermission(session, action, canAccess),
+  };
+}
