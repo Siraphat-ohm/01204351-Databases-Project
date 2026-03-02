@@ -14,17 +14,11 @@ type BookingFindManyArgs = {
 };
 
 export const bookingRepository = {
-  findById: (id: string) =>
-    prisma.booking.findUnique({
-      where: { id },
-      include: bookingAdminInclude,
-    }),
+  findById: (id: string, include?: Prisma.BookingInclude) =>
+    prisma.booking.findUnique({ where: { id }, include }),
 
-  findByBookingRef: (bookingRef: string) =>
-    prisma.booking.findUnique({
-      where: { bookingRef },
-      include: bookingAdminInclude,
-    }),
+  findByBookingRef: (bookingRef: string, include?: Prisma.BookingInclude) =>
+    prisma.booking.findUnique({ where: { bookingRef }, include }),
 
   findAll: (args?: BookingFindManyArgs) =>
     prisma.booking.findMany({

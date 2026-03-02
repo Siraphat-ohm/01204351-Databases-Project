@@ -16,7 +16,7 @@ export const flightRepository = {
   isAdminRole: (role: string) => role?.trim().toUpperCase() === 'ADMIN',
 
   findByIdForRole: (id: string, role: string) => {
-    if (flightRepository.isAdminRole(role)) return flightRepository.findById(id);
+    if (flightRepository.isAdminRole(role)) return flightRepository.findById(id, flightAdminInclude);
     return prisma.flight.findFirst({
       where: { id, status: 'SCHEDULED' },
       include: flightAdminInclude,
@@ -24,7 +24,7 @@ export const flightRepository = {
   },
 
   findByCodeForRole: (flightCode: string, role: string) => {
-    if (flightRepository.isAdminRole(role)) return flightRepository.findByCode(flightCode);
+    if (flightRepository.isAdminRole(role)) return flightRepository.findByCode(flightCode, flightAdminInclude);
     return prisma.flight.findFirst({
       where: { flightCode, status: 'SCHEDULED' },
       include: flightAdminInclude,
@@ -36,24 +36,15 @@ export const flightRepository = {
     return flightRepository.findAll({ where: { status: 'SCHEDULED' } });
   },
 
-  findById: (id: string) =>
-    prisma.flight.findUnique({
-      where: { id },
-      include: flightAdminInclude,
-    }),
+  findById: (id: string, include?: Prisma.FlightInclude) =>
+    prisma.flight.findUnique({ where: { id }, include }),
 
-  findByCode: (flightCode: string) =>
-    prisma.flight.findUnique({
-      where: { flightCode },
-      include: flightAdminInclude,
-    }),
+  findByCode: (flightCode: string, include?: Prisma.FlightInclude) =>
+    prisma.flight.findUnique({ where: { flightCode }, include }),
 
-  findDetailByCode: (params: FlightCodeSearchParams) => {
+  findDetailByCode: (params: FlightCodeSearchParams, include?: Prisma.FlightInclude) => {
     const { flightCode } = FlightCodeSearchSchema.parse(params);
-    return prisma.flight.findUnique({
-      where: { flightCode },
-      include: flightAdminInclude,
-    });
+    return prisma.flight.findUnique({ where: { flightCode }, include });
   },
 
   findAll: (args?: { where?: Prisma.FlightWhereInput; skip?: number; take?: number }) =>

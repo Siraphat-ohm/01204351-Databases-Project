@@ -13,11 +13,8 @@ type TicketFindManyArgs = {
 };
 
 export const ticketRepository = {
-  findById: (id: string) =>
-    prisma.ticket.findUnique({
-      where: { id },
-      include: ticketAdminInclude,
-    }),
+  findById: (id: string, include?: Prisma.TicketInclude) =>
+    prisma.ticket.findUnique({ where: { id }, include }),
 
   findAll: (args?: TicketFindManyArgs) =>
     prisma.ticket.findMany({
