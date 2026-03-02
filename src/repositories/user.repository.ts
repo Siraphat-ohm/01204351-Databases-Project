@@ -7,17 +7,11 @@ import {
 import { Prisma, Role } from '@/generated/prisma/client';
 
 export const userRepository = {
-  findByIdAdmin: (id: string) =>
-    prisma.user.findUnique({
-      where: { id },
-      select: userAdminSelect,
-    }),
+  findByIdAdmin: (id: string, include?: Prisma.UserInclude) =>
+    prisma.user.findUniqueOrThrow({ where: { id }, include }),
 
-  findByIdSelf: (id: string) =>
-    prisma.user.findUnique({
-      where: { id },
-      select: userSelfSelect,
-    }),
+  findByIdSelf: (id: string, include?: Prisma.UserInclude) =>
+    prisma.user.findUniqueOrThrow({ where: { id }, include }),
 
   findAllAdmin: (args?: { where?: Prisma.UserWhereInput; skip?: number; take?: number }) =>
     prisma.user.findMany({

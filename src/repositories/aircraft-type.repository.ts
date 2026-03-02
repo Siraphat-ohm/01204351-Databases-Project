@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma';
 import {
-  aircraftTypeAdminInclude,
   type CreateAircraftTypeInput,
   type UpdateAircraftTypeInput,
 } from '@/types/aircraft-type.type';
@@ -13,17 +12,16 @@ export const aircraftTypeRepository = {
   findByIataCode: (iataCode: string, include?: Prisma.AircraftTypeInclude) =>
     prisma.aircraftType.findUniqueOrThrow({ where: { iataCode }, include }),
 
-  findAll: (args?: { where?: Prisma.AircraftTypeWhereInput; skip?: number; take?: number }) =>
+  findAll: (args?: { where?: Prisma.AircraftTypeWhereInput; skip?: number; take?: number; include?: Prisma.AircraftTypeInclude }) =>
     prisma.aircraftType.findMany({
       ...(args ?? {}),
-      include: aircraftTypeAdminInclude,
       orderBy: { iataCode: 'asc' },
     }),
 
   count: (where?: Prisma.AircraftTypeWhereInput) =>
     prisma.aircraftType.count({ where }),
 
-  create: (data: CreateAircraftTypeInput) =>
+  create: (data: CreateAircraftTypeInput, include?: Prisma.AircraftTypeInclude) =>
     prisma.aircraftType.create({
       data: {
         iataCode: data.iataCode,
@@ -32,20 +30,20 @@ export const aircraftTypeRepository = {
         capacityBiz: data.capacityBiz,
         capacityFirst: data.capacityFirst ?? 0,
       },
-      include: aircraftTypeAdminInclude,
+      include,
     }),
 
-  update: (id: string, data: UpdateAircraftTypeInput) =>
+  update: (id: string, data: UpdateAircraftTypeInput, include?: Prisma.AircraftTypeInclude) =>
     prisma.aircraftType.update({
       where: { id },
       data,
-      include: aircraftTypeAdminInclude,
+      include,
     }),
 
-  delete: (id: string) =>
+  delete: (id: string, include?: Prisma.AircraftTypeInclude) =>
     prisma.aircraftType.delete({
       where: { id },
-      include: aircraftTypeAdminInclude,
+      include,
     }),
 
   countFleet: (aircraftTypeId: string) =>
