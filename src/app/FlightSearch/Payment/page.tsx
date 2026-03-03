@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Container,
@@ -24,38 +24,46 @@ import { useAuthSession } from "@/services/auth-client.service";
 export default function PaymentPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const bookingId = searchParams.get("bookingId");
+  const bookingIdQuery = searchParams.get("bookingId"); 
+  
+  // Split the booking IDs if there are multiple (e.g., "id1,id2")
+  const bookingIds = useMemo(() => {
+    return bookingIdQuery ? bookingIdQuery.split(',').filter(Boolean) : [];
+  }, [bookingIdQuery]);
 
   const { data: session, isPending } = useAuthSession();
 
   const [initializing, setInitializing] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [bookingData, setBookingData] = useState<any>(null);
+  const [bookingsData, setBookingsData] = useState<any[]>([]); // Now an array
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-        if (!session) {
+    if (!session && !isPending) {
       router.replace(`/login`);
       return;
     }
+
     const fetchDetails = async () => {
-      if (!bookingId) {
+      if (bookingIds.length === 0) {
         setError("No booking ID provided.");
         setInitializing(false);
         return;
       }
 
       try {
-        const res = await fetch(`/api/v1/bookings/${bookingId}`);
-        const result = await res.json();
+        // Fetch all bookings simultaneously
+        const fetchPromises = bookingIds.map(async (id) => {
+          const res = await fetch(`/api/v1/bookings/${id}`);
+          const result = await res.json();
+          if (!res.ok) {
+            throw new Error(result.error?.message || result.message || `Could not find booking ${id}`);
+          }
+          return result.data || result;
+        });
 
-        if (!res.ok) {
-          throw new Error(
-            result.error?.message || result.message || "Could not find booking",
-          );
-        }
-
-        setBookingData(result.data || result);
+        const results = await Promise.all(fetchPromises);
+        setBookingsData(results);
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -66,10 +74,15 @@ export default function PaymentPage() {
     if (!isPending) {
       fetchDetails();
     }
-  }, [bookingId, isPending]);
+  }, [bookingIds, isPending, session, router]);
+
+  // Calculate the grand total across all fetched bookings
+  const grandTotal = useMemo(() => {
+    return bookingsData.reduce((sum, b) => sum + (Number(b.totalPrice) || 0), 0);
+  }, [bookingsData]);
 
   const handleStripeCheckout = async () => {
-    if (!bookingId) return;
+    if (bookingIds.length === 0) return;
 
     setLoading(true);
     setError(null);
@@ -81,7 +94,8 @@ export default function PaymentPage() {
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify({ bookingId }),
+        // Pass the array of IDs to your backend
+        body: JSON.stringify({ bookingIds }), 
       });
 
       const data = await res.json();
@@ -125,26 +139,44 @@ export default function PaymentPage() {
           <Box>
             <Title order={2}>Finalize Your Booking</Title>
             <Text c="dimmed">
-              You will be redirected to secure payment gateway.
+              You will be redirected to a secure payment gateway.
             </Text>
           </Box>
 
           <Paper withBorder p="lg" radius="md">
-            <Group justify="space-between" mb="xs">
-              <Text fw={700}>Booking Reference</Text>
-              <Badge variant="outline" color="blue" size="lg">
-                {bookingData?.bookingRef || "PENDING"}
-              </Badge>
+            <Text fw={700} mb="sm">Booking Reference{bookingsData.length > 1 ? 's' : ''}</Text>
+            
+            <Group gap="sm" mb="md">
+              {bookingsData.length > 0 ? (
+                bookingsData.map((b, i) => (
+                  <Badge key={b.id || i} variant="outline" color="blue" size="lg">
+                    {b.bookingRef || "PENDING"} {bookingsData.length > 1 && `(Trip ${i + 1})`}
+                  </Badge>
+                ))
+              ) : (
+                <Badge variant="outline" color="gray" size="lg">PENDING</Badge>
+              )}
             </Group>
+
+            {/* Optional Breakdown for Round Trips */}
+            {bookingsData.length > 1 && (
+              <Box mb="md">
+                <Text size="sm" c="dimmed" mb="xs">Price Breakdown</Text>
+                {bookingsData.map((b, i) => (
+                  <Group justify="space-between" key={b.id || i} mb={4}>
+                    <Text size="sm">Trip {i + 1} ({b.bookingRef || "Pending"})</Text>
+                    <Text size="sm">THB {Number(b.totalPrice || 0).toLocaleString()}</Text>
+                  </Group>
+                ))}
+              </Box>
+            )}
 
             <Divider my="sm" />
 
             <Group justify="space-between">
-              <Text size="xl" fw={900}>
-                Total Amount
-              </Text>
+              <Text size="xl" fw={900}>Grand Total</Text>
               <Text size="xl" fw={900} c="blue.9">
-                THB {bookingData?.totalPrice?.toLocaleString() || "0"}
+                THB {grandTotal.toLocaleString()}
               </Text>
             </Group>
           </Paper>
@@ -168,7 +200,7 @@ export default function PaymentPage() {
                 loading={loading}
                 onClick={handleStripeCheckout}
               >
-                Pay THB {bookingData?.totalPrice?.toLocaleString() || "0"}
+                Pay THB {grandTotal.toLocaleString()}
               </Button>
 
               <Button
