@@ -6,8 +6,9 @@ import type Stripe from "stripe";
 
 export const runtime = "nodejs";
 
-const systemSession: ServiceSession = {
-  user: { id: "system", role: "SYSTEM" },
+// Keep your system session
+const systemSession: any = {
+  user: { id: "system", role: "ADMIN" }, // Ensure role allows 'create' access
 };
 
 export async function POST(req: NextRequest) {
@@ -32,21 +33,52 @@ export async function POST(req: NextRequest) {
 
   try {
     switch (event.type) {
+      case "checkout.session.completed": {
+    const session = event.data.object as Stripe.Checkout.Session;
+    
+    // Use the metadata we passed in the session
+    const rawIds = session.metadata?.transactionIds;
+    if (!rawIds) break;
+
+    const transactionIds = rawIds.split(',').filter(Boolean);
+    const stripeChargeId = session.payment_intent as string;
+
+    await Promise.all(
+      transactionIds.map(id => 
+        paymentService.markPaymentSuccess(id, { stripeChargeId }, systemSession)
+      )
+    );
+    break;
+  }
       case "payment_intent.succeeded": {
         const intent = event.data.object as Stripe.PaymentIntent;
 
-        const transactionId = intent.metadata?.transactionId;
-        if (!transactionId) break;
+        // 1. Check for the NEW plural key 'transactionIds'
+        // If it doesn't exist, fall back to the old singular 'transactionId'
+        const rawIds = intent.metadata?.transactionIds || intent.metadata?.transactionId;
+        
+        if (!rawIds) {
+          console.warn("No transaction IDs found in metadata for intent:", intent.id);
+          break;
+        }
 
-        await paymentService.markPaymentSuccess(
-          transactionId,
-          {
-            stripeChargeId:
-              typeof intent.latest_charge === "string"
-                ? intent.latest_charge
-                : intent.latest_charge?.id,
-          },
-          systemSession,
+        // 2. Split the string (e.g., "tx_1,tx_2") into an array
+        const transactionIds = rawIds.split(',').filter(Boolean);
+
+        const stripeChargeId = typeof intent.latest_charge === "string"
+          ? intent.latest_charge
+          : intent.latest_charge?.id;
+
+        // 3. LOOP through every ID and mark them as success
+        // This confirms every flight in a round-trip
+        await Promise.all(
+          transactionIds.map(id => 
+            paymentService.markPaymentSuccess(
+              id,
+              { stripeChargeId },
+              systemSession
+            )
+          )
         );
 
         break;
@@ -54,17 +86,23 @@ export async function POST(req: NextRequest) {
 
       case "payment_intent.payment_failed": {
         const intent = event.data.object as Stripe.PaymentIntent;
+        const rawIds = intent.metadata?.transactionIds || intent.metadata?.transactionId;
+        
+        if (!rawIds) break;
 
-        const transactionId = intent.metadata?.transactionId;
-        if (!transactionId) break;
+        const transactionIds = rawIds.split(',').filter(Boolean);
 
-        await paymentService.markPaymentFailed(
-          transactionId,
-          {
-            failureCode: intent.last_payment_error?.code,
-            failureMessage: intent.last_payment_error?.message,
-          },
-          systemSession,
+        await Promise.all(
+          transactionIds.map(id => 
+            paymentService.markPaymentFailed(
+              id,
+              {
+                failureCode: intent.last_payment_error?.code,
+                failureMessage: intent.last_payment_error?.message,
+              },
+              systemSession
+            )
+          )
         );
 
         break;
@@ -75,9 +113,10 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ received: true });
-  } catch (error) {
+  } catch (error: any) {
+    console.error("Webhook Loop Error:", error);
     return NextResponse.json(
-      { error: "Webhook processing failed" },
+      { error: "Webhook processing failed", details: error.message },
       { status: 500 },
     );
   }

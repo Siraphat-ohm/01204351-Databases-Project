@@ -37,69 +37,88 @@ function canReadAll(session: Session) {
 
 export const paymentService = {
 
-  async createCheckoutSession(
-    bookingId: string,
+async createCheckoutSession(
+    bookingIds: string | string[], // Accept both single string or array
     origin: string,
     session: Session,
   ) {
     checkPermission(session, "create");
 
-    const booking = await bookingRepository.findById(bookingId);
-    if (!booking) throw new NotFoundError(`Booking not found: ${bookingId}`);
+    // Ensure we are working with an array
+    const ids = Array.isArray(bookingIds) ? bookingIds : [bookingIds];
+    
+    const allLineItems: any[] = [];
+    const transactionIds: string[] = [];
 
-    if (!canReadAll(session) && booking.userId !== session.user.id) {
-      throw new UnauthorizedError("create");
+    // 1. Process each booking to build a single Stripe session
+    for (const bId of ids) {
+      const booking = await bookingRepository.findById(bId);
+      if (!booking) throw new NotFoundError(`Booking not found: ${bId}`);
+
+      if (!canReadAll(session) && booking.userId !== session.user.id) {
+        throw new UnauthorizedError("create");
+      }
+
+      // Create a pending transaction record for this specific flight
+      const transaction = await paymentRepository.createPayment({
+        bookingId: booking.id,
+        amount: Number(booking.totalPrice),
+        currency: booking.currency,
+      });
+      transactionIds.push(transaction.id);
+
+      // Get tickets for this flight and add to line items
+      const tickets = await ticketService.findByBookingId(booking.id, session);
+      const flightItems = tickets.map((ticket) => {
+        const total = Number(ticket.price) + Number(ticket.seatSurcharge);
+        return {
+          price_data: {
+            currency: booking.currency.toLowerCase(),
+            product_data: {
+              name: `Flight ${booking.bookingRef} - ${ticket.firstName} ${ticket.lastName}`,
+              description: `Seat: ${ticket.seatNumber || "Unassigned"}`,
+            },
+            unit_amount: Math.round(total * 100),
+          },
+          quantity: 1,
+        };
+      });
+
+      allLineItems.push(...flightItems);
     }
 
-    const tickets = await ticketService.findByBookingId(booking.id, session);
-
-    const transaction = await paymentRepository.createPayment({
-      bookingId: booking.id,
-      amount: Number(booking.totalPrice),
-      currency: booking.currency,
-    });
-
-    const lineItems = tickets.map((ticket) => {
-      const total = Number(ticket.price) + Number(ticket.seatSurcharge);
-
-      return {
-        price_data: {
-          currency: booking.currency.toLowerCase(),
-          product_data: {
-            name: `Flight ${booking.bookingRef} - Seat ${
-              ticket.seatNumber || "Unassigned"
-            }`,
-            description: `${ticket.firstName} ${ticket.lastName}`,
-          },
-          unit_amount: Math.round(total * 100),
-        },
-        quantity: 1,
-      };
-    });
+    // 2. Create the unified Stripe session
+    const joinedBookingIds = ids.join(",");
+    const joinedTransactionIds = transactionIds.join(",");
 
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card", "promptpay"],
-      line_items: lineItems,
-      success_url: `${origin}/confirmation?bookingId=${booking.id}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/payment?bookingId=${booking.id}&canceled=true`,
-      client_reference_id: transaction.id,
-      metadata: {
-        bookingId: booking.id,
-        transactionId: transaction.id,
-      },
-      payment_intent_data: {
-        metadata: {
-          bookingId: booking.id,
-          transactionId: transaction.id,
-        },
-      },
-    });
+      line_items: allLineItems,
+      // Pass all IDs back to the confirmation page
+      success_url: `${origin}/confirmation?bookingId=${joinedBookingIds}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/payment?bookingId=${joinedBookingIds}&canceled=true`,
+metadata: {
+    transactionIds: joinedTransactionIds,
+  },
+  payment_intent_data: {
+    // THIS LINE IS CRITICAL. Without this, the webhook sees empty metadata.
+    metadata: {
+      transactionIds: joinedTransactionIds,
+    },
+  },
+});
 
-    await paymentRepository.updateStatus(transaction.id, {
-      stripePaymentIntentId: checkoutSession.payment_intent as string,
-      status: TransactionStatus.PENDING,
-    });
+    // 3. Link the Stripe Intent to all DB transactions
+    await Promise.all(
+      transactionIds.map((tId) =>
+        paymentRepository.updateStatus(tId, {
+          stripePaymentIntentId: checkoutSession.payment_intent as string,
+          status: TransactionStatus.PENDING,
+        })
+      )
+    );
+    
 
     return { url: checkoutSession.url };
   },
@@ -116,17 +135,30 @@ export const paymentService = {
 
     return payment;
   },
+  async handleSuccessfulPaymentMetadata(transactionIdsStr: string, stripeChargeId: string, session: Session) {
+    const ids = transactionIdsStr.split(',').filter(Boolean);
+    const results = [];
 
-  async markPaymentSuccess(
+    for (const id of ids) {
+      const result = await this.markPaymentSuccess(id, { stripeChargeId }, session);
+      results.push(result);
+    }
+    return results;
+  },
+
+ async markPaymentSuccess(
     id: string,
     input: any,
     session: Session,
   ) {
+    // Note: If this is called by a Webhook, ensure 'session' 
+    // represents a system user or skip the permission check.
     checkPermission(session, "create");
 
     const existing = await paymentRepository.findById(id);
-    if (!existing) throw new NotFoundError(`Payment not found: ${id}`);
+    if (!existing) throw new NotFoundError(`Payment record not found: ${id}`);
 
+    // If already success, don't repeat (idempotency)
     if (existing.status === TransactionStatus.SUCCESS) {
       return existing;
     }
@@ -135,15 +167,18 @@ export const paymentService = {
       throw new ConflictError("Invalid transaction type");
     }
 
-    const stripeChargeId = input.stripeChargeId ?? input.transactionId ?? input.id ?? undefined;
+    const stripeChargeId = input.stripeChargeId ?? input.transactionId ?? input.id;
 
     const data = markPaymentStatusSchema.parse({
       status: TransactionStatus.SUCCESS,
       stripeChargeId,
     });
 
+    // 1. Update the Payment/Transaction record
     const updated = await paymentRepository.updateStatus(id, data);
 
+    // 2. Update the linked Booking to CONFIRMED
+    // This is the line that was likely not being hit
     await bookingRepository.updateStatus(existing.bookingId, BookingStatus.CONFIRMED);
 
     return updated;
