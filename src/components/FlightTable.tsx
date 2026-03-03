@@ -27,6 +27,8 @@ export interface FlightTableRow {
   arrivalTime: Date;
   basePrice: number;
   captainId: string | null;
+  captainName?: string | null; 
+  captainImage?: string | null; // 🌟 NEW: Added captain image
   route: {
     distanceKm: number;
     durationMins: number;
@@ -68,14 +70,6 @@ interface SortConfig {
   direction: 'asc' | 'desc';
 }
 
-const getMockCaptain = (id: string | null) => {
-  if (!id) return "Unassigned"; 
-  const captains = ['Capt. James Maverick', 'Capt. Sarah Connor', 'Capt. Ellen Ripley', 'Capt. Han Solo'];
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash += id.charCodeAt(i);
-  return captains[hash % captains.length];
-};
-
 export function FlightTable({ data, totalPages }: { data: FlightTableRow[], totalPages: number }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -109,7 +103,6 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
   const [deleteOpened, { open: openDelete, close: closeDelete }] = useDisclosure(false);
   const [flightToDelete, setFlightToDelete] = useState<FlightTableRow | null>(null);
   
-  // 🌟 Handle transitions and explicit error states
   const [isPending, startTransition] = useTransition();
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -123,19 +116,17 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
   const confirmDelete = () => {
     if (!flightToDelete) return;
     
-    setDeleteError(null); // Clear previous errors
+    setDeleteError(null); 
 
     startTransition(async () => {
       const result = await deleteFlightAction(flightToDelete.id);
       
       if (result?.error) {
-        // 🌟 NORMALIZE THE ERROR MESSAGE
         let friendlyError = result.error;
         
         if (friendlyError.includes("with bookings")) {
           friendlyError = `Cannot delete flight ${flightToDelete.flightCode} because there are passengers already booked on this flight. You must cancel or move the bookings first.`;
         } else if (friendlyError.includes(flightToDelete.id)) {
-           // Strip ugly IDs if it's a generic error
            friendlyError = friendlyError.replace(flightToDelete.id, flightToDelete.flightCode);
         }
 
@@ -150,7 +141,6 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
         });
         closeDelete();
         setFlightToDelete(null);
-        router.refresh();
       }
     });
   };
@@ -208,7 +198,6 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
     });
   };
 
-  // Explicit Form Submission
   const applyFilters = (e: React.FormEvent) => {
     e.preventDefault();
     startTransition(() => {
@@ -371,11 +360,20 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
                   <Grid.Col span={{ base: 12, md: 3 }}>
                     <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb="sm">Crew & Ticket</Text>
                     <Stack gap="md">
+                      {/* 🌟 NEW: Dynamic Captain Avatar rendering */}
                       <Group align="flex-start">
-                        <Avatar color={flight.captainId ? "blue" : "gray"} radius="xl"><User size={20}/></Avatar>
+                        <Avatar 
+                          src={flight.captainImage || null} 
+                          color={flight.captainName ? "blue" : "gray"} 
+                          radius="xl"
+                        >
+                          {flight.captainName ? flight.captainName.substring(0, 2).toUpperCase() : <User size={20}/>}
+                        </Avatar>
                         <div>
-                          <Text size="xs" c="dimmed">Captain</Text>
-                          <Text size="sm" fw={600}>{flight.captainId ? getMockCaptain(flight.captainId) : "Not Assigned"}</Text>
+                          <Text size="xs" c="dimmed">Captain In Command</Text>
+                          <Text size="sm" fw={600}>
+                            {flight.captainName ? `Capt. ${flight.captainName}` : "Not Assigned"}
+                          </Text>
                         </div>
                       </Group>
                       <Paper withBorder p="xs" radius="md" bg="white">
@@ -474,7 +472,12 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
         </form>
       </Paper>
 
-      <Paper shadow="xs" withBorder mb="lg" pos="relative" >
+      <Paper shadow="xs" withBorder mb="lg" pos="relative">
+        <LoadingOverlay 
+          visible={isPending} 
+          zIndex={1000} 
+          overlayProps={{ radius: 'sm', blur: 0, backgroundOpacity: 0 }} 
+        />
         <Table.ScrollContainer minWidth={900}>
           <Table verticalSpacing="sm" striped highlightOnHover>
             <Table.Thead bg="gray.0">
@@ -515,7 +518,6 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
         closeButtonProps={{ disabled: isPending }}
       >
         <Stack>
-          {/* 🌟 NEW: Error Alert Box */}
           {deleteError && (
             <Alert color="red" title="Cannot Delete Flight" icon={<X size={16} />}>
               {deleteError}

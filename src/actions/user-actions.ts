@@ -4,6 +4,7 @@ import { userService } from '@/services/user.services';
 import { getServerSession } from '@/services/auth.services';
 import { revalidatePath } from 'next/cache';
 import { UpdateMyProfileInput, updateMyProfileSchema, UpdateUserRoleInput } from '@/types/user.type';
+import { redirect } from 'next/navigation';
 
 export async function adminUpdateUserRoleAction(userId: string, roleData: UpdateUserRoleInput) {
   const session = await getServerSession();
@@ -46,4 +47,33 @@ export async function updateMyProfileAction(data: UpdateMyProfileInput) {
   } catch (error: any) {
     return { error: error.message || "An unexpected error occurred while saving." };
   }
+}
+
+
+
+export async function adminUpdateUserAction(id: string, data: UpdateMyProfileInput) {
+  // 1. Validate the input via Zod using safeParse
+  const validation = updateMyProfileSchema.safeParse(data);
+
+  if (!validation.success) {
+    return { 
+      error: "Validation failed", 
+      fieldErrors: validation.error.flatten().fieldErrors 
+    };
+  }
+
+  try {
+    const session = await getServerSession();
+    if (!session) return { error: "Unauthorized" };
+    
+    // 2. Perform the update with the safely parsed data
+    await userService.updateUser(id, validation.data, session as any);
+
+  } catch (error: any) {
+    return { error: error.message || "An unexpected error occurred while updating the user." };
+  }
+
+  // 3. Revalidate and redirect on success (done outside try/catch because redirect throws an error internally)
+  revalidatePath('/admin/dashboard/users'); 
+  redirect('/admin/dashboard/users');
 }

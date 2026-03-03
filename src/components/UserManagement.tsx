@@ -6,7 +6,7 @@ import {
   Modal, Stack, Alert, LoadingOverlay, Box
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Search, Filter, Plus, Trash, ShieldCheck, MapPin, Check, X } from 'lucide-react';
+import { Search, Filter, Plus, Trash, ShieldCheck, MapPin, Check, X, Pencil} from 'lucide-react';
 import { useState, useTransition, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { notifications } from '@mantine/notifications';
@@ -14,6 +14,8 @@ import { notifications } from '@mantine/notifications';
 import { UserAdmin } from '@/types/user.type'; 
 import { Role } from '@/generated/prisma/client';
 import { adminUpdateUserRoleAction } from '@/actions/user-actions';
+
+
 
 interface UserManagementProps {
   initialUsers: UserAdmin[];
@@ -184,6 +186,11 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
 
         <Table.Td>
           <Group gap={4} justify="flex-end">
+            <Tooltip label="Edit User">
+              <ActionIcon variant="subtle" color="yellow" onClick={() => router.push(`/admin/dashboard/users/${user.id}/edit`)}>
+                <Pencil size={16} />
+              </ActionIcon>
+            </Tooltip>
             <Tooltip label="Manage Role">
               <ActionIcon variant="subtle" color="blue" onClick={() => handleEditRoleClick(user)}>
                 <ShieldCheck size={16} />

@@ -2,7 +2,7 @@
 
 import { AircraftEditForm } from "@/components/AircraftEditForm";
 import { notFound } from "next/navigation";
-import { aircraftService, AircraftNotFoundError } from "@/services/aircraft.services"; 
+import { aircraftService } from "@/services/aircraft.services"; 
 import { aircraftTypeService } from "@/services/aircraft-type.services"; // Import your new service!
 import { requireServerSession } from "@/services/auth.services"; // Use your clean auth utility
 
@@ -36,7 +36,7 @@ export default async function EditAircraftPage({ params }: PageProps) {
     );
   } catch (error) {
     // 5. Gracefully handle 404s using your custom error class
-    if (error instanceof AircraftNotFoundError) {
+    if (error) {
       notFound();
     }
     

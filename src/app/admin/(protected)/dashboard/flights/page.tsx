@@ -1,6 +1,7 @@
 import { FlightTable } from "@/components/FlightTable";
 import { redirect } from "next/navigation";
 import { flightService } from "@/services/flight.services"; 
+import { userService } from "@/services/user.services"; 
 import { getServerSession } from "@/services/auth.services"; 
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -25,7 +26,7 @@ export default async function FlightsPage({ searchParams }: PageProps) {
   const dateValue = typeof resolvedParams.date === 'string' ? resolvedParams.date : '';
 
   const page = Number(resolvedParams.page) || 1;
-  const limit = 15; // Set pagination limit
+  const limit = 15; 
 
   // 1. Build the Prisma Where Clause natively
   const where: Prisma.FlightWhereInput = {};
@@ -45,12 +46,10 @@ export default async function FlightsPage({ searchParams }: PageProps) {
   }
 
   if (statusFilter) {
-    where.status = statusFilter as any; // Cast to FlightStatus enum
+    where.status = statusFilter as any; 
   }
 
   if (dateValue) {
-    // To search by Date in Prisma (which uses exact DateTime), 
-    // we search for any time between the start and end of that specific day (UTC).
     const startOfDay = new Date(`${dateValue}T00:00:00.000Z`);
     const endOfDay = new Date(`${dateValue}T23:59:59.999Z`);
     
@@ -60,14 +59,35 @@ export default async function FlightsPage({ searchParams }: PageProps) {
     };
   }
 
-  // 2. Fetch paginated and filtered data directly from the Database
+  // 2. Fetch paginated flights
   const response = await flightService.findAllPaginated(session as any, { 
     page, 
     limit, 
     where 
   } as any);
 
-  // 3. Map Data safely for the UI
+  // 🌟 3. FETCH REAL CAPTAIN NAMES & IMAGES 🌟
+  const captainUserIds = [...new Set(response.data.map((f: any) => f.captain?.userId).filter(Boolean))];
+  
+  // Update Dictionary to hold an object with name and image
+  let userDict: Record<string, { name: string; image: string | null }> = {};
+  
+  if (captainUserIds.length > 0) {
+    const usersResponse = await userService.findAllPaginated(session as any, {
+      limit: 100, 
+      where: { id: { in: captainUserIds as string[] } }
+    } as any);
+
+    userDict = usersResponse.data.reduce((acc: Record<string, { name: string; image: string | null }>, user: any) => {
+      acc[user.id] = {
+        name: user.name || user.email.split('@')[0],
+        image: user.image || null, // 🌟 Extract the image
+      };
+      return acc;
+    }, {});
+  }
+
+  // 4. Map Data safely for the UI
   const tableData = response.data.map((flight: any) => ({
     id: flight.id, 
     flightCode: flight.flightCode,
@@ -77,6 +97,11 @@ export default async function FlightsPage({ searchParams }: PageProps) {
     arrivalTime: flight.arrivalTime,
     basePrice: Number(flight.basePriceEconomy ?? 0), 
     captainId: flight.captainId, 
+    
+    // 🌟 Inject both the real captain name AND image
+    captainName: flight.captain?.userId ? userDict[flight.captain.userId]?.name : null,
+    captainImage: flight.captain?.userId ? userDict[flight.captain.userId]?.image : null,
+    
     route: {
       distanceKm: flight.route?.distanceKm ?? 0,
       durationMins: flight.route?.durationMins ?? 0,
