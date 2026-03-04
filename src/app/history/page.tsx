@@ -1,30 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { Container, Title, Card, Text, Group, Badge, Stack, Loader, Center, Paper, Divider, Flex, Box } from "@mantine/core";
 import { IconPlaneDeparture, IconTicket, IconUser } from "@tabler/icons-react";
 import { useAuthSession } from "@/services/auth-client.service";
 import { Navbar } from "@/components/Navbar";
 
-export default function HistoryPage() {
-  
+function HistoryContent() {
   const [groupedBookings, setGroupedBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
- const { data: session, isPending: isAuthLoading } = useAuthSession(); // Added isPending
- const formatTime = (dateString: string) => {
-  if (!dateString) return "--:--";
-  return new Date(dateString).toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'UTC' // Standard for flight history
-  }) ;
-};
+  const { data: session, isPending: isAuthLoading } = useAuthSession();
+
+  const formatTime = (dateString: string) => {
+    if (!dateString) return "--:--";
+    return new Date(dateString).toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC'
+    });
+  };
 
   useEffect(() => {
-    // 1. Handle the refresh/loading state properly
     if (isAuthLoading) return;
 
     if (!session) {
@@ -38,12 +37,10 @@ export default function HistoryPage() {
         const data = await res.json();
         
         if (Array.isArray(data)) {
-          // 2. FILTER ONLY CONFIRMED BOOKINGS
           const confirmedTickets = data.filter(
             (ticket: any) => ticket.booking?.status === "CONFIRMED"
           );
 
-          // 3. GROUP THE FILTERED TICKETS
           const groups = confirmedTickets.reduce((acc: any, ticket: any) => {
             const ref = ticket.booking?.bookingRef || "N/A";
             if (!acc[ref]) {
@@ -74,7 +71,7 @@ export default function HistoryPage() {
     };
 
     fetchTickets();
-  }, [session, isAuthLoading, router]); // Added dependencies
+  }, [session, isAuthLoading, router]);
 
   if (loading) {
     return (
@@ -113,47 +110,40 @@ export default function HistoryPage() {
                 onClick={() => router.push(`/history/${group.ref}`)}
               >
                 <Flex align="stretch" direction={{ base: 'column', sm: 'row' }}>
-                  
-{/* --- LEFT SECTION: CENTERED FLIGHT INFO --- */}
-<Stack p="xl" style={{ flex: 1 }}>
-  <Group justify="space-between" align="start">
-    <Badge color="blue" variant="filled" radius="xl">
-      {group.flight?.flightCode}
-    </Badge>
-    <Text size="sm" fw={500} c="dimmed">Ref: {group.ref}</Text>
-  </Group>
+                  <Stack p="xl" style={{ flex: 1 }}>
+                    <Group justify="space-between" align="start">
+                      <Badge color="blue" variant="filled" radius="xl">
+                        {group.flight?.flightCode}
+                      </Badge>
+                      <Text size="sm" fw={500} c="dimmed">Ref: {group.ref}</Text>
+                    </Group>
 
-  <Group justify="space-between" align="center" mt="md">
-    {/* ORIGIN */}
-    <Stack gap={0}>
-      <Text size="xl" fw={900}>{group.flight?.route?.origin?.iataCode}</Text>
-      <Text size="sm" c="dimmed">{group.flight?.route?.origin?.city}</Text>
-      {/* Added Departure Time */}
-      <Text size="sm" fw={700} c="blue.6">{formatTime(group.flight?.departureTime)}</Text>
-    </Stack>
-    
-    <Stack align="center" gap={0} style={{ flex: 1 }}>
-      <IconPlaneDeparture color="gray" size={24} style={{ opacity: 0.5 }} />
-      <Divider w="50%" />
-    </Stack>
+                    <Group justify="space-between" align="center" mt="md">
+                      <Stack gap={0}>
+                        <Text size="xl" fw={900}>{group.flight?.route?.origin?.iataCode}</Text>
+                        <Text size="sm" c="dimmed">{group.flight?.route?.origin?.city}</Text>
+                        <Text size="sm" fw={700} c="blue.6">{formatTime(group.flight?.departureTime)}</Text>
+                      </Stack>
+                      
+                      <Stack align="center" gap={0} style={{ flex: 1 }}>
+                        <IconPlaneDeparture color="gray" size={24} style={{ opacity: 0.5 }} />
+                        <Divider w="50%" />
+                      </Stack>
 
-    {/* DESTINATION */}
-    <Stack gap={0} align="flex-end">
-      <Text size="xl" fw={900}>{group.flight?.route?.destination?.iataCode}</Text>
-      <Text size="sm" c="dimmed">{group.flight?.route?.destination?.city}</Text>
-      {/* Added Arrival Time */}
-      <Text size="sm" fw={700} c="blue.6">{formatTime(group.flight?.arrivalTime)}</Text>
-    </Stack>
-  </Group>
+                      <Stack gap={0} align="flex-end">
+                        <Text size="xl" fw={900}>{group.flight?.route?.destination?.iataCode}</Text>
+                        <Text size="sm" c="dimmed">{group.flight?.route?.destination?.city}</Text>
+                        <Text size="sm" fw={700} c="blue.6">{formatTime(group.flight?.arrivalTime)}</Text>
+                      </Stack>
+                    </Group>
 
-  <Text size="sm" fw={600} mt="md">
-    {new Date(group.flight?.departureTime).toLocaleString('en-GB', {
-      weekday: 'short', day: '2-digit', month: 'short', year: 'numeric'
-    })}
-  </Text>
-</Stack>
+                    <Text size="sm" fw={600} mt="md">
+                      {new Date(group.flight?.departureTime).toLocaleString('en-GB', {
+                        weekday: 'short', day: '2-digit', month: 'short', year: 'numeric'
+                      })}
+                    </Text>
+                  </Stack>
 
-                  {/* --- RIGHT SECTION: PASSENGER DETAILS --- */}
                   <Stack p="lg" gap={0} bg="gray.0" style={{ borderLeft: '1px dashed #dee2e6', flex: 1 }}>
                     <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="md">Passenger Details</Text>
                     
@@ -194,10 +184,22 @@ export default function HistoryPage() {
                   </Stack>
                 </Flex>
               </Card>
-            )
-          ))}
+            ))
+          )}
         </Stack>
       </Container>
     </Box>
+  );
+}
+
+export default function HistoryPage() {
+  return (
+    <Suspense fallback={
+      <Box>
+        <Center h="80vh"><Loader color="blue" size="xl" /></Center>
+      </Box>
+    }>
+      <HistoryContent />
+    </Suspense>
   );
 }

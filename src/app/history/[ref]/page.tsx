@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import {
   Container,
   Stack,
@@ -26,7 +26,7 @@ import { notifications } from "@mantine/notifications";
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
 
-export default function BookingDetailsPage() {
+function BookingDetailsContent() {
   const { ref } = useParams();
   const router = useRouter();
   const [tickets, setTickets] = useState<any[]>([]);
@@ -46,29 +46,29 @@ export default function BookingDetailsPage() {
       setLoading(false);
     }
   };
-  const formatUTCTime = (dateString: string) => {
-  if (!dateString) return "...";
-  const d = new Date(dateString);
-  return d.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "UTC",
-  }) ;
-};
 
-const getBoardingTimeUTC = (dateString: string) => {
-  if (!dateString) return "...";
-  const d = new Date(dateString);
-  // Aviation standard: Boarding starts ~40 mins before departure
-  const boarding = new Date(d.getTime() - 40 * 60000); 
-  return boarding.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "UTC",
-  }) ;
-};
+  const formatUTCTime = (dateString: string) => {
+    if (!dateString) return "...";
+    const d = new Date(dateString);
+    return d.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "UTC",
+    });
+  };
+
+  const getBoardingTimeUTC = (dateString: string) => {
+    if (!dateString) return "...";
+    const d = new Date(dateString);
+    const boarding = new Date(d.getTime() - 40 * 60000); 
+    return boarding.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "UTC",
+    });
+  };
 
   useEffect(() => {
     if (!session) {
@@ -78,13 +78,12 @@ const getBoardingTimeUTC = (dateString: string) => {
     fetchBookingDetails();
   }, [ref, session, router]);
 
-const handleCheckIn = async (ticket: any) => { // Pass the whole ticket object
+  const handleCheckIn = async (ticket: any) => {
     setCheckingInId(ticket.id);
     try {
       const res = await fetch(`/api/v1/tickets/${ticket.id}/check-in`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        // Send the existing ticket data so Zod validation passes
         body: JSON.stringify({
           firstName: ticket.firstName,
           lastName: ticket.lastName,
@@ -118,16 +117,16 @@ const handleCheckIn = async (ticket: any) => { // Pass the whole ticket object
 
   if (loading)
     return (
-      <>
+      <Box>
         <Navbar />
         <Center h="80vh">
           <Loader size="xl" />
         </Center>
-      </>
+      </Box>
     );
 
   return (
-    <>
+    <Box>
       <Navbar />
       <Container size="md" py="xl">
         <Button
@@ -142,13 +141,11 @@ const handleCheckIn = async (ticket: any) => { // Pass the whole ticket object
         <Stack gap={50}>
           {tickets.map((ticket) => (
             <Stack key={ticket.id} gap="md">
-              {/* --- YOUR ORIGINAL TICKET UI --- */}
               <Paper
                 shadow="md"
                 radius="lg"
                 style={{ overflow: "hidden", border: "1px solid #e0e0e0" }}
               >
-                {/* Blue Header Bar */}
                 <Group justify="space-between" bg="blue.6" p="md" c="white">
                   <Group gap="xs">
                     <IconPlaneDeparture size={24} />
@@ -176,7 +173,7 @@ const handleCheckIn = async (ticket: any) => { // Pass the whole ticket object
                         transform: "translate(-50%, -50%) rotate(-90deg)",
                         width: "240px",
                         height: "40px",
-                        background: `repeating-linear-gradient(90deg, #000, #000 2px, transparent 2px, transparent 4px, #000 4px, #000 5px, transparent 5px, transparent 8px)`,
+                        background: `repeating-linear-gradient(90deg, #000, #000 1px, transparent 1px, transparent 2px, #000 2px, #000 3px, transparent 3px, transparent 5px, #000 5px, #000 6px, transparent 6px, transparent 8px)`,
                         opacity: 0.8,
                       }}
                     />
@@ -210,44 +207,40 @@ const handleCheckIn = async (ticket: any) => { // Pass the whole ticket object
                       </Stack>
                     </Group>
 
-<Group mt="xl" justify="space-between" align="center">
-  {/* Departure Column */}
-  <div>
-    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-      From
-    </Text>
-    <Text size="xl" fw={900} lh={1}>
-      {ticket.flight?.route?.origin?.iataCode}
-    </Text>
-    <Text size="sm">{ticket.flight?.route?.origin?.city}</Text>
-    {/* Added Departure Time */}
-    <Text size="md" fw={700} c="blue.7" mt={4}>
-      {formatUTCTime(ticket.flight?.departureTime)}
-    </Text>
-  </div>
+                    <Group mt="xl" justify="space-between" align="center">
+                      <div>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                          From
+                        </Text>
+                        <Text size="xl" fw={900} lh={1}>
+                          {ticket.flight?.route?.origin?.iataCode}
+                        </Text>
+                        <Text size="sm">{ticket.flight?.route?.origin?.city}</Text>
+                        <Text size="md" fw={700} c="blue.7" mt={4}>
+                          {formatUTCTime(ticket.flight?.departureTime)}
+                        </Text>
+                      </div>
 
-  <Box style={{ textAlign: "center", opacity: 0.2 }}>
-    <IconPlaneDeparture size={32} />
-    <Divider w={80} />
-  </Box>
+                      <Box style={{ textAlign: "center", opacity: 0.2 }}>
+                        <IconPlaneDeparture size={32} />
+                        <Divider w={80} />
+                      </Box>
 
-  {/* Arrival Column */}
-  <div style={{ textAlign: "right" }}>
-    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-      To
-    </Text>
-    <Text size="xl" fw={900} lh={1}>
-      {ticket.flight?.route?.destination?.iataCode}
-    </Text>
-    <Text size="sm">
-      {ticket.flight?.route?.destination?.city}
-    </Text>
-    {/* Added Arrival Time */}
-    <Text size="md" fw={700} c="blue.7" mt={4}>
-      {formatUTCTime(ticket.flight?.arrivalTime)}
-    </Text>
-  </div>
-</Group>
+                      <div style={{ textAlign: "right" }}>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                          To
+                        </Text>
+                        <Text size="xl" fw={900} lh={1}>
+                          {ticket.flight?.route?.destination?.iataCode}
+                        </Text>
+                        <Text size="sm">
+                          {ticket.flight?.route?.destination?.city}
+                        </Text>
+                        <Text size="md" fw={700} c="blue.7" mt={4}>
+                          {formatUTCTime(ticket.flight?.arrivalTime)}
+                        </Text>
+                      </div>
+                    </Group>
 
                     <Divider variant="dashed" my="lg" />
 
@@ -372,7 +365,6 @@ const handleCheckIn = async (ticket: any) => { // Pass the whole ticket object
                 </Group>
               </Paper>
 
-              {/* --- INDIVIDUAL CHECK-IN BUTTON AT THE END OF EACH TICKET --- */}
               <Group justify="flex-end">
                 {ticket.checkedIn ? (
                   <Badge
@@ -384,23 +376,37 @@ const handleCheckIn = async (ticket: any) => { // Pass the whole ticket object
                     Successfully Checked In
                   </Badge>
                 ) : (
-                // Inside your tickets.map loop:
-                <Button
-                color="orange"
-                radius="md"
-                size="md"
-                loading={checkingInId === ticket.id}
-                onClick={() => handleCheckIn(ticket)} // Pass ticket instead of ticket.id
-                style={{ minWidth: 200 }}
-                >
-                Check In for {ticket.firstName}
-                </Button>
+                  <Button
+                    color="orange"
+                    radius="md"
+                    size="md"
+                    loading={checkingInId === ticket.id}
+                    onClick={() => handleCheckIn(ticket)}
+                    style={{ minWidth: 200 }}
+                  >
+                    Check In for {ticket.firstName}
+                  </Button>
                 )}
               </Group>
             </Stack>
           ))}
         </Stack>
       </Container>
-    </>
+    </Box>
+  );
+}
+
+export default function BookingDetailsPage() {
+  return (
+    <Suspense fallback={
+      <Box>
+        <Navbar />
+        <Center h="80vh">
+          <Loader size="xl" />
+        </Center>
+      </Box>
+    }>
+      <BookingDetailsContent />
+    </Suspense>
   );
 }
