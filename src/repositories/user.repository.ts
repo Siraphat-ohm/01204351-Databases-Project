@@ -10,8 +10,8 @@ export const userRepository = {
   findByIdAdmin: (id: string, include?: Prisma.UserInclude) =>
     prisma.user.findUniqueOrThrow({ where: { id }, include }),
 
-  findByIdSelf: (id: string, include?: Prisma.UserInclude) =>
-    prisma.user.findUniqueOrThrow({ where: { id }, include }),
+  findByIdSelf: (id: string) =>
+    prisma.user.findUniqueOrThrow({ where: { id }, select: userSelfSelect }),
 
   findAllAdmin: (args?: { where?: Prisma.UserWhereInput; skip?: number; take?: number }) =>
     prisma.user.findMany({

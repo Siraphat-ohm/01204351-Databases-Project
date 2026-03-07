@@ -28,6 +28,8 @@ interface WeatherConditions {
 interface ClientOpsLog {
   id: string;
   flightId: string;
+  flightCode: string;
+  route: string;
   captainName: string;
   gateChanges: GateChange[];
   weatherConditions: WeatherConditions | null;
@@ -133,9 +135,14 @@ export function FlightOpsLogManagement({ initialLogs, userRole, totalPages, curr
       <Table.Td>
         <Group gap="xs">
           <ThemeIcon variant="light" color="blue"><Plane size={14} /></ThemeIcon>
-          <Text size="sm" fw={600} style={{ fontFamily: 'monospace' }}>
-            {log.flightId.substring(0, 8).toUpperCase()}
-          </Text>
+          <div>
+            <Text size="sm" fw={700}>
+              {log.flightCode}
+            </Text>
+            <Text size="xs" c="dimmed">
+              {log.route}
+            </Text>
+          </div>
         </Group>
       </Table.Td>
 
@@ -198,7 +205,7 @@ export function FlightOpsLogManagement({ initialLogs, userRole, totalPages, curr
             <TextInput 
               placeholder="Search by Flight ID or Captain Name... (Press Enter)" 
               leftSection={<Search size={16} />} 
-              style={{ flex: 1, maxWidth: '500px' }}
+              style={{ flex: 1 }}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.currentTarget.value)}
               disabled={isPending}
@@ -227,8 +234,8 @@ export function FlightOpsLogManagement({ initialLogs, userRole, totalPages, curr
           <Table verticalSpacing="sm" striped highlightOnHover>
             <Table.Thead bg="gray.0">
               <Table.Tr>
-                <Table.Th style={{ width: '20%' }}>Flight ID</Table.Th>
-                <Table.Th style={{ width: '25%' }}>Captain In Command</Table.Th>
+                <Table.Th style={{ width: '20%' }}>Flight</Table.Th>
+                <Table.Th style={{ width: '25%' }}>Reporter</Table.Th>
                 <Table.Th style={{ width: '15%' }}>Incidents</Table.Th>
                 <Table.Th style={{ width: '15%' }}>Gate Operations</Table.Th>
                 <Table.Th style={{ width: '15%' }}>Log Date</Table.Th>
@@ -277,11 +284,12 @@ export function FlightOpsLogManagement({ initialLogs, userRole, totalPages, curr
 
             <Group grow align="flex-start">
               <Paper p="sm" bg="gray.0" radius="md">
-                <Text size="xs" c="dimmed" fw={600}>FLIGHT ID</Text>
-                <Text size="sm" fw={600} style={{ fontFamily: 'monospace' }}>{selectedLog.flightId}</Text>
+                <Text size="xs" c="dimmed" fw={600}>FLIGHT</Text>
+                <Text size="sm" fw={700}>{selectedLog.flightCode}</Text>
+                <Text size="xs" c="dimmed">{selectedLog.route}</Text>
               </Paper>
               <Paper p="sm" bg="gray.0" radius="md">
-                <Text size="xs" c="dimmed" fw={600}>CAPTAIN</Text>
+                <Text size="xs" c="dimmed" fw={600}>REPORTER</Text>
                 <Group gap="xs" mt={2}>
                    <User size={14} />
                    <Text size="sm" fw={600}>{selectedLog.captainName}</Text>

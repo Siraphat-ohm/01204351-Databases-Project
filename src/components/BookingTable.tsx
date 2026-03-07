@@ -36,11 +36,14 @@ interface Booking {
 
 interface BookingTableProps {
   initialBookings: Booking[];
+  userRole?: string;
 }
 
-export function BookingTable({ initialBookings }: BookingTableProps) {
+export function BookingTable({ initialBookings, userRole }: BookingTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+
+  const isAdmin = userRole === 'ADMIN';
 
   // Helper: Status Colors
   const getStatusColor = (status: string) => {
@@ -121,25 +124,27 @@ export function BookingTable({ initialBookings }: BookingTableProps) {
         </Badge>
       </Table.Td>
 
-      <Table.Td>
-        <Group gap={4} justify="flex-end">
-          <Tooltip label="View Details">
-            <ActionIcon variant="subtle" color="blue" onClick={() => alert(`View details for ${booking.bookingRef}`)}>
-              <Eye size={16} />
-            </ActionIcon>
-          </Tooltip>
-          {booking.status === 'PENDING' && (
-            <>
-              <ActionIcon variant="subtle" color="green" title="Confirm">
-                <Check size={16} />
+      {isAdmin && (
+        <Table.Td>
+          <Group gap={4} justify="flex-end">
+            <Tooltip label="View Details">
+              <ActionIcon variant="subtle" color="blue" onClick={() => alert(`View details for ${booking.bookingRef}`)}>
+                <Eye size={16} />
               </ActionIcon>
-              <ActionIcon variant="subtle" color="red" title="Cancel">
-                <X size={16} />
-              </ActionIcon>
-            </>
-          )}
-        </Group>
-      </Table.Td>
+            </Tooltip>
+            {booking.status === 'PENDING' && (
+              <>
+                <ActionIcon variant="subtle" color="green" title="Confirm">
+                  <Check size={16} />
+                </ActionIcon>
+                <ActionIcon variant="subtle" color="red" title="Cancel">
+                  <X size={16} />
+                </ActionIcon>
+              </>
+            )}
+          </Group>
+        </Table.Td>
+      )}
     </Table.Tr>
   ));
 
@@ -150,9 +155,11 @@ export function BookingTable({ initialBookings }: BookingTableProps) {
           <Title order={2}>Bookings & Reservations</Title>
           <Text c="dimmed" size="sm">Manage passenger tickets and flight reservations</Text>
         </div>
-        <Button leftSection={<Ticket size={16} />}>
-          New Booking
-        </Button>
+        {isAdmin && (
+          <Button leftSection={<Ticket size={16} />}>
+            New Booking
+          </Button>
+        )}
       </Group>
 
       {/* Filters */}
@@ -190,7 +197,7 @@ export function BookingTable({ initialBookings }: BookingTableProps) {
                 <Table.Th>Passengers</Table.Th>
                 <Table.Th>Total Price</Table.Th>
                 <Table.Th>Status</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Actions</Table.Th>
+                {isAdmin && <Table.Th style={{ textAlign: 'right' }}>Actions</Table.Th>}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>

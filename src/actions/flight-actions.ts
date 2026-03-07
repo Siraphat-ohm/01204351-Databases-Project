@@ -92,6 +92,38 @@ export async function updateFlightAction(id: string, formData: unknown) {
   redirect('/admin/dashboard/flights');
 }
 
+// --- 5. Search Flights Action (Paginated) ---
+export async function searchFlightsAction(search: string = '', page: number = 1, limit: number = 20) {
+  try {
+    const session = await getServerSession();
+    if (!session) return { data: [], total: 0 };
+
+    const response = await flightService.findAllPaginated(session as any, {
+      page,
+      limit,
+      where: {
+        departureTime: { gte: new Date() },
+        OR: [
+          { flightCode: { contains: search, mode: 'insensitive' } },
+        ]
+      }
+    } as any);
+
+    return {
+      data: response.data.map((f: any) => ({
+        id: f.id,
+        flightCode: f.flightCode,
+        route: `${f.route.origin.iataCode} - ${f.route.destination.iataCode}`,
+        departureTime: f.departureTime
+      })),
+      total: response.meta.total
+    };
+  } catch (error) {
+    console.error("Failed to search flights:", error);
+    return { data: [], total: 0 };
+  }
+}
+
 // --- 4. Delete Flight Action ---
 export async function deleteFlightAction(id: string) {
   try {

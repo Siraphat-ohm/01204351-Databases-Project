@@ -1,4 +1,5 @@
 import { issueReportRepository } from '@/repositories/issue-report.repository';
+import { userRepository } from '@/repositories/user.repository';
 import {
   createIssueReportAdminSchema,
   createIssueReportSchema,
@@ -33,7 +34,12 @@ export const issueReportService = {
       throw new UnauthorizedError('read');
     }
 
-    return issue;
+    const user = await userRepository.findByIdAdmin(issueUserId).catch(() => null);
+
+    return {
+      ...issue,
+      user,
+    };
   },
 
   async findMine(session: Session) {
@@ -74,7 +80,7 @@ export const issueReportService = {
   async findAllPaginated(
     session: Session,
     params?: PaginationParams<Record<string, unknown>>,
-  ): Promise<PaginatedResponse<Awaited<ReturnType<typeof issueReportRepository.findAll>>[number]>> {
+  ): Promise<PaginatedResponse<any>> {
     if (!isAdmin(session)) throw new UnauthorizedError('read-all');
 
     const { page, limit, skip } = resolvePagination(params);
@@ -84,8 +90,20 @@ export const issueReportService = {
       issueReportRepository.count(where),
     ]);
 
+    // Fetch user details for each issue to support Admin Dashboard display
+    const userIds = [...new Set(data.map((i: any) => i.userId))];
+    const users = await userRepository.findAllAdmin({
+      where: { id: { in: userIds } },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    const dataWithUsers = data.map((i: any) => ({
+      ...i,
+      user: userMap.get(i.userId),
+    }));
+
     return {
-      data,
+      data: dataWithUsers,
       meta: {
         page,
         limit,
@@ -141,3 +159,4 @@ export const issueReportService = {
     return deleted;
   },
 };
+

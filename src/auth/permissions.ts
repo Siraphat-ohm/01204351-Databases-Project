@@ -29,6 +29,8 @@ export const groundStaffRole = ac.newRole({
   ticket: ["read-all", "update", "check-in"],
   payment: ["read-all"],
   airport: ["read"],
+  aircraft: ["read"],
+  staff: ["read"],
 });
 
 export const cabinCrewRole = ac.newRole({
@@ -36,6 +38,9 @@ export const cabinCrewRole = ac.newRole({
   flight: ["read"],
   ticket: ["read-all"],
   airport: ["read"],
+  aircraft: ["read"],
+  booking: ["read-all"],
+  staff: ["read"],
 });
 
 export const pilotRole = ac.newRole({
@@ -43,12 +48,17 @@ export const pilotRole = ac.newRole({
   flight: ["read"],
   ticket: ["read-all"],
   airport: ["read"],
+  aircraft: ["read"],
+  booking: ["read-all"],
+  staff: ["read"],
 });
 
 export const mechanicRole = ac.newRole({
   aircraft: ["read", "manage-status"],
   flight: ["read"],
   airport: ["read"],
+  route: ["read"],
+  staff: ["read"],
 });
 
 export const adminRole = ac.newRole({

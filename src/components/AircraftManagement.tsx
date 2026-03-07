@@ -33,12 +33,15 @@ interface AircraftManagementProps {
   aircraftTypes: AircraftType[];
   totalPages: number;
   currentPage: number;
+  userRole?: string;
 }
 
-export function AircraftManagement({ initialAircrafts, aircraftTypes, totalPages, currentPage }: AircraftManagementProps) {
+export function AircraftManagement({ initialAircrafts, aircraftTypes, totalPages, currentPage, userRole }: AircraftManagementProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const isAdmin = userRole === 'ADMIN';
 
   // Initialize Search & Filter from URL
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
@@ -170,29 +173,31 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes, totalPages
           {ac.status}
         </Badge>
       </Table.Td>
-      <Table.Td>
-        <Group gap={0} justify="flex-end">
-          <ActionIcon
-            component={Link}
-            href={`/admin/dashboard/aircraft/${ac.id}/edit`}
-            variant="subtle"
-            color="blue"
-            aria-label="Edit"
-          >
-            <Pencil size={16} />
-          </ActionIcon>
+      {isAdmin && (
+        <Table.Td>
+          <Group gap={0} justify="flex-end">
+            <ActionIcon
+              component={Link}
+              href={`/admin/dashboard/aircraft/${ac.id}/edit`}
+              variant="subtle"
+              color="blue"
+              aria-label="Edit"
+            >
+              <Pencil size={16} />
+            </ActionIcon>
 
-          <ActionIcon
-            variant="subtle"
-            color="red"
-            aria-label="Delete"
-            onClick={() => handleDeleteClick(ac)}
-            disabled={deleteState.isDeleting}
-          >
-            <Trash size={16} />
-          </ActionIcon>
-        </Group>
-      </Table.Td>
+            <ActionIcon
+              variant="subtle"
+              color="red"
+              aria-label="Delete"
+              onClick={() => handleDeleteClick(ac)}
+              disabled={deleteState.isDeleting}
+            >
+              <Trash size={16} />
+            </ActionIcon>
+          </Group>
+        </Table.Td>
+      )}
     </Table.Tr>
   ));
 
@@ -203,13 +208,15 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes, totalPages
           <Title order={2}>Fleet Management</Title>
           <Text c="dimmed" size="sm">Manage aircraft status and fleet additions</Text>
         </div>
-        <Button 
-          component={Link} 
-          href="/admin/dashboard/aircraft/new" 
-          leftSection={<Plus size={16} />}
-        >
-          Add Aircraft
-        </Button>
+        {isAdmin && (
+          <Button 
+            component={Link} 
+            href="/admin/dashboard/aircraft/new" 
+            leftSection={<Plus size={16} />}
+          >
+            Add Aircraft
+          </Button>
+        )}
       </Group>
 
       {/* ────────────────────────────────────────────────
@@ -266,7 +273,7 @@ export function AircraftManagement({ initialAircrafts, aircraftTypes, totalPages
                 <Table.Th style={{ width: '30%' }}>Model</Table.Th>
                 <Table.Th style={{ width: '25%' }}>Capacity (Seats)</Table.Th>
                 <Table.Th style={{ width: '15%' }}>Status</Table.Th>
-                <Table.Th style={{ width: '10%', textAlign: 'right' }}>Actions</Table.Th>
+                {isAdmin && <Table.Th style={{ width: '10%', textAlign: 'right' }}>Actions</Table.Th>}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>

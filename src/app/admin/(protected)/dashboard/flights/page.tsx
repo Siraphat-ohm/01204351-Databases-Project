@@ -129,6 +129,7 @@ export default async function FlightsPage({ searchParams }: PageProps) {
     <FlightTable 
       data={tableData} 
       totalPages={response.meta.totalPages} 
+      userRole={session.user.role}
     />
   );
 }

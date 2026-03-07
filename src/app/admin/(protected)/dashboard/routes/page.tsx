@@ -64,6 +64,7 @@ export default async function RoutesPage({ searchParams }: PageProps) {
       initialRoutes={response.data as any} 
       totalPages={response.meta.totalPages}
       currentPage={page}
+      userRole={session.user.role}
     />
   );
 }
