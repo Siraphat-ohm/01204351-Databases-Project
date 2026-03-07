@@ -15,6 +15,7 @@ export const paymentGatewaySchema = z.enum([
 ]);
 
 export const createPaymentLogSchema = z.object({
+  transactionId: z.cuid({ message: 'Invalid transaction ID' }).optional(),
   bookingId: z.cuid({ message: 'Invalid booking ID' }),
   amount: z.number().positive(),
   currency: z.string().trim().length(3).default('THB'),
@@ -25,12 +26,14 @@ export const createPaymentLogSchema = z.object({
 
 export const updatePaymentLogSchema = z
   .object({
+    transactionId: z.cuid({ message: 'Invalid transaction ID' }).optional(),
     status: paymentLogStatusSchema.optional(),
     gateway: paymentGatewaySchema.optional(),
     rawResponse: z.record(z.string(), z.unknown()).optional(),
   })
   .refine(
     (data) =>
+      data.transactionId !== undefined ||
       data.status !== undefined ||
       data.gateway !== undefined ||
       data.rawResponse !== undefined,

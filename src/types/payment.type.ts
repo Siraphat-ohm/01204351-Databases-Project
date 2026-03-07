@@ -10,8 +10,6 @@ export const createPaymentSchema = z.object({
   amount: z.number().positive({ message: 'Amount must be positive' }),
   currency: z.string().trim().length(3).default('THB'),
   paymentMethodType: z.string().trim().min(2).optional(),
-  paymentMethodRef: z.string().trim().min(2).optional(),
-  stripePaymentIntentId: z.string().trim().min(2).optional(),
 });
 
 export const markPaymentStatusSchema = z.object({

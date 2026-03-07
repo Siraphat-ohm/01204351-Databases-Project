@@ -171,6 +171,6 @@ export const FALLBACK_AIRPORTS = [
   { iataCode: "DOH", name: "Hamad International Airport", city: "Doha", country: "QA", lat: 25.2609, lon: 51.6138 },
 ];
 
-export const PAYMENT_METHODS = ["CARD", "PROMPTPAY", "TRUEMONEY", "RABBIT_LINE_PAY"] as const;
+export const PAYMENT_METHODS = ["card", "promptpay"] as const;
 export const PASSENGER_NATIONALITIES = ["TH", "SG", "JP", "US", "GB", "CN", "KR", "AU", "DE", "FR"];
 export const REFUND_REASONS = ["Passenger request", "Flight cancelled by airline", "Schedule change", "Medical reason", "Visa denied"];

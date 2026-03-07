@@ -16,6 +16,14 @@ export const paymentLogRepository = {
     return PaymentLog.find({ bookingId }).sort({ createdAt: -1 }).lean();
   },
 
+  async findByTransactionIds(transactionIds: string[]) {
+    await connectMongo();
+    if (transactionIds.length === 0) return [];
+    return PaymentLog.find({ transactionId: { $in: transactionIds } })
+      .sort({ createdAt: -1 })
+      .lean();
+  },
+
   async findAll(args?: {
     where?: Record<string, unknown>;
     skip?: number;

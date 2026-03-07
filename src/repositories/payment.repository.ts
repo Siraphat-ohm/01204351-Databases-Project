@@ -19,9 +19,6 @@ export const paymentRepository = {
   findById: (id: string, include?: Prisma.TransactionInclude) =>
     prisma.transaction.findUniqueOrThrow({ where: { id }, include }),
 
-  findByStripePaymentIntentId: (stripePaymentIntentId: string, include?: Prisma.TransactionInclude) =>
-    prisma.transaction.findUniqueOrThrow({ where: { stripePaymentIntentId }, include }),
-
   findByBookingId: (bookingId: string, include?: Prisma.TransactionInclude) =>
     prisma.transaction.findMany({
       where: { bookingId },
@@ -66,8 +63,6 @@ export const paymentRepository = {
         status: TransactionStatus.PENDING,
         type: TransactionType.PAYMENT,
         paymentMethodType: input.paymentMethodType,
-        paymentMethodRef: input.paymentMethodRef,
-        stripePaymentIntentId: input.stripePaymentIntentId,
       },
       include,
     }),
@@ -81,8 +76,6 @@ export const paymentRepository = {
         status: TransactionStatus.PENDING,
         type: TransactionType.PAYMENT,
         paymentMethodType: input.paymentMethodType,
-        paymentMethodRef: input.paymentMethodRef,
-        stripePaymentIntentId: input.stripePaymentIntentId,
       },
       include,
     }),
@@ -93,11 +86,8 @@ export const paymentRepository = {
   updateStatus: (
     id: string,
     data: {
-      status: TransactionStatus;
-      stripePaymentIntentId?: string;
-      stripeChargeId?: string;
-      failureCode?: string;
-      failureMessage?: string;
+      status?: TransactionStatus;
+      paymentMethodType?: string;
       refundedAt?: Date;
       refundReason?: string;
     },

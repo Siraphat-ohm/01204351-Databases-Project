@@ -115,16 +115,12 @@ export async function seedMongoData(
       take: 400,
       orderBy: { createdAt: "desc" },
       select: {
+        id: true,
         bookingId: true,
         amount: true,
         currency: true,
         status: true,
         paymentMethodType: true,
-        paymentMethodRef: true,
-        stripePaymentIntentId: true,
-        stripeChargeId: true,
-        failureCode: true,
-        failureMessage: true,
         refundReason: true,
       },
     });
@@ -137,25 +133,17 @@ export async function seedMongoData(
     };
 
     const paymentDocs = txRows.map((t) => ({
+      transactionId: t.id,
       bookingId: t.bookingId,
       amount: Number(t.amount),
       currency: t.currency,
       status: statusMap[t.status],
-      gateway:
-        t.paymentMethodType === "PROMPTPAY"
-          ? "promptpay"
-          : t.paymentMethodType === "TRUEMONEY"
-            ? "truemoney"
-            : t.paymentMethodType === "CARD"
-              ? "stripe"
-              : "other",
+      gateway: "stripe",
       rawResponse: {
-        paymentMethodRef: t.paymentMethodRef,
-        stripePaymentIntentId: t.stripePaymentIntentId,
-        stripeChargeId: t.stripeChargeId,
-        failureCode: t.failureCode,
-        failureMessage: t.failureMessage,
-        refundReason: t.refundReason,
+        stripePaymentIntentId: `pi_${faker.string.alphanumeric({ length: 24, casing: "mixed" })}`,
+        stripeChargeId: `py_${faker.string.alphanumeric({ length: 24, casing: "mixed" })}`,
+        paymentMethodType: (t.paymentMethodType ?? faker.helpers.arrayElement(["card", "promptpay"])).toLowerCase(),
+        paymentMethodRef: `pm_${faker.string.alphanumeric({ length: 24, casing: "mixed" })}`,
       },
     }));
 

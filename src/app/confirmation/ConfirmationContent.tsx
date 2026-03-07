@@ -2,34 +2,53 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Container, Paper, Title, Text, Stack, Center, Loader, Box, RingProgress, Divider, Button } from "@mantine/core";
+import { Container, Paper, Title, Text, Stack, Center, Loader, Box, RingProgress, Divider, Button, Badge, Group } from "@mantine/core";
 import { IconCheck } from "@tabler/icons-react";
 
 export function ConfirmationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [countdown, setCountdown] = useState(10);
-  const [bookingRef, setBookingRef] = useState<string | null>(null);
+  const [bookingRefs, setBookingRefs] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
   
-  const bookingId = searchParams.get("bookingId");
+  const bookingIdParam = searchParams.get("bookingId");
+  const bookingIds = bookingIdParam ? bookingIdParam.split(',') : [];
 
   useEffect(() => {
-    const fetchBookingRef = async () => {
-      if (!bookingId) return;
+    const fetchBookingRefs = async () => {
+      if (bookingIds.length === 0) {
+        setLoading(false);
+        return;
+      }
+      
       try {
-        const res = await fetch("/api/v1/tickets");
-        const data = await res.json();
-        const ticket = data.find((t: any) => t.bookingId === bookingId);
+        // Fetch all bookings by their IDs
+        const refs: string[] = [];
         
-        if (ticket?.booking?.bookingRef) {
-          setBookingRef(ticket.booking.bookingRef);
+        for (const id of bookingIds) {
+          try {
+            const res = await fetch(`/api/v1/bookings/${id}`);
+            const result = await res.json();
+            const booking = result.data || result;
+            
+            if (booking?.bookingRef) {
+              refs.push(booking.bookingRef);
+            }
+          } catch (e) {
+            console.error(`Failed to fetch booking ${id}:`, e);
+          }
         }
+        
+        setBookingRefs(refs);
       } catch (e) {
-        console.error("Failed to fetch booking ref", e);
+        console.error("Failed to fetch booking refs", e);
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchBookingRef();
+    fetchBookingRefs();
 
     const timer = setInterval(() => {
       setCountdown((prev) => {
@@ -46,7 +65,17 @@ export function ConfirmationContent() {
       clearInterval(timer);
       clearTimeout(redirect);
     };
-  }, [bookingId, router]);
+  }, [bookingIdParam, router]);
+
+  if (loading) {
+    return (
+      <Container size="sm" py={100}>
+        <Center h={400}>
+          <Loader size="xl" />
+        </Center>
+      </Container>
+    );
+  }
 
   return (
     <Container size="sm" py={100}>
@@ -63,9 +92,28 @@ export function ConfirmationContent() {
         
           <Stack gap={5}>
             <Title order={1}>Payment Successful!</Title>
-            <Text size="lg" c="dimmed">
-              Your booking <b>#{bookingRef || "..."}</b> has been confirmed.
-            </Text>
+            {bookingRefs.length === 0 ? (
+              <Text size="lg" c="dimmed">
+                Your booking has been confirmed.
+              </Text>
+            ) : bookingRefs.length === 1 ? (
+              <Text size="lg" c="dimmed">
+                Your booking <b>#{bookingRefs[0]}</b> has been confirmed.
+              </Text>
+            ) : (
+              <Stack gap="xs">
+                <Text size="lg" c="dimmed">
+                  Your {bookingRefs.length} bookings have been confirmed:
+                </Text>
+                <Group justify="center" gap="xs">
+                  {bookingRefs.map((ref) => (
+                    <Badge key={ref} size="lg" variant="light" color="blue">
+                      {ref}
+                    </Badge>
+                  ))}
+                </Group>
+              </Stack>
+            )}
           </Stack>
 
           <Divider w="100%" label="Redirecting" labelPosition="center" />

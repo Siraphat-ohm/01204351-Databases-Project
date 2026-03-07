@@ -9,7 +9,6 @@
     "db:generate": "bunx prisma generate",
     "db:migrate": "bunx prisma migrate dev",
     "db:seed": "bunx tsx prisma/seed.ts",
-    "db:seed-seats": "bunx tsx prisma/seed-seats.ts",
     "db:reset": "bunx prisma migrate reset",
     "test": "bunx jest"
   },

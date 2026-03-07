@@ -51,6 +51,11 @@ export const paymentLogService = {
     return paymentLogRepository.findByBookingId(bookingId);
   },
 
+  async findByTransactionIds(transactionIds: string[], session: Session) {
+    if (!isStaff(session)) throw new UnauthorizedError('read-all');
+    return paymentLogRepository.findByTransactionIds(transactionIds);
+  },
+
   async findAll(session: Session) {
     if (!isStaff(session)) throw new UnauthorizedError('read-all');
     return paymentLogRepository.findAll();

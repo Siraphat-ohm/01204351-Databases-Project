@@ -52,9 +52,7 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-// ─────────────────────────────────────────────────────────────
-// CACHED SEAT HELPERS (OPTIMIZATION)
-// ─────────────────────────────────────────────────────────────
+type CabinName = "FIRST" | "BUSINESS" | "ECONOMY";
 
 interface LoadedCabin {
   cabin: string;
@@ -69,20 +67,16 @@ interface LoadedLayout {
   cabins: LoadedCabin[];
 }
 
-// Global cache structure
-const seatCache = new Map<string, {
-  allSeats: string[];
-  classMap: Map<string, TicketClass>;
-  cabinMap: Map<TicketClass, string[]>;
-}>();
+const seatCache = new Map<
+  string,
+  {
+    allSeats: string[];
+    classMap: Map<string, TicketClass>;
+    cabinMap: Map<TicketClass, string[]>;
+  }
+>();
 
-function ticketClassToCabin(cls: TicketClass): "FIRST" | "BUSINESS" | "ECONOMY" {
-  if (cls === TicketClass.FIRST_CLASS) return "FIRST";
-  if (cls === TicketClass.BUSINESS) return "BUSINESS";
-  return "ECONOMY";
-}
-
-function cabinToTicketClass(cabin: "FIRST" | "BUSINESS" | "ECONOMY"): TicketClass {
+function cabinToTicketClass(cabin: CabinName): TicketClass {
   if (cabin === "FIRST") return TicketClass.FIRST_CLASS;
   if (cabin === "BUSINESS") return TicketClass.BUSINESS;
   return TicketClass.ECONOMY;
@@ -95,9 +89,9 @@ function buildSeatCache(layouts: Map<string, LoadedLayout>) {
     const cabinMap = new Map<TicketClass, string[]>();
 
     for (const cabin of layout.cabins) {
-      const ticketClass = cabinToTicketClass(cabin.cabin as "FIRST" | "BUSINESS" | "ECONOMY");
+      const ticketClass = cabinToTicketClass(cabin.cabin as CabinName);
       const cabinSeats: string[] = [];
-      
+
       for (let row = cabin.rowStart; row <= cabin.rowEnd; row++) {
         for (const col of cabin.columns) {
           const seatLabel = `${row}${col}`;
@@ -108,64 +102,76 @@ function buildSeatCache(layouts: Map<string, LoadedLayout>) {
           }
         }
       }
+
       cabinMap.set(ticketClass, cabinSeats);
     }
+
     seatCache.set(iataCode, { allSeats, classMap, cabinMap });
   }
 }
 
 function generateSeatForAircraft(aircraftTypeIataCode: string, cls: TicketClass): string | null {
-  const cache = seatCache.get(aircraftTypeIataCode);
-  if (!cache) return null;
-  const seats = cache.cabinMap.get(cls);
+  const seats = seatCache.get(aircraftTypeIataCode)?.cabinMap.get(cls);
   return seats && seats.length > 0 ? pick(seats) : null;
 }
 
 function allSeatsForCabin(aircraftTypeIataCode: string, cls: TicketClass): string[] {
-  return seatCache.get(aircraftTypeIataCode)?.cabinMap.get(cls) || [];
+  return seatCache.get(aircraftTypeIataCode)?.cabinMap.get(cls) ?? [];
 }
 
 function allSeatsForAircraft(aircraftTypeIataCode: string): string[] {
-  return seatCache.get(aircraftTypeIataCode)?.allSeats || [];
+  return seatCache.get(aircraftTypeIataCode)?.allSeats ?? [];
 }
 
 function ticketClassForSeat(aircraftTypeIataCode: string, seatLabel: string): TicketClass | null {
-  return seatCache.get(aircraftTypeIataCode)?.classMap.get(seatLabel) || null;
+  return seatCache.get(aircraftTypeIataCode)?.classMap.get(seatLabel) ?? null;
 }
 
 function aircraftHasClass(aircraftTypeIataCode: string, cls: TicketClass): boolean {
   const seats = seatCache.get(aircraftTypeIataCode)?.cabinMap.get(cls);
-  return !!(seats && seats.length > 0);
+  return Boolean(seats && seats.length > 0);
 }
-
-
-// ─────────────────────────────────────────────────────────────
-// SEEDING FUNCTIONS
-// ─────────────────────────────────────────────────────────────
 
 async function fetchOurAirports() {
   console.log("📡 Fetching airports from OurAirports...");
+
   let csv = "";
   try {
     const res = await fetch(OURAIRPORTS_CSV_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     csv = await res.text();
-  } catch (e) {
+  } catch {
     console.warn("  ⚠️  Could not fetch OurAirports — using fallback data only");
   }
 
   const map = new Map<string, any>();
+
   if (csv) {
     const { data } = Papa.parse<any>(csv, { header: true, skipEmptyLines: true });
     for (const row of data) {
       const iata = row.iata_code?.trim();
-      if (!iata || iata.length !== 3 || !ALLOWED_AIRPORT_TYPES.has(row.type) || !ASIAN_COUNTRIES.has(row.iso_country) || row.scheduled_service !== "yes" || map.has(iata)) continue;
-      map.set(iata, { id: createCuid(), iataCode: iata, name: row.name.trim(), city: row.municipality?.trim() || row.name.trim(), country: row.iso_country.trim(), lat: parseFloat(row.latitude_deg), lon: parseFloat(row.longitude_deg) });
+      if (!iata || iata.length !== 3) continue;
+      if (!ALLOWED_AIRPORT_TYPES.has(row.type)) continue;
+      if (!ASIAN_COUNTRIES.has(row.iso_country)) continue;
+      if (row.scheduled_service !== "yes") continue;
+      if (map.has(iata)) continue;
+
+      map.set(iata, {
+        id: createCuid(),
+        iataCode: iata,
+        name: row.name.trim(),
+        city: row.municipality?.trim() || row.name.trim(),
+        country: row.iso_country.trim(),
+        lat: parseFloat(row.latitude_deg),
+        lon: parseFloat(row.longitude_deg),
+      });
     }
   }
 
   for (const fb of FALLBACK_AIRPORTS) {
-    if (!map.has(fb.iataCode)) map.set(fb.iataCode, { id: createCuid(), ...fb });
+    if (!map.has(fb.iataCode)) {
+      map.set(fb.iataCode, { id: createCuid(), ...fb });
+    }
   }
 
   const neededIatas = new Set(ROUTE_PAIRS.flat());
@@ -209,6 +215,7 @@ async function seedSeatLayouts(aircraftTypes: { id: string; iataCode: string }[]
       },
     });
   }
+
   console.log(`   ✅ ${SEAT_LAYOUT_DEFS.length} seat layouts`);
 }
 
@@ -224,15 +231,22 @@ async function loadSeatLayouts(): Promise<Map<string, LoadedLayout>> {
   for (const t of templates) {
     map.set(t.aircraftType.iataCode, {
       aircraftTypeIataCode: t.aircraftType.iataCode,
-      cabins: t.cabins.map((c) => ({ cabin: c.cabin, rowStart: c.rowStart, rowEnd: c.rowEnd, columns: c.columns, blockedSeats: c.blockedSeats })),
+      cabins: t.cabins.map((c) => ({
+        cabin: c.cabin,
+        rowStart: c.rowStart,
+        rowEnd: c.rowEnd,
+        columns: c.columns,
+        blockedSeats: c.blockedSeats,
+      })),
     });
   }
+
   return map;
 }
 
 async function seedAircraft(types: any[]) {
   console.log("✈️  Seeding aircraft fleet...");
-  const fleetData = [];
+  const fleetData: any[] = [];
   let tailIdx = 0;
 
   for (const type of types) {
@@ -243,10 +257,18 @@ async function seedAircraft(types: any[]) {
       const tailNumber = `${TAIL_PREFIX}${letter}${num}`;
       tailIdx++;
 
-      const status = i === count - 1 && count >= 3 ? AircraftStatus.MAINTENANCE : AircraftStatus.ACTIVE;
-      fleetData.push({ id: createCuid(), tailNumber, status, aircraftTypeId: type.id });
+      const status =
+        i === count - 1 && count >= 3 ? AircraftStatus.MAINTENANCE : AircraftStatus.ACTIVE;
+
+      fleetData.push({
+        id: createCuid(),
+        tailNumber,
+        status,
+        aircraftTypeId: type.id,
+      });
     }
   }
+
   await prisma.aircraft.createMany({ data: fleetData });
   return fleetData;
 }
@@ -259,7 +281,8 @@ async function seedAirports(airportsData: any[]) {
 
 async function seedRoutes(airportCoords: any[]) {
   console.log("🗺️  Seeding routes...");
-  const routesData = [];
+
+  const routesData: any[] = [];
   const iataToNode = new Map(airportCoords.map((a) => [a.iataCode, a]));
   const seenPairs = new Set<string>();
 
@@ -271,38 +294,88 @@ async function seedRoutes(airportCoords: any[]) {
     const distKm = haversineKm(oCoords.lat, oCoords.lon, dCoords.lat, dCoords.lon);
     const mins = durationMins(distKm);
 
-    for (const [from, to] of [[oCoords, dCoords], [dCoords, oCoords]]) {
+    for (const [from, to] of [
+      [oCoords, dCoords],
+      [dCoords, oCoords],
+    ] as const) {
       const key = `${from.iataCode}-${to.iataCode}`;
       if (seenPairs.has(key)) continue;
       seenPairs.add(key);
 
-      routesData.push({ id: createCuid(), originAirportId: from.id, destAirportId: to.id, distanceKm: distKm, durationMins: mins });
+      routesData.push({
+        id: createCuid(),
+        originAirportId: from.id,
+        destAirportId: to.id,
+        distanceKm: distKm,
+        durationMins: mins,
+      });
     }
   }
+
   await prisma.route.createMany({ data: routesData });
   return routesData;
 }
 
 async function seedUsers(dbAirports: any[], passengerCount = 200) {
   console.log("👤 Seeding passengers and staff...");
-  const usersData = [];
-  const accountsData = [];
-  const staffProfilesData = [];
+
+  const usersData: any[] = [];
+  const accountsData: any[] = [];
+  const staffProfilesData: any[] = [];
+
   const passwordHash = await bcrypt.hash(SEED_DEFAULT_PASSWORD, 12);
   const bkkAirport = dbAirports.find((a) => a.iataCode === "BKK") ?? dbAirports[0];
   const thaiAirports = dbAirports.filter((a) => ["BKK", "DMK", "HKT", "CNX"].includes(a.iataCode));
 
   const adminUserId = createCuid();
-  usersData.push({ id: adminUserId, email: "admin@yokairlines.com", name: "YokAirlines Admin", phone: faker.phone.number(), role: Role.ADMIN, emailVerified: true, image: null });
-  accountsData.push({ id: createCuid(), accountId: adminUserId, providerId: "credential", userId: adminUserId, password: passwordHash });
-  staffProfilesData.push({ id: createCuid(), userId: adminUserId, employeeId: "YK0000", role: Role.ADMIN, rank: Rank.MANAGER, baseAirportId: bkkAirport.id, stationId: bkkAirport.id });
+  usersData.push({
+    id: adminUserId,
+    email: "admin@yokairlines.com",
+    name: "YokAirlines Admin",
+    phone: faker.phone.number(),
+    role: Role.ADMIN,
+    emailVerified: true,
+    image: null,
+  });
+  accountsData.push({
+    id: createCuid(),
+    accountId: adminUserId,
+    providerId: "credential",
+    userId: adminUserId,
+    password: passwordHash,
+  });
+  staffProfilesData.push({
+    id: createCuid(),
+    userId: adminUserId,
+    employeeId: "YK0000",
+    role: Role.ADMIN,
+    rank: Rank.MANAGER,
+    baseAirportId: bkkAirport.id,
+    stationId: bkkAirport.id,
+  });
 
   for (let i = 0; i < passengerCount; i++) {
     const userId = createCuid();
     const firstName = faker.person.firstName();
     const lastName = faker.person.lastName();
-    usersData.push({ id: userId, email: faker.internet.email({ firstName, lastName }).toLowerCase(), name: `${firstName} ${lastName}`, phone: faker.phone.number(), role: Role.PASSENGER, emailVerified: Math.random() > 0.1, image: Math.random() > 0.6 ? faker.image.avatar() : null });
-    accountsData.push({ id: createCuid(), accountId: userId, providerId: "credential", userId, password: passwordHash });
+
+    usersData.push({
+      id: userId,
+      email: faker.internet.email({ firstName, lastName }).toLowerCase(),
+      name: `${firstName} ${lastName}`,
+      phone: faker.phone.number(),
+      role: Role.PASSENGER,
+      emailVerified: Math.random() > 0.1,
+      image: Math.random() > 0.6 ? faker.image.avatar() : null,
+    });
+
+    accountsData.push({
+      id: createCuid(),
+      accountId: userId,
+      providerId: "credential",
+      userId,
+      password: passwordHash,
+    });
   }
 
   let empNum = 1000;
@@ -314,43 +387,107 @@ async function seedUsers(dbAirports: any[], passengerCount = 200) {
       const firstName = faker.person.firstName();
       const lastName = faker.person.lastName();
 
-      usersData.push({ id: userId, email: `${employeeId.toLowerCase()}@yokairlines.com`, name: `${firstName} ${lastName}`, phone: faker.phone.number(), role: def.role, emailVerified: true });
-      accountsData.push({ id: createCuid(), accountId: userId, providerId: "credential", userId, password: passwordHash });
-      staffProfilesData.push({ id: createCuid(), userId: userId, employeeId, role: def.role, rank: def.rank, baseAirportId: bkkAirport.id, stationId: pick(thaiAirports.length ? thaiAirports : dbAirports).id });
+      usersData.push({
+        id: userId,
+        email: `${employeeId.toLowerCase()}@yokairlines.com`,
+        name: `${firstName} ${lastName}`,
+        phone: faker.phone.number(),
+        role: def.role,
+        emailVerified: true,
+      });
+
+      accountsData.push({
+        id: createCuid(),
+        accountId: userId,
+        providerId: "credential",
+        userId,
+        password: passwordHash,
+      });
+
+      staffProfilesData.push({
+        id: createCuid(),
+        userId,
+        employeeId,
+        role: def.role,
+        rank: def.rank,
+        baseAirportId: bkkAirport.id,
+        stationId: pick(thaiAirports.length ? thaiAirports : dbAirports).id,
+      });
     }
   }
 
-  for (const chunk of chunkArray(usersData, 5000)) await prisma.user.createMany({ data: chunk });
-  for (const chunk of chunkArray(accountsData, 5000)) await prisma.account.createMany({ data: chunk });
+  for (const chunk of chunkArray(usersData, 5000)) {
+    await prisma.user.createMany({ data: chunk });
+  }
+  for (const chunk of chunkArray(accountsData, 5000)) {
+    await prisma.account.createMany({ data: chunk });
+  }
   await prisma.staffProfile.createMany({ data: staffProfilesData });
 
   console.log("  👑 Admin login: admin@yokairlines.com");
   console.log(`  🔑 Seed credential password: ${SEED_DEFAULT_PASSWORD}`);
 
-  return { passengers: usersData.filter((u) => u.role === Role.PASSENGER), staff: usersData.filter((u) => u.role !== Role.PASSENGER), staffProfiles: staffProfilesData };
+  return {
+    passengers: usersData.filter((u) => u.role === Role.PASSENGER),
+    staffProfiles: staffProfilesData,
+  };
 }
 
-function calcPrices(distanceKm: number) {
-  const eco = Math.round(500 + distanceKm * 0.07);
-  return { basePriceEconomy: eco, basePriceBusiness: Math.round(eco * 3.5), basePriceFirst: Math.round(eco * 7.0) };
+function roundFare(value: number) {
+  return Math.max(500, Math.round(value / 10) * 10);
+}
+
+function calcPrices(distanceKm: number, departure: Date) {
+  const baseEco = 900 + distanceKm * 4;
+
+  const hour = departure.getHours();
+  const day = departure.getDay();
+  const isWeekend = day === 0 || day === 6;
+  const isPeakHour = [6, 7, 8, 17, 18, 19, 20].includes(hour);
+
+  const now = new Date();
+  const leadDays = Math.floor((departure.getTime() - now.getTime()) / 86_400_000);
+
+  const weekendFactor = isWeekend ? 1.12 : 1;
+  const peakFactor = isPeakHour ? 1.1 : 1;
+  const leadFactor = leadDays >= 14 ? 1.02 : leadDays >= 3 ? 1.08 : 1.18;
+  const randomFactor = 0.98 + Math.random() * 0.18;
+
+  const eco = roundFare(baseEco * weekendFactor * peakFactor * leadFactor * randomFactor);
+  return {
+    basePriceEconomy: eco,
+    basePriceBusiness: roundFare(eco * 3.8),
+    basePriceFirst: roundFare(eco * 7.8),
+  };
+}
+
+function variedTicketPrice(basePrice: number, cls: TicketClass) {
+  const variance =
+    cls === TicketClass.FIRST_CLASS
+      ? 1.02 + Math.random() * 0.2
+      : cls === TicketClass.BUSINESS
+        ? 1 + Math.random() * 0.18
+        : 0.98 + Math.random() * 0.16;
+
+  return roundFare(basePrice * variance);
 }
 
 async function seedFlights(routes: any[], aircraft: any[], aircraftTypes: any[], staffProfiles: any[]) {
   console.log("🛫 Seeding flights (30-day schedule)...");
-  const activeAircraft = aircraft.filter((_, i) => i % 3 !== 2);
+
+  const activeAircraft = aircraft.filter((_: any, i: number) => i % 3 !== 2);
   const DEPARTURE_HOURS = [6, 9, 13, 17, 21];
   const usedCodes = new Set<string>();
-  const typeIdToIata = new Map(aircraftTypes.map((t) => [t.id, t.iataCode]));
+  const typeIdToIata = new Map(aircraftTypes.map((t: any) => [t.id, t.iataCode]));
+  const captains = staffProfiles.filter((p: any) => p.role === Role.PILOT && p.rank === Rank.CAPTAIN);
 
-  const captains = staffProfiles.filter((p) => p.role === Role.PILOT && p.rank === Rank.CAPTAIN);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const flightsData = [];
+  const flightsData: any[] = [];
 
   for (const route of routes) {
     const mins = route.durationMins ?? durationMins(route.distanceKm);
-    const prices = calcPrices(route.distanceKm);
 
     for (let day = -7; day < 30; day++) {
       for (const hour of DEPARTURE_HOURS) {
@@ -358,26 +495,35 @@ async function seedFlights(routes: any[], aircraft: any[], aircraftTypes: any[],
 
         const ac = pick(activeAircraft);
         const departure = addDays(today, day);
-        departure.setHours(hour, pick([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]), 0, 0);
+        departure.setHours(
+          hour,
+          pick([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]),
+          0,
+          0,
+        );
         const arrival = addMinutes(departure, mins);
+        const prices = calcPrices(route.distanceKm, departure);
 
         let status: FlightStatus = FlightStatus.SCHEDULED;
         if (day < -1) status = FlightStatus.ARRIVED;
         else if (day === -1 || (day === 0 && hour < new Date().getHours())) {
           const roll = Math.random();
-          status = roll > 0.92 ? FlightStatus.DELAYED : roll > 0.03 ? FlightStatus.DEPARTED : FlightStatus.DIVERTED;
+          status =
+            roll > 0.92
+              ? FlightStatus.DELAYED
+              : roll > 0.03
+                ? FlightStatus.DEPARTED
+                : FlightStatus.DIVERTED;
         } else if (day === 0 && hour === new Date().getHours()) {
           status = Math.random() > 0.3 ? FlightStatus.BOARDING : FlightStatus.DELAYED;
         }
-
-        const captainId = captains.length && Math.random() > 0.1 ? pick(captains).id : null;
 
         flightsData.push({
           id: createCuid(),
           flightCode: uniqueCode("YK", usedCodes, 5),
           routeId: route.id,
           aircraftId: ac.id,
-          captainId: captainId,
+          captainId: captains.length && Math.random() > 0.1 ? pick(captains).id : null,
           gate: `${pick(["A", "B", "C", "D", "E"])}${randInt(1, 30)}`,
           departureTime: departure,
           arrivalTime: arrival,
@@ -385,14 +531,14 @@ async function seedFlights(routes: any[], aircraft: any[], aircraftTypes: any[],
           basePriceEconomy: prices.basePriceEconomy,
           basePriceBusiness: prices.basePriceBusiness,
           basePriceFirst: prices.basePriceFirst,
-          aircraftTypeIataCode: typeIdToIata.get(ac.aircraftTypeId) ?? "320", 
+          aircraftTypeIataCode: typeIdToIata.get(ac.aircraftTypeId) ?? "320",
         });
       }
     }
   }
 
   for (const chunk of chunkArray(flightsData, 5000)) {
-    const dbData = chunk.map(({ aircraftTypeIataCode, ...rest }) => rest);
+    const dbData = chunk.map(({ aircraftTypeIataCode, ...rest }: any) => rest);
     await prisma.flight.createMany({ data: dbData });
   }
 
@@ -412,26 +558,40 @@ async function seedBookings(passengers: any[], flights: any[], bookingCount = 40
   let totalTransactionsCreated = 0;
 
   const flushBuffers = async (force = false) => {
-    if (!force && bookingsData.length < FLUSH_THRESHOLD && ticketsData.length < FLUSH_THRESHOLD && transactionsData.length < FLUSH_THRESHOLD) return;
+    if (
+      !force &&
+      bookingsData.length < FLUSH_THRESHOLD &&
+      ticketsData.length < FLUSH_THRESHOLD &&
+      transactionsData.length < FLUSH_THRESHOLD
+    ) {
+      return;
+    }
 
     if (bookingsData.length > 0) {
       totalBookingsCreated += bookingsData.length;
-      for (const chunk of chunkArray(bookingsData, 500)) await prisma.booking.createMany({ data: chunk });
+      for (const chunk of chunkArray(bookingsData, 500)) {
+        await prisma.booking.createMany({ data: chunk });
+      }
       bookingsData.length = 0;
     }
+
     if (ticketsData.length > 0) {
       totalTicketsCreated += ticketsData.length;
-      for (const chunk of chunkArray(ticketsData, 500)) await prisma.ticket.createMany({ data: chunk });
+      for (const chunk of chunkArray(ticketsData, 500)) {
+        await prisma.ticket.createMany({ data: chunk });
+      }
       ticketsData.length = 0;
     }
+
     if (transactionsData.length > 0) {
       totalTransactionsCreated += transactionsData.length;
-      for (const chunk of chunkArray(transactionsData, 500)) await prisma.transaction.createMany({ data: chunk });
+      for (const chunk of chunkArray(transactionsData, 500)) {
+        await prisma.transaction.createMany({ data: chunk });
+      }
       transactionsData.length = 0;
     }
   };
 
-  // ── Phase 1: Random bookings ─────────────────────────────────────────────
   const usedSeatsPerFlight = new Map<string, Set<string>>();
   const bookableFlights = flights.slice(0, Math.ceil(flights.length * 0.8));
 
@@ -441,36 +601,53 @@ async function seedBookings(passengers: any[], flights: any[], bookingCount = 40
 
     const hasFirst = aircraftHasClass(flight.aircraftTypeIataCode, TicketClass.FIRST_CLASS);
     const hasBiz = aircraftHasClass(flight.aircraftTypeIataCode, TicketClass.BUSINESS);
-    
+
     let cls: TicketClass = TicketClass.ECONOMY;
     const classRoll = Math.random();
     if (hasFirst && classRoll > 0.92) cls = TicketClass.FIRST_CLASS;
     else if (hasBiz && classRoll > 0.7) cls = TicketClass.BUSINESS;
 
-    const pricePerTicket = cls === TicketClass.FIRST_CLASS ? Number(flight.basePriceFirst) : cls === TicketClass.BUSINESS ? Number(flight.basePriceBusiness) : Number(flight.basePriceEconomy);
-    const paxCount = randInt(1, 4);
+    const basePricePerTicket =
+      cls === TicketClass.FIRST_CLASS
+        ? Number(flight.basePriceFirst)
+        : cls === TicketClass.BUSINESS
+          ? Number(flight.basePriceBusiness)
+          : Number(flight.basePriceEconomy);
 
+    const paxCount = randInt(1, 4);
     const statusRoll = Math.random();
-    const bookingStatus = statusRoll > 0.92 ? BookingStatus.CANCELLED : statusRoll > 0.05 ? BookingStatus.CONFIRMED : BookingStatus.PENDING;
-    const txStatus = bookingStatus === BookingStatus.CANCELLED ? TransactionStatus.REFUNDED : bookingStatus === BookingStatus.CONFIRMED ? TransactionStatus.SUCCESS : TransactionStatus.PENDING;
-    const txType = txStatus === TransactionStatus.REFUNDED ? TransactionType.REFUND : TransactionType.PAYMENT;
+    const bookingStatus =
+      statusRoll > 0.92
+        ? BookingStatus.CANCELLED
+        : statusRoll > 0.05
+          ? BookingStatus.CONFIRMED
+          : BookingStatus.PENDING;
+
+    const isRefunded = bookingStatus === BookingStatus.CANCELLED;
+    const txStatus = isRefunded
+      ? TransactionStatus.REFUNDED
+      : bookingStatus === BookingStatus.CONFIRMED
+        ? TransactionStatus.SUCCESS
+        : TransactionStatus.PENDING;
 
     const pmType = pick(PAYMENT_METHODS);
-    const pmRef = pmType === "CARD" ? `**** **** **** ${randInt(1000, 9999)}` : `***-***-${randInt(1000, 9999)}`;
-    const stripeIntentId = txStatus !== TransactionStatus.PENDING ? `pi_${faker.string.alphanumeric(24)}` : null;
 
-    if (!usedSeatsPerFlight.has(flight.id)) usedSeatsPerFlight.set(flight.id, new Set());
+    if (!usedSeatsPerFlight.has(flight.id)) {
+      usedSeatsPerFlight.set(flight.id, new Set());
+    }
+
     const flightSeats = usedSeatsPerFlight.get(flight.id)!;
-
     const allValid = allSeatsForCabin(flight.aircraftTypeIataCode, cls);
     const remaining = allValid.filter((s) => !flightSeats.has(s));
     if (remaining.length < paxCount) continue;
 
     const bookingId = createCuid();
     let ticketsAssigned = 0;
+    let bookingSubtotal = 0;
 
     for (let p = 0; p < paxCount; p++) {
       let seat: string | null = null;
+
       for (let attempt = 0; attempt < 50; attempt++) {
         const candidate = generateSeatForAircraft(flight.aircraftTypeIataCode, cls);
         if (candidate && !flightSeats.has(candidate)) {
@@ -478,46 +655,92 @@ async function seedBookings(passengers: any[], flights: any[], bookingCount = 40
           break;
         }
       }
+
       if (!seat) {
         const stillFree = allValid.filter((s) => !flightSeats.has(s));
         if (stillFree.length === 0) break;
         seat = pick(stillFree);
       }
-      flightSeats.add(seat);
 
+      flightSeats.add(seat);
       const checkedIn = bookingStatus === BookingStatus.CONFIRMED && Math.random() > 0.45;
+      const ticketPrice = variedTicketPrice(basePricePerTicket, cls);
+      bookingSubtotal += ticketPrice;
 
       ticketsData.push({
-        id: createCuid(), bookingId, flightId: flight.id, firstName: faker.person.firstName(), lastName: faker.person.lastName(),
-        dateOfBirth: faker.date.birthdate({ min: 18, max: 75, mode: "age" }), passportNumber: faker.string.alphanumeric({ length: 9, casing: "upper" }),
-        nationality: pick(PASSENGER_NATIONALITIES), gender: pick(["MALE", "FEMALE"]), seatNumber: seat, class: cls, price: pricePerTicket,
-        checkedIn, checkedInAt: checkedIn ? faker.date.recent({ days: 2 }) : null, boardingPass: checkedIn ? `BP-${faker.string.alphanumeric({ length: 12, casing: "upper" })}` : null,
+        id: createCuid(),
+        bookingId,
+        flightId: flight.id,
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+        dateOfBirth: faker.date.birthdate({ min: 18, max: 75, mode: "age" }),
+        passportNumber: faker.string.alphanumeric({ length: 9, casing: "upper" }),
+        nationality: pick(PASSENGER_NATIONALITIES),
+        gender: pick(["MALE", "FEMALE"]),
+        seatNumber: seat,
+        class: cls,
+        price: ticketPrice,
+        checkedIn,
+        checkedInAt: checkedIn ? faker.date.recent({ days: 2 }) : null,
+        boardingPass: checkedIn
+          ? `BP-${faker.string.alphanumeric({ length: 12, casing: "upper" })}`
+          : null,
       });
+
       ticketsAssigned++;
     }
 
     if (ticketsAssigned === 0) continue;
 
     bookingsData.push({
-      id: bookingId, bookingRef: makeBookingRef(), userId: user.id, flightId: flight.id, status: bookingStatus,
-      totalPrice: pricePerTicket * ticketsAssigned, currency: "THB", contactEmail: faker.internet.email().toLowerCase(), contactPhone: faker.phone.number(),
+      id: bookingId,
+      bookingRef: makeBookingRef(),
+      userId: user.id,
+      flightId: flight.id,
+      status: bookingStatus,
+      totalPrice: bookingSubtotal,
+      currency: "THB",
+      contactEmail: faker.internet.email().toLowerCase(),
+      contactPhone: faker.phone.number(),
     });
 
+    const paymentTxId = createCuid();
+    const bookingTotal = bookingSubtotal;
+    const refundDate = isRefunded ? faker.date.recent({ days: 10 }) : null;
+    const refundReason = isRefunded ? pick(REFUND_REASONS) : null;
+
     transactionsData.push({
-      id: createCuid(), bookingId, amount: pricePerTicket * ticketsAssigned, currency: "THB", status: txStatus, type: txType,
-      paymentMethodType: pmType, paymentMethodRef: pmRef, stripePaymentIntentId: stripeIntentId,
-      stripeChargeId: stripeIntentId ? `ch_${faker.string.alphanumeric(24)}` : null,
-      refundedAt: txType === TransactionType.REFUND ? faker.date.recent({ days: 10 }) : null,
-      refundReason: txType === TransactionType.REFUND ? pick(REFUND_REASONS) : null,
+      id: paymentTxId,
+      bookingId,
+      amount: bookingTotal,
+      currency: "THB",
+      status: txStatus,
+      type: TransactionType.PAYMENT,
+      paymentMethodType: pmType,
+      refundedAt: refundDate,
+      refundReason,
     });
+
+    if (isRefunded) {
+      transactionsData.push({
+        id: createCuid(),
+        bookingId,
+        amount: bookingTotal,
+        currency: "THB",
+        status: TransactionStatus.SUCCESS,
+        type: TransactionType.REFUND,
+        paymentMethodType: null,
+        originalTransactionId: paymentTxId,
+        refundedAt: refundDate,
+        refundReason,
+      });
+    }
 
     await flushBuffers();
   }
 
   await flushBuffers(true);
-  // OPTIMIZATION: Do NOT clear usedSeatsPerFlight here.
 
-  // ── Phase 2: Top-up only +5% seats per flight ────────────────────────────
   console.log("  📊 Top-up flights by +5% seats...");
   let extraReservedSeatCount = 0;
 
@@ -525,20 +748,18 @@ async function seedBookings(passengers: any[], flights: any[], bookingCount = 40
     const allValidSeats = allSeatsForAircraft(flight.aircraftTypeIataCode);
     if (allValidSeats.length === 0) continue;
 
-    // OPTIMIZATION: Read directly from Phase 1 Map memory cache instead of DB queries
     const takenSeats = usedSeatsPerFlight.get(flight.id) ?? new Set<string>();
-
     const topUpSeats = Math.round(allValidSeats.length * 0.05);
     const freeSeats = allValidSeats.filter((s) => !takenSeats.has(s));
     const needed = Math.min(topUpSeats, freeSeats.length);
     if (needed === 0 || freeSeats.length === 0) continue;
 
-    // OPTIMIZATION: Partial Fisher-Yates (only loop 'needed' times)
     const shuffleLimit = Math.min(needed, freeSeats.length);
     for (let i = freeSeats.length - 1; i > freeSeats.length - 1 - shuffleLimit; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [freeSeats[i], freeSeats[j]] = [freeSeats[j], freeSeats[i]];
     }
+
     const seatsToReserve = freeSeats.slice(-shuffleLimit);
 
     for (const seat of seatsToReserve) {
@@ -547,27 +768,73 @@ async function seedBookings(passengers: any[], flights: any[], bookingCount = 40
 
       const user = pick(passengers);
       const bookingId = createCuid();
-      const price = cls === TicketClass.FIRST_CLASS ? Number(flight.basePriceFirst) : cls === TicketClass.BUSINESS ? Number(flight.basePriceBusiness) : Number(flight.basePriceEconomy);
+      const price =
+        cls === TicketClass.FIRST_CLASS
+          ? Number(flight.basePriceFirst)
+          : cls === TicketClass.BUSINESS
+            ? Number(flight.basePriceBusiness)
+            : Number(flight.basePriceEconomy);
+      const ticketPrice = variedTicketPrice(price, cls);
 
-      bookingsData.push({ id: bookingId, bookingRef: makeBookingRef(), userId: user.id, flightId: flight.id, status: BookingStatus.PENDING, totalPrice: price, currency: "THB", contactEmail: faker.internet.email().toLowerCase(), contactPhone: faker.phone.number() });
-      ticketsData.push({ id: createCuid(), bookingId, flightId: flight.id, firstName: faker.person.firstName(), lastName: faker.person.lastName(), dateOfBirth: faker.date.birthdate({ min: 18, max: 75, mode: "age" }), passportNumber: faker.string.alphanumeric({ length: 9, casing: "upper" }), nationality: pick(PASSENGER_NATIONALITIES), gender: pick(["MALE", "FEMALE"]), seatNumber: seat, class: cls, price, checkedIn: false, checkedInAt: null, boardingPass: null });
-      transactionsData.push({ id: createCuid(), bookingId, amount: price, currency: "THB", status: TransactionStatus.PENDING, type: TransactionType.PAYMENT, paymentMethodType: null, paymentMethodRef: null, stripePaymentIntentId: null, stripeChargeId: null, refundedAt: null, refundReason: null });
+      bookingsData.push({
+        id: bookingId,
+        bookingRef: makeBookingRef(),
+        userId: user.id,
+        flightId: flight.id,
+        status: BookingStatus.PENDING,
+        totalPrice: ticketPrice,
+        currency: "THB",
+        contactEmail: faker.internet.email().toLowerCase(),
+        contactPhone: faker.phone.number(),
+      });
+
+      ticketsData.push({
+        id: createCuid(),
+        bookingId,
+        flightId: flight.id,
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+        dateOfBirth: faker.date.birthdate({ min: 18, max: 75, mode: "age" }),
+        passportNumber: faker.string.alphanumeric({ length: 9, casing: "upper" }),
+        nationality: pick(PASSENGER_NATIONALITIES),
+        gender: pick(["MALE", "FEMALE"]),
+        seatNumber: seat,
+        class: cls,
+        price: ticketPrice,
+        checkedIn: false,
+        checkedInAt: null,
+        boardingPass: null,
+      });
+
+      const topUpPm = pick(PAYMENT_METHODS);
+
+      transactionsData.push({
+        id: createCuid(),
+        bookingId,
+        amount: ticketPrice,
+        currency: "THB",
+        status: TransactionStatus.PENDING,
+        type: TransactionType.PAYMENT,
+        paymentMethodType: topUpPm,
+        refundedAt: null,
+        refundReason: null,
+      });
 
       extraReservedSeatCount++;
     }
+
     await flushBuffers();
   }
 
   await flushBuffers(true);
-  console.log(`  ✅ ${totalBookingsCreated} bookings | ${totalTicketsCreated} tickets | ${totalTransactionsCreated} transactions | ${extraReservedSeatCount} top-up seats`);
+
+  console.log(
+    `  ✅ ${totalBookingsCreated} bookings | ${totalTicketsCreated} tickets | ${totalTransactionsCreated} transactions | ${extraReservedSeatCount} top-up seats`,
+  );
 }
 
-// ─────────────────────────────────────────────────────────────
-// MAIN
-// ─────────────────────────────────────────────────────────────
-
 async function main() {
-  console.log("\n🌏  YokAirlines — Database Seed (Optimized)\n" + "─".repeat(50));
+  console.log("\n🌏  YokAirlines — Database Seed\n" + "─".repeat(50));
 
   const { passengers, staffProfiles, flights } = await seedSqlData(prisma, {
     fetchOurAirports,

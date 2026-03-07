@@ -279,8 +279,6 @@ export const openApiDocument = {
           amount: { type: 'number' },
           currency: { type: 'string', minLength: 3, maxLength: 3, default: 'THB' },
           paymentMethodType: { type: 'string' },
-          paymentMethodRef: { type: 'string' },
-          stripePaymentIntentId: { type: 'string' },
         },
       },
       PaymentActionInput: {
