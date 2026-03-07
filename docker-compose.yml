@@ -46,6 +46,19 @@ services:
     networks:
       - airline_network
 
+  mongo-compass:
+    image: mongoclient/mongoclient
+    container_name: airline_mongo_compass
+    restart: always
+    environment:
+      MONGO_URL: "mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017"
+    ports:
+      - "${MONGO_COMPASS_PORT}:3000"
+    depends_on:
+      - mongo
+    networks:
+      - airline_network
+
 volumes:
   postgres_data:
   pgadmin_data:
