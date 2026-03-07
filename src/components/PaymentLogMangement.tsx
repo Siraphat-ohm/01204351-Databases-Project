@@ -3,10 +3,11 @@
 import { 
   Title, Group, Table, Badge, Text, ActionIcon, 
   TextInput, Paper, Select, Modal, Stack, Alert,
-  NumberFormatter, Code, ScrollArea, Button, Pagination, Center, LoadingOverlay, Box
+  NumberFormatter, Code, ScrollArea, Button, Pagination, Center, LoadingOverlay, Box,
+  CopyButton, Grid // 🌟 Add these
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Search, Filter, Eye, AlertCircle, CheckCircle, Clock, RefreshCw } from 'lucide-react';
+import { Search, Filter, Eye, AlertCircle, CheckCircle, Clock, RefreshCw, Copy, Check, X } from 'lucide-react'; // 🌟 Add Copy
 import { useState, useTransition, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { notifications } from '@mantine/notifications';
@@ -324,14 +325,62 @@ export function PaymentLogManagement({ initialLogs, totalPages, currentPage }: P
             </Group>
 
             {/* Gateway JSON Response */}
-            <div>
-              <Text size="xs" c="dimmed" fw={600} mb={4}>GATEWAY RAW RESPONSE</Text>
-              <ScrollArea h={200} type="always" offsetScrollbars>
-                <Code block style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                  {JSON.stringify(selectedLog.rawResponse, null, 2)}
-                </Code>
-              </ScrollArea>
-            </div>
+            <Paper withBorder radius="md">
+              <Group justify="space-between" p="sm" bg="gray.0" style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
+                <Text size="xs" c="dimmed" fw={700}>GATEWAY RAW RESPONSE</Text>
+                
+                <CopyButton value={JSON.stringify(selectedLog.rawResponse, null, 2)}>
+                  {({ copied, copy }) => (
+                    <Button 
+                      color={copied ? 'teal' : 'gray'} 
+                      variant="subtle" 
+                      size="compact-xs" 
+                      onClick={copy} 
+                      leftSection={copied ? <Check size={14} /> : <Copy size={14} />}
+                    >
+                      {copied ? 'Copied JSON' : 'Copy JSON'}
+                    </Button>
+                  )}
+                </CopyButton>
+              </Group>
+              
+              <ScrollArea.Autosize mah={250} type="hover">
+                {Object.keys(selectedLog.rawResponse).length > 0 ? (
+                  <Stack gap={0}>
+                    {Object.entries(selectedLog.rawResponse).map(([key, value], index) => {
+                      const isLast = index === Object.keys(selectedLog.rawResponse).length - 1;
+                      
+                      return (
+                        <Grid 
+                          key={key} 
+                          gutter={0} 
+                          p="sm" 
+                          style={{ borderBottom: isLast ? 'none' : '1px solid var(--mantine-color-gray-2)' }}
+                          align="center"
+                        >
+                          <Grid.Col span={5}>
+                            <Text size="sm" fw={600} style={{ wordBreak: 'break-all' }}>{key}</Text>
+                          </Grid.Col>
+                          <Grid.Col span={7}>
+                            {value === null ? (
+                              <Badge color="gray" variant="light" size="sm" style={{ textTransform: 'lowercase' }}>null</Badge>
+                            ) : typeof value === 'object' ? (
+                              <Code block style={{ whiteSpace: 'pre-wrap', backgroundColor: 'transparent', padding: 0 }}>
+                                {JSON.stringify(value, null, 2)}
+                              </Code>
+                            ) : (
+                              <Text size="sm" style={{ wordBreak: 'break-all' }}>{String(value)}</Text>
+                            )}
+                          </Grid.Col>
+                        </Grid>
+                      );
+                    })}
+                  </Stack>
+                ) : (
+                  <Text p="sm" size="sm" c="dimmed">No gateway response data provided.</Text>
+                )}
+              </ScrollArea.Autosize>
+            </Paper>
 
             {/* Admin Action: Manual Override */}
             <Paper p="sm" withBorder mt="md" radius="md">

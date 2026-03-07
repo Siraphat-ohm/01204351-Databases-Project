@@ -2,14 +2,14 @@
 
 import { 
   Button, Group, TextInput, Title, Paper, Select, Container, 
-  NumberInput, Grid, Text, Stack, Divider, LoadingOverlay, Alert
+  NumberInput, Grid, Text, Stack, Divider, LoadingOverlay, Avatar, SelectProps
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   ArrowLeft, Save, Plane, MapPin, Clock, DollarSign, 
-  Building, AlertCircle, Check, X, Calendar, ArrowRight
+  Building, Check, X, Calendar, ArrowRight, User
 } from 'lucide-react';
 import { FlightStatus } from '@/generated/prisma/client'; 
 import { updateFlightAction } from '@/actions/flight-actions';
@@ -28,13 +28,20 @@ interface RouteData {
   destCity: string;
 }
 
+interface CaptainOption {
+  value: string;
+  label: string;
+  image?: string | null;
+}
+
 interface FlightEditFormProps {
   flight: any;
   aircraftOptions: AircraftOption[];
-  availableRoutes: RouteData[]; // Now receiving routes
+  availableRoutes: RouteData[]; 
+  captainOptions: CaptainOption[]; // 🌟 New Prop
 }
 
-export function FlightEditForm({ flight, aircraftOptions, availableRoutes }: FlightEditFormProps) {
+export function FlightEditForm({ flight, aircraftOptions, availableRoutes, captainOptions }: FlightEditFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -42,9 +49,10 @@ export function FlightEditForm({ flight, aircraftOptions, availableRoutes }: Fli
   // Initialize form with existing flight data
   const [formData, setFormData] = useState({
     flightCode: flight.flightCode,
-    originCode: flight.originCode, // Initialize from DB
-    destCode: flight.destCode,     // Initialize from DB
+    originCode: flight.originCode, 
+    destCode: flight.destCode,     
     aircraftId: flight.aircraftId || '',
+    captainId: flight.captainId || '', // 🌟 Initialize from DB
     status: flight.status as FlightStatus,
     gate: flight.gate || '',
     departureTime: new Date(flight.departureTime).toISOString().slice(0, 16),
@@ -57,7 +65,6 @@ export function FlightEditForm({ flight, aircraftOptions, availableRoutes }: Fli
   // ────────────────────────────────────────────────
   // Dynamic Route Dropdown Logic
   // ────────────────────────────────────────────────
-  
   const originOptions = useMemo(() => {
     const originsMap = new Map();
     availableRoutes.forEach(route => {
@@ -92,11 +99,9 @@ export function FlightEditForm({ flight, aircraftOptions, availableRoutes }: Fli
   // ────────────────────────────────────────────────
   // Handlers
   // ────────────────────────────────────────────────
-
   const handleChange = (field: string, value: any) => {
     setFormData(prev => {
       const newState = { ...prev, [field]: value };
-      // Reset destination if origin changes
       if (field === 'originCode') {
         newState.destCode = '';
       }
@@ -121,11 +126,11 @@ export function FlightEditForm({ flight, aircraftOptions, availableRoutes }: Fli
       return;
     }
 
-    // Pass the payload matching the Zod update schema
     const payload = {
       flightCode: formData.flightCode,
       routeId: selectedRouteId,
       aircraftId: formData.aircraftId,
+      captainId: formData.captainId || null, // 🌟 Ensure it can be null
       gate: formData.gate || undefined,
       status: formData.status,
       departureTime: formData.departureTime,
@@ -153,10 +158,23 @@ export function FlightEditForm({ flight, aircraftOptions, availableRoutes }: Fli
           color: "green",
           icon: <Check size={18} />,
         });
-        router.push("/dashboard/flights");
+        router.push("/admin/dashboard/flights"); // Adjust redirect path if necessary
         router.refresh();
       }
     });
+  };
+
+  // 🌟 NEW: Custom Render function for the Captain Dropdown
+  const renderCaptainOption: SelectProps['renderOption'] = ({ option }) => {
+    const captain = captainOptions.find((c) => c.value === option.value);
+    return (
+      <Group gap="sm">
+        <Avatar src={captain?.image || null} size="sm" radius="xl">
+          {option.label.replace('Capt. ', '').charAt(0).toUpperCase()}
+        </Avatar>
+        <Text size="sm">{option.label}</Text>
+      </Group>
+    );
   };
 
   return (
@@ -214,7 +232,22 @@ export function FlightEditForm({ flight, aircraftOptions, availableRoutes }: Fli
                   required
                 />
 
-                <Divider label="Network Route" labelPosition="center" />
+                {/* 🌟 CUSTOMIZED: Captain Selection with Avatar rendering */}
+                <Select
+                  label="Commanding Captain"
+                  description="Optional. Can be reassigned later."
+                  placeholder="Select available Pilot"
+                  data={captainOptions}
+                  value={formData.captainId}
+                  onChange={(val) => handleChange('captainId', val || '')}
+                  searchable
+                  clearable
+                  leftSection={<User size={16} />}
+                  error={fieldErrors.captainId?.join(', ')}
+                  renderOption={renderCaptainOption}
+                />
+
+                <Divider label="Network Route" labelPosition="center" mt="sm" />
 
                 <Grid>
                   <Grid.Col span={6}>
@@ -244,7 +277,6 @@ export function FlightEditForm({ flight, aircraftOptions, availableRoutes }: Fli
                   </Grid.Col>
                 </Grid>
 
-                {/* Visual Route Confirmation */}
                 {selectedRouteId && (
                   <Paper bg="blue.0" p="sm" radius="md" style={{ border: '1px solid var(--mantine-color-blue-2)' }}>
                     <Group justify="center" gap="xs">

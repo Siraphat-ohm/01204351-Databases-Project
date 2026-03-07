@@ -157,10 +157,11 @@ export function FlightSearchBox() {
   placeholder="Pick date" 
   value={departureDate}
   minDate={new Date()} 
-  onChange={(val: Date | null) => { // Added explicit type here
-    setDepartureDate(val);
+  onChange={(val: any) => { 
+    const date = val ? new Date(val) : null;
+    setDepartureDate(date);
     // Safety check: if the new departure is after the existing return, reset return
-    if (val && returnDate && returnDate <= val) {
+    if (date && returnDate && returnDate <= date) {
       setReturnDate(null);
     }
   }}
@@ -173,7 +174,7 @@ export function FlightSearchBox() {
               value={returnDate}
               minDate={getMinReturnDate()} 
               disabled={!departureDate}
-              onChange={(e) => setReturnDate(e? new Date(e) : null)}
+              onChange={(val: any) => setReturnDate(val ? new Date(val) : null)}
               error={errors.returnDate}
             />
           )}

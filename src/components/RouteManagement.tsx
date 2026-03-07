@@ -13,8 +13,6 @@ import Link from 'next/link';
 
 import { deleteRouteAction } from '@/actions/route-actions';
 
-import { Mosaic } from 'react-loading-indicators'; // Custom loading indicator
-
 export interface RouteAdmin {
   id: string;
   distanceKm: number;
@@ -211,13 +209,6 @@ export function RouteManagement({ initialRoutes, totalPages, currentPage }: Rout
 
       {/* 🌟 NEW: Scoped the LoadingOverlay to the Table container with a modern animation */}
       <Paper shadow="xs" withBorder pos="relative">
-        <LoadingOverlay 
-          visible={isPending} 
-          zIndex={1000} 
-          overlayProps={{ radius: 'sm', blur: 1, backgroundOpacity: 0.1 }} 
-          // Injecting the custom Mosaic indicator here
-          loaderProps={<Mosaic color="#339af0" size="small" />} 
-        />
         <Table.ScrollContainer minWidth={700}>
           <Table verticalSpacing="sm" striped highlightOnHover>
             <Table.Thead bg="gray.0">

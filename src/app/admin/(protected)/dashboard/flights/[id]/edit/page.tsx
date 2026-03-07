@@ -1,10 +1,10 @@
 import { FlightEditForm } from "@/components/FlightEditForm";
 import { notFound } from "next/navigation";
-
-import { flightService, FlightNotFoundError } from "@/services/flight.services";
+import { flightService } from "@/services/flight.services";
 import { aircraftService } from "@/services/aircraft.services"; 
-import { routeService } from "@/services/route.services"; // Import Route Service
-import { requireServerSession } from "@/services/auth.services"; // Clean auth utility
+import { routeService } from "@/services/route.services"; 
+import { userService } from "@/services/user.services"; // 🌟 Import userService
+import { requireServerSession } from "@/services/auth.services"; 
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -19,11 +19,15 @@ export default async function EditFlightPage({ params }: PageProps) {
   try {
     const session = await requireServerSession();
 
-    // Fetch Flight, Aircraft, and Routes in parallel!
-    const [flight, aircrafts, routes] = await Promise.all([
+    // 🌟 Fetch Flight, Aircraft, Routes, AND Pilots in parallel
+    const [flight, aircrafts, routes, pilotsResponse] = await Promise.all([
       flightService.findById(id, session as any),
       aircraftService.findAll(session as any),
-      routeService.findAll(session as any)
+      routeService.findAll(session as any),
+      userService.findAllPaginated(session as any, {
+        limit: 100, 
+        where: { role: 'PILOT' }
+      } as any)
     ]);
 
     // Process Aircraft Options
@@ -33,7 +37,7 @@ export default async function EditFlightPage({ params }: PageProps) {
       disabled: ac.status !== 'ACTIVE' && ac.id !== flight.aircraftId
     }));
 
-    // Process Route Options for the cascading dropdowns
+    // Process Route Options
     const availableRoutes = routes.map((route: any) => ({
       id: route.id, 
       originCode: route.origin.iataCode,
@@ -41,6 +45,15 @@ export default async function EditFlightPage({ params }: PageProps) {
       destCode: route.destination.iataCode,
       destCity: route.destination.city,
     }));
+
+    // 🌟 Format Captain Options (with Image)
+    const captainOptions = pilotsResponse.data
+      .filter((pilot: any) => pilot.staffProfile?.id) 
+      .map((pilot: any) => ({
+        value: pilot.staffProfile.id,
+        label: `Capt. ${pilot.name || pilot.email.split('@')[0]} (${pilot.staffProfile.employeeId})`,
+        image: pilot.image || null, 
+      }));
 
     // Prepare Serializable Flight Object
     const serializableFlight = {
@@ -50,13 +63,11 @@ export default async function EditFlightPage({ params }: PageProps) {
       gate: flight.gate ?? null,
       departureTime: flight.departureTime,
       arrivalTime: flight.arrivalTime,
-      
       basePriceEconomy: Number(flight.basePriceEconomy), 
       basePriceBusiness: Number(flight.basePriceBusiness),
       basePriceFirst: Number(flight.basePriceFirst),
-      
       aircraftId: flight.aircraftId,
-      // Pass the IATA codes so the form dropdowns know what to pre-select
+      captainId: flight.captainId, // 🌟 Make sure captainId is passed
       originCode: flight.route.origin.iataCode,
       destCode: flight.route.destination.iataCode,
     };
@@ -66,13 +77,12 @@ export default async function EditFlightPage({ params }: PageProps) {
         flight={serializableFlight as any} 
         aircraftOptions={aircraftOptions} 
         availableRoutes={availableRoutes}
+        captainOptions={captainOptions} // 🌟 Pass Captain options
       />
     );
     
   } catch (error) {
-    if (error instanceof FlightNotFoundError) {
-      notFound();
-    }
-    throw error;
+    console.error("Error loading flight edit page:", error);
+    notFound();
   }
 }

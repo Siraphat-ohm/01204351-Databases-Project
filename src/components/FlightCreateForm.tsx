@@ -2,14 +2,15 @@
 
 import { 
   Button, Group, TextInput, Title, Paper, Select, Container, 
-  NumberInput, Grid, Text, Stack, Divider, LoadingOverlay, Alert, Box, ThemeIcon
+  NumberInput, Grid, Text, Stack, Divider, LoadingOverlay, Box, Avatar,
+  SelectProps // 🌟 Added SelectProps
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   ArrowLeft, Plus, Plane, MapPin, Clock, DollarSign, 
-  Building, Calendar, AlertCircle, Check, X, ArrowRight 
+  Building, Calendar, Check, X, ArrowRight, User 
 } from 'lucide-react';
 import { FlightStatus } from '@/generated/prisma/client';
 import { createFlightAction } from '@/actions/flight-actions';
@@ -29,12 +30,20 @@ interface RouteData {
   destCity: string;
 }
 
+// 🌟 NEW: Updated interface to include image
+interface CaptainOption {
+  value: string;
+  label: string;
+  image?: string | null;
+}
+
 interface FlightCreateFormProps {
   aircraftOptions: AircraftOption[];
   availableRoutes: RouteData[];
+  captainOptions: CaptainOption[]; 
 }
 
-export function FlightCreateForm({ aircraftOptions, availableRoutes }: FlightCreateFormProps) {
+export function FlightCreateForm({ aircraftOptions, availableRoutes, captainOptions }: FlightCreateFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -42,9 +51,10 @@ export function FlightCreateForm({ aircraftOptions, availableRoutes }: FlightCre
   // Form State
   const [formData, setFormData] = useState({
     flightCode: '',
-    originCode: '', // Virtual field for UI
-    destCode: '',   // Virtual field for UI
+    originCode: '', 
+    destCode: '',   
     aircraftId: '',
+    captainId: '', 
     status: 'SCHEDULED' as FlightStatus,
     gate: '',
     departureTime: '',
@@ -57,8 +67,6 @@ export function FlightCreateForm({ aircraftOptions, availableRoutes }: FlightCre
   // ────────────────────────────────────────────────
   // Dynamic Route Dropdown Logic
   // ────────────────────────────────────────────────
-  
-  // 1. Extract unique origins from all available routes
   const originOptions = useMemo(() => {
     const originsMap = new Map();
     availableRoutes.forEach(route => {
@@ -72,7 +80,6 @@ export function FlightCreateForm({ aircraftOptions, availableRoutes }: FlightCre
     return Array.from(originsMap.values());
   }, [availableRoutes]);
 
-  // 2. Filter destinations based on the selected origin
   const destOptions = useMemo(() => {
     if (!formData.originCode) return [];
     
@@ -84,7 +91,6 @@ export function FlightCreateForm({ aircraftOptions, availableRoutes }: FlightCre
       }));
   }, [formData.originCode, availableRoutes]);
 
-  // 3. Find the specific Route ID based on the Origin + Dest combination
   const selectedRouteId = useMemo(() => {
     if (!formData.originCode || !formData.destCode) return null;
     const route = availableRoutes.find(
@@ -100,7 +106,6 @@ export function FlightCreateForm({ aircraftOptions, availableRoutes }: FlightCre
   const handleChange = (field: string, value: any) => {
     setFormData(prev => {
       const newState = { ...prev, [field]: value };
-      // Reset destination if origin changes to prevent invalid pairs
       if (field === 'originCode') {
         newState.destCode = '';
       }
@@ -120,17 +125,16 @@ export function FlightCreateForm({ aircraftOptions, availableRoutes }: FlightCre
     e.preventDefault();
     setFieldErrors({});
 
-    // Pre-flight checks
     if (!selectedRouteId) {
       notifications.show({ title: "Route Required", message: "Please select a valid Origin and Destination pair.", color: "red" });
       return;
     }
 
-    // Prepare Payload mapping exactly to Zod Schema
     const payload = {
       flightCode: formData.flightCode,
-      routeId: selectedRouteId, // The resolved UUID from the database
+      routeId: selectedRouteId, 
       aircraftId: formData.aircraftId,
+      captainId: formData.captainId || null, 
       gate: formData.gate || undefined,
       status: formData.status,
       departureTime: formData.departureTime, 
@@ -148,9 +152,24 @@ export function FlightCreateForm({ aircraftOptions, availableRoutes }: FlightCre
         notifications.show({ title: "Failed to Create Flight", message: result.error, color: "red", icon: <X size={18} /> });
       } else {
         notifications.show({ title: "Success", message: `Flight ${formData.flightCode} created.`, color: "green", icon: <Check size={18} /> });
-        // Redirect handled by server action
       }
     });
+  };
+
+  // 🌟 NEW: Custom Render function for the Captain Dropdown
+  const renderCaptainOption: SelectProps['renderOption'] = ({ option }) => {
+    // Find the full object so we can access the image URL
+    const captain = captainOptions.find((c) => c.value === option.value);
+    
+    return (
+      <Group gap="sm">
+        <Avatar src={captain?.image || null} size="sm" radius="xl">
+          {/* Fallback initials if no image */}
+          {option.label.replace('Capt. ', '').charAt(0).toUpperCase()}
+        </Avatar>
+        <Text size="sm">{option.label}</Text>
+      </Group>
+    );
   };
 
   return (
@@ -200,7 +219,22 @@ export function FlightCreateForm({ aircraftOptions, availableRoutes }: FlightCre
                   required
                 />
 
-                <Divider label="Network Route" labelPosition="center" />
+                {/* 🌟 CUSTOMIZED: Captain Selection with Avatar rendering */}
+                <Select
+                  label="Commanding Captain"
+                  description="Optional. Can be assigned later."
+                  placeholder="Select available Pilot"
+                  data={captainOptions}
+                  value={formData.captainId}
+                  onChange={(val) => handleChange('captainId', val || '')}
+                  searchable
+                  clearable
+                  leftSection={<User size={16} />}
+                  error={fieldErrors.captainId?.join(', ')}
+                  renderOption={renderCaptainOption} // Inject custom render logic here
+                />
+
+                <Divider label="Network Route" labelPosition="center" mt="sm" />
 
                 <Grid>
                   <Grid.Col span={6}>
@@ -223,14 +257,13 @@ export function FlightCreateForm({ aircraftOptions, availableRoutes }: FlightCre
                       value={formData.destCode}
                       onChange={(val) => handleChange('destCode', val)}
                       searchable
-                      disabled={!formData.originCode} // Disable until origin is picked
+                      disabled={!formData.originCode} 
                       leftSection={<MapPin size={16} />}
                       required
                     />
                   </Grid.Col>
                 </Grid>
 
-                {/* Visual Route Confirmation */}
                 {selectedRouteId && (
                   <Paper bg="blue.0" p="sm" radius="md" style={{ border: '1px solid var(--mantine-color-blue-2)' }}>
                     <Group justify="center" gap="xs">

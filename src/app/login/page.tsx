@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Paper,
@@ -30,7 +30,7 @@ import {
 // 1. IMPORT useAuthSession here
 import { signInWithEmail, signUpWithEmail, useAuthSession } from "@/services/auth-client.service";
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackURL = searchParams.get("callbackURL") || "/";
@@ -196,5 +196,17 @@ export default function LoginPage() {
         </Paper>
       </Container>
     </Box>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <Box bg="gray.0" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader size="xl" />
+      </Box>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }
