@@ -88,6 +88,13 @@ export type UpdateBookingStatusInput = z.infer<typeof updateBookingStatusSchema>
 export type ChangeFlightInput = z.infer<typeof changeFlightSchema>;
 export type AcceptReaccommodationInput = z.infer<typeof acceptReaccommodationSchema>;
 export type CancelReaccommodationInput = z.infer<typeof cancelReaccommodationSchema>;
+export type BookingServiceAction =
+  | 'create'
+  | 'read'
+  | 'cancel'
+  | 'read-all'
+  | 'update';
+export type BookingListItem = BookingAdmin;
 
 export const bookingAdminInclude = {
   user: true,

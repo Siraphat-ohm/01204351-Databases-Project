@@ -30,6 +30,7 @@ export const updateStaffSchema = z
 
 export type CreateStaffInput = z.infer<typeof createStaffSchema>;
 export type UpdateStaffInput = z.infer<typeof updateStaffSchema>;
+export type StaffServiceAction = 'create' | 'read' | 'update' | 'delete';
 
 export const staffAdminInclude = {
   user: true,
@@ -40,3 +41,5 @@ export const staffAdminInclude = {
 export type StaffAdmin = Prisma.StaffProfileGetPayload<{
   include: typeof staffAdminInclude;
 }>;
+
+export type StaffListItem = StaffAdmin;

@@ -66,3 +66,11 @@ export const ticketCreateSchema = z.object({
 });
 
 export type CreateTicketInput = z.infer<typeof ticketCreateSchema>;
+
+export type TicketServiceAction =
+  | 'create'
+  | 'read'
+  | 'update'
+  | 'delete'
+  | 'check-in'
+  | 'read-all';

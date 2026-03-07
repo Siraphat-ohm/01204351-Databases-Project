@@ -4,29 +4,46 @@ import {
   createRouteSchema,
   updateRouteSchema,
   iataCodeSchema,
+  routeAdminInclude,
   type CreateRouteInput,
+  type RouteAdmin,
+  type RouteListItem,
+  type RouteServiceAction,
   type UpdateRouteInput,
 } from '@/types/route.type';
 import type { PaginatedResponse } from '@/types/common';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { Prisma } from '@/generated/prisma/client';
-import { makeCheckPermission } from '@/services/_shared/authorization';
+import { makePermissionHelpers } from '@/services/_shared/authorization';
 import {
   resolvePagination,
   type PaginationParams,
 } from '@/services/_shared/pagination';
+import { ConflictError, NotFoundError, UnauthorizedError } from '@/lib/errors';
 
-type RouteListItem = Awaited<ReturnType<typeof routeRepository.findAll>>[number];
-
-
-import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
-
-
-const checkPermission = makeCheckPermission(
+const { checkPermission } = makePermissionHelpers<RouteServiceAction>(
   canAccessRoute,
   'route',
   (a) => new UnauthorizedError(a),
 );
+
+async function getRouteByIdOrThrow(id: string) {
+  const route = await routeRepository.findByIdAdmin(id, routeAdminInclude);
+  if (!route) throw new NotFoundError(`Route not found: ${id}`);
+  return route as RouteAdmin;
+}
+
+async function assertRouteDoesNotExist(originAirportId: string, destAirportId: string) {
+  const existing = await routeRepository.findByAirportIds(originAirportId, destAirportId);
+  if (existing) throw new ConflictError(`${originAirportId} → ${destAirportId} already exists`);
+}
+
+async function assertRouteDeletable(id: string) {
+  const activeFlights = await routeRepository.countActiveFlights(id);
+  if (activeFlights > 0) {
+    throw new ConflictError(`Cannot delete route with ${activeFlights} active flight(s)`);
+  }
+}
 
 
 export const routeService = {
@@ -71,7 +88,7 @@ export const routeService = {
 
   async findAll(session: Session) {
     checkPermission(session, 'read');
-    return routeRepository.findAll();
+    return routeRepository.findAll({ include: routeAdminInclude });
   },
 
   async findAllPaginated(
@@ -83,7 +100,7 @@ export const routeService = {
     const { page, limit, skip } = resolvePagination(params);
     const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      routeRepository.findMany({ where, skip, take: limit }),
+      routeRepository.findMany({ where, skip, take: limit, include: routeAdminInclude }) as Promise<RouteAdmin[]>,
       routeRepository.count(where),
     ]);
 
@@ -121,7 +138,8 @@ export const routeService = {
         where,
         skip,
         take: limit,
-      }),
+        include: routeAdminInclude,
+      }) as Promise<RouteAdmin[]>,
       routeRepository.count(where),
     ]);
 
@@ -141,26 +159,17 @@ export const routeService = {
 
     const data = createRouteSchema.parse(input);
 
-    const existing = await routeRepository.findByAirportIds(
-      data.originAirportId,
-      data.destAirportId,
-    );
-    if (existing) throw new ConflictError(`${data.originAirportId} → ${data.destAirportId} already exists`);
-
+    await assertRouteDoesNotExist(data.originAirportId, data.destAirportId);
     if (data.createReturn) {
-      const reverseExists = await routeRepository.findByAirportIds(
-        data.destAirportId,
-        data.originAirportId,
-      );
-      if (reverseExists) throw new ConflictError(`${data.destAirportId} → ${data.originAirportId} already exists`);
+      await assertRouteDoesNotExist(data.destAirportId, data.originAirportId);
     }
 
     if (data.createReturn) {
-      const [route, returnRoute] = await routeRepository.createWithReturn(data);
+      const [route, returnRoute] = await routeRepository.createWithReturn(data, routeAdminInclude);
       return { route, returnRoute };
     }
 
-    const route = await routeRepository.create(data);
+    const route = await routeRepository.create(data, routeAdminInclude);
     return { route, returnRoute: null };
   },
 
@@ -169,21 +178,15 @@ export const routeService = {
 
     const data = updateRouteSchema.parse(input);
 
-    const existing = await routeRepository.findByIdAdmin(id);
-    if (!existing) throw new NotFoundError(`Route not found: ${id}`);
-
-    return routeRepository.update(id, data);
+    await getRouteByIdOrThrow(id);
+    return routeRepository.update(id, data, routeAdminInclude);
   },
 
   async deleteRoute(id: string, session: Session) {
     checkPermission(session, 'delete');
 
-    const existing = await routeRepository.findByIdAdmin(id);
-    if (!existing) throw new NotFoundError(`Route not found: ${id}`);
-
-    const activeFlights = await routeRepository.countActiveFlights(id);
-    if (activeFlights > 0) throw new ConflictError(`Cannot delete route with ${activeFlights} active flight(s)`);
-
+    await getRouteByIdOrThrow(id);
+    await assertRouteDeletable(id);
     return routeRepository.delete(id);
   },
 };

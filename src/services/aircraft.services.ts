@@ -2,6 +2,8 @@ import { aircraftRepository } from '@/repositories/aircraft.repository';
 import {
   createAircraftSchema,
   updateAircraftSchema,
+  type AircraftListItem,
+  type AircraftServiceAction,
   type CreateAircraftInput,
   type UpdateAircraftInput,
 } from '@/types/aircraft.type';
@@ -9,30 +11,37 @@ import { canAccessAircraft } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { PaginatedResponse } from '@/types/common';
 import type { Prisma } from '@/generated/prisma/client';
-import { makeCheckPermission } from '@/services/_shared/authorization';
-import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
+import { makePermissionHelpers } from '@/services/_shared/authorization';
+import { ConflictError, UnauthorizedError } from '@/lib/errors';
 import {
   resolvePagination,
   type PaginationParams,
 } from '@/services/_shared/pagination';
 
-type AircraftListItem = Awaited<ReturnType<typeof aircraftRepository.findAll>>[number];
-
-
-
-const checkPermission = makeCheckPermission(
+const { checkPermission } = makePermissionHelpers<AircraftServiceAction>(
   canAccessAircraft,
   'aircraft',
   (a) => new UnauthorizedError(a),
 );
 
+async function assertTailNumberAvailable(tailNumber: string) {
+  try {
+    await aircraftRepository.findByTailNumber(tailNumber);
+    throw new ConflictError(`Aircraft already exists: ${tailNumber}`);
+  } catch (e) {
+    if (e instanceof ConflictError) throw e;
+  }
+}
+
+async function assertAircraftDeletable(id: string) {
+  const flightCount = await aircraftRepository.countFlights(id);
+  if (flightCount > 0) throw new ConflictError(`Cannot delete aircraft in use: ${id}`);
+}
+
 export const aircraftService = {
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
-
-    const aircraft = await aircraftRepository.findById(id);
-    if (!aircraft) throw new NotFoundError(`Aircraft not found: ${id}`);
-    return aircraft;
+    return aircraftRepository.findById(id);
   },
 
   async findAll(session: Session) {
@@ -68,9 +77,7 @@ export const aircraftService = {
     checkPermission(session, 'create');
 
     const data = createAircraftSchema.parse(input);
-    const existing = await aircraftRepository.findByTailNumber(data.tailNumber);
-    if (existing) throw new ConflictError(`Aircraft already exists: ${data.tailNumber}`);
-
+    await assertTailNumberAvailable(data.tailNumber);
     return aircraftRepository.create(data);
   },
 
@@ -79,11 +86,9 @@ export const aircraftService = {
 
     const data = updateAircraftSchema.parse(input);
     const existing = await aircraftRepository.findById(id);
-    if (!existing) throw new NotFoundError(`Aircraft not found: ${id}`);
 
     if (data.tailNumber && data.tailNumber !== existing.tailNumber) {
-      const conflict = await aircraftRepository.findByTailNumber(data.tailNumber);
-      if (conflict) throw new ConflictError(data.tailNumber);
+      await assertTailNumberAvailable(data.tailNumber);
     }
 
     return aircraftRepository.update(id, data);
@@ -91,22 +96,14 @@ export const aircraftService = {
 
   async updateStatus(id: string, status: UpdateAircraftInput['status'], session: Session) {
     checkPermission(session, 'manage-status');
-
-    const existing = await aircraftRepository.findById(id);
-    if (!existing) throw new NotFoundError(`Aircraft not found: ${id}`);
-
+    await aircraftRepository.findById(id);
     return aircraftRepository.update(id, { status });
   },
 
   async deleteAircraft(id: string, session: Session) {
     checkPermission(session, 'delete');
-
-    const existing = await aircraftRepository.findById(id);
-    if (!existing) throw new NotFoundError(`Aircraft not found: ${id}`);
-
-    const flightCount = await aircraftRepository.countFlights(id);
-    if (flightCount > 0) throw new ConflictError(`Cannot delete aircraft in use: ${id}`);
-
+    await aircraftRepository.findById(id);
+    await assertAircraftDeletable(id);
     return aircraftRepository.delete(id);
   },
 };

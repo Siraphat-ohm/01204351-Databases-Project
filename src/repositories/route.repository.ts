@@ -2,7 +2,6 @@ import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@/generated/prisma/client';
 import {
   routePublicSelect,
-  routeAdminInclude,
   type CreateRouteInput,
   type UpdateRouteInput,
 } from '@/types/route.type';
@@ -11,6 +10,7 @@ type RouteFindManyArgs = {
   where?: Prisma.RouteWhereInput;
   skip?: number;
   take?: number;
+  include?: Prisma.RouteInclude;
 };
 
 export const routeRepository = {
@@ -22,10 +22,10 @@ export const routeRepository = {
       select: routePublicSelect,
     }),
 
-  findByIdAdmin: (id: string) =>
+  findByIdAdmin: (id: string, include?: Prisma.RouteInclude) =>
     prisma.route.findUnique({
       where: { id },
-      include: routeAdminInclude,
+      include,
     }),
 
   findByIdForRole: (id: string, role: string) => {
@@ -100,7 +100,7 @@ export const routeRepository = {
       where: args?.where,
       skip: args?.skip,
       take: args?.take,
-      include: routeAdminInclude,
+      include: args?.include,
       orderBy: [
         { origin:      { iataCode: 'asc' } },
         { destination: { iataCode: 'asc' } },
@@ -112,7 +112,7 @@ export const routeRepository = {
       where: args.where,
       skip: args.skip,
       take: args.take,
-      include: routeAdminInclude,
+      include: args.include,
       orderBy: [
         { origin:      { iataCode: 'asc' } },
         { destination: { iataCode: 'asc' } },
@@ -122,7 +122,7 @@ export const routeRepository = {
   count: (where?: Prisma.RouteWhereInput) =>
     prisma.route.count({ where }),
 
-  create: (data: Omit<CreateRouteInput, 'createReturn'>) =>
+  create: (data: Omit<CreateRouteInput, 'createReturn'>, include?: Prisma.RouteInclude) =>
     prisma.route.create({
       data: {
         originAirportId: data.originAirportId,
@@ -130,10 +130,10 @@ export const routeRepository = {
         distanceKm:      data.distanceKm,
         durationMins:    data.durationMins,
       },
-      include: routeAdminInclude,
+      include,
     }),
 
-  createWithReturn: (data: Omit<CreateRouteInput, 'createReturn'>) =>
+  createWithReturn: (data: Omit<CreateRouteInput, 'createReturn'>, include?: Prisma.RouteInclude) =>
     prisma.$transaction([
       prisma.route.create({
         data: {
@@ -142,7 +142,7 @@ export const routeRepository = {
           distanceKm:      data.distanceKm,
           durationMins:    data.durationMins,
         },
-        include: routeAdminInclude,
+        include,
       }),
       prisma.route.create({
         data: {
@@ -151,16 +151,12 @@ export const routeRepository = {
           distanceKm:      data.distanceKm,
           durationMins:    data.durationMins,
         },
-        include: routeAdminInclude,
+        include,
       }),
     ]),
 
-  update: (id: string, data: UpdateRouteInput) =>
-    prisma.route.update({
-      where: { id },
-      data,
-      include: routeAdminInclude,
-    }),
+  update: (id: string, data: UpdateRouteInput, include?: Prisma.RouteInclude) =>
+    prisma.route.update({ where: { id }, data, include }),
 
   delete: (id: string) =>
     prisma.route.delete({ where: { id } }),

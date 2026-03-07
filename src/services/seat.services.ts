@@ -1,4 +1,5 @@
 import { flightRepository } from "@/repositories/flight.repository";
+import { flightAdminInclude } from "@/types/flight.type";
 import { seatRepository } from "@/repositories/seat.repository";
 import {
   buildAvailability,
@@ -85,7 +86,22 @@ export async function getFlightSeatLayout(
   flightCode: string,
   options?: { includeOccupants?: boolean },
 ) {
-  const flight = await flightRepository.findByCode(flightCode);
+  type FlightWithAircraft = Awaited<
+    ReturnType<typeof flightRepository.findByCode>
+  > & {
+    aircraft: {
+      tailNumber: string;
+      type: {
+        iataCode: string;
+        model: string;
+      };
+    };
+  };
+
+  const flight = (await flightRepository.findByCode(flightCode, {
+    ...flightAdminInclude,
+    aircraft: { include: { type: true } },
+  })) as FlightWithAircraft | null;
   if (!flight) return null;
 
   const aircraftTypeCode = flight.aircraft.type.iataCode;
@@ -187,7 +203,7 @@ export async function getFlightSeatLayout(
       departureTime: flight.departureTime,
       arrivalTime: flight.arrivalTime,
       gate: flight.gate,
-      route: flight.route,
+      routeId: flight.routeId,
     },
     aircraft: {
       model: layout.aircraftType.model,

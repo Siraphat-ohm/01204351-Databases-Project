@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma';
 import {
-  bookingAdminInclude,
   type BookingTicketInput,
   type CreateBookingInput,
 } from '@/types/booking.type';
@@ -11,27 +10,22 @@ type BookingFindManyArgs = {
   where?: Prisma.BookingWhereInput;
   skip?: number;
   take?: number;
+  include?: Prisma.BookingInclude;
 };
 
 export const bookingRepository = {
-  findById: (id: string) =>
-    prisma.booking.findUnique({
-      where: { id },
-      include: bookingAdminInclude,
-    }),
+  findById: (id: string, include?: Prisma.BookingInclude) =>
+    prisma.booking.findUniqueOrThrow({ where: { id }, include }),
 
-  findByBookingRef: (bookingRef: string) =>
-    prisma.booking.findUnique({
-      where: { bookingRef },
-      include: bookingAdminInclude,
-    }),
+  findByBookingRef: (bookingRef: string, include?: Prisma.BookingInclude) =>
+    prisma.booking.findUniqueOrThrow({ where: { bookingRef }, include }),
 
   findAll: (args?: BookingFindManyArgs) =>
     prisma.booking.findMany({
       where: args?.where,
       skip: args?.skip,
       take: args?.take,
-      include: bookingAdminInclude,
+      include: args?.include,
       orderBy: { createdAt: 'desc' },
     }),
 
@@ -40,39 +34,39 @@ export const bookingRepository = {
       where: args.where,
       skip: args.skip,
       take: args.take,
-      include: bookingAdminInclude,
+      include: args.include,
       orderBy: { createdAt: 'desc' },
     }),
 
   count: (where?: Prisma.BookingWhereInput) =>
     prisma.booking.count({ where }),
 
-  findByUserId: (userId: string) =>
+  findByUserId: (userId: string, include?: Prisma.BookingInclude) =>
     prisma.booking.findMany({
       where: { userId },
-      include: bookingAdminInclude,
+      include,
       orderBy: { createdAt: 'desc' },
     }),
 
-  findByFlightId: (flightId: string) =>
+  findByFlightId: (flightId: string, include?: Prisma.BookingInclude) =>
     prisma.booking.findMany({
       where: { flightId },
-      include: bookingAdminInclude,
+      include,
       orderBy: { createdAt: 'desc' },
     }),
 
-  findByFlightCode: (flightCode: string) =>
+  findByFlightCode: (flightCode: string, include?: Prisma.BookingInclude) =>
     prisma.booking.findMany({
       where: {
         flight: {
           flightCode,
         },
       },
-      include: bookingAdminInclude,
+      include,
       orderBy: { createdAt: 'desc' },
     }),
 
-  create: (data: CreateBookingInput & { bookingRef: string }) =>
+  create: (data: CreateBookingInput & { bookingRef: string }, include?: Prisma.BookingInclude) =>
     prisma.booking.create({
       data: {
         bookingRef: data.bookingRef,
@@ -83,7 +77,7 @@ export const bookingRepository = {
         contactEmail: data.contactEmail ?? null,
         contactPhone: data.contactPhone ?? null,
       },
-      include: bookingAdminInclude,
+      include,
     }),
 
   findOccupiedSeats: (flightId: string, seatNumbers: string[]) =>
@@ -98,7 +92,7 @@ export const bookingRepository = {
   createWithTickets: (params: {
     booking: CreateBookingInput & { bookingRef: string };
     tickets: BookingTicketInput[];
-  }) =>
+  }, include?: Prisma.BookingInclude) =>
     prisma.$transaction(async (tx) => {
       const createdBooking = await tx.booking.create({
         data: {
@@ -131,28 +125,28 @@ export const bookingRepository = {
 
       return tx.booking.findUnique({
         where: { id: createdBooking.id },
-        include: bookingAdminInclude,
+        include,
       });
     }),
 
-  update: (id: string, data: Partial<CreateBookingInput>) =>
+  update: (id: string, data: Partial<CreateBookingInput>, include?: Prisma.BookingInclude) =>
     prisma.booking.update({
       where: { id },
       data,
-      include: bookingAdminInclude,
+      include,
     }),
 
-  delete: (id: string) =>
+  delete: (id: string, include?: Prisma.BookingInclude) =>
     prisma.booking.delete({
       where: { id },
-      include: bookingAdminInclude,
+      include,
     }),
 
-  updateStatus: (id: string, status: BookingStatus) =>
+  updateStatus: (id: string, status: BookingStatus, include?: Prisma.BookingInclude) =>
     prisma.booking.update({
       where: { id },
       data: { status },
-      include: bookingAdminInclude,
+      include,
     }),
 
   markReaccommodationPendingByTicketIds: async (ticketIds: string[]) => {
@@ -186,7 +180,7 @@ export const bookingRepository = {
     totalPrice?: number;
     currency?: string;
     keepSeatAssignments?: boolean;
-  }) => {
+  }, include?: Prisma.BookingInclude) => {
     const oldBooking = await prisma.booking.findUnique({
       where: { id: params.bookingId },
       include: {
@@ -239,7 +233,7 @@ export const bookingRepository = {
 
       return tx.booking.findUnique({
         where: { id: created.id },
-        include: bookingAdminInclude,
+        include,
       });
     });
   },

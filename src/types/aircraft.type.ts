@@ -20,6 +20,8 @@ export const updateAircraftSchema = z
 
 export type CreateAircraftInput = z.infer<typeof createAircraftSchema>;
 export type UpdateAircraftInput = z.infer<typeof updateAircraftSchema>;
+export type AircraftServiceAction = 'create' | 'read' | 'update' | 'delete' | 'manage-status';
+export type AircraftListItem = AircraftAdmin;
 
 export const aircraftAdminInclude = {
   type: true,

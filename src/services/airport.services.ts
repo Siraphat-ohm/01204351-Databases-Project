@@ -3,6 +3,8 @@ import {
   createAirportSchema,
   updateAirportSchema,
   iataCodeSchema,
+  type AirportListItem,
+  type AirportServiceAction,
   type CreateAirportInput,
   type UpdateAirportInput,
 } from '@/types/airport.type';
@@ -10,28 +12,44 @@ import { canAccessAirport } from '@/auth/permissions';
 import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { PaginatedResponse } from '@/types/common';
 import type { Prisma } from '@/generated/prisma/client';
-import { makeCheckPermission } from '@/services/_shared/authorization';
-import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
+import { makePermissionHelpers } from '@/services/_shared/authorization';
+import { ConflictError, NotFoundError, UnauthorizedError } from '@/lib/errors';
 import {
   resolvePagination,
   type PaginationParams,
 } from '@/services/_shared/pagination';
 
-type AirportListItem = Awaited<ReturnType<typeof airportRepository.findAll>>[number];
-
-const checkPermission = makeCheckPermission(
+const { checkPermission } = makePermissionHelpers<AirportServiceAction>(
   canAccessAirport,
   'airport',
   (a) => new UnauthorizedError(a),
 );
 
+async function getAirportByIdOrThrow(id: string) {
+  const airport = await airportRepository.findById(id);
+  if (!airport) throw new NotFoundError(`Airport not found: ${id}`);
+  return airport;
+}
+
+async function assertAirportIataCodeAvailable(iataCode: string) {
+  const existing = await airportRepository.findByIataCode(iataCode);
+  if (existing) throw new ConflictError(`Airport already exists: ${iataCode}`);
+}
+
+async function assertAirportDeletable(id: string) {
+  const [routeCount, staffCount] = await Promise.all([
+    airportRepository.countRoutes(id),
+    airportRepository.countStaffAssignments(id),
+  ]);
+  if (routeCount > 0 || staffCount > 0) {
+    throw new ConflictError(`Cannot delete airport in use: ${id}`);
+  }
+}
+
 export const airportService = {
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
-
-    const airport = await airportRepository.findById(id);
-    if (!airport) throw new NotFoundError(`Airport not found: ${id}`);
-    return airport;
+    return getAirportByIdOrThrow(id);
   },
 
   async findByIataCode(iataCode: string, session: Session) {
@@ -111,9 +129,7 @@ export const airportService = {
     checkPermission(session, 'create');
 
     const data = createAirportSchema.parse(input);
-    const existing = await airportRepository.findByIataCode(data.iataCode);
-    if (existing) throw new ConflictError(`Airport already exists: ${data.iataCode}`);
-
+    await assertAirportIataCodeAvailable(data.iataCode);
     return airportRepository.create(data);
   },
 
@@ -121,12 +137,10 @@ export const airportService = {
     checkPermission(session, 'update');
 
     const data = updateAirportSchema.parse(input);
-    const existing = await airportRepository.findById(id);
-    if (!existing) throw new NotFoundError(`Airport not found: ${id}`);
+    const existing = await getAirportByIdOrThrow(id);
 
     if (data.iataCode && data.iataCode !== existing.iataCode) {
-      const conflict = await airportRepository.findByIataCode(data.iataCode);
-      if (conflict) throw new ConflictError(`Airport already exists: ${data.iataCode}`);
+      await assertAirportIataCodeAvailable(data.iataCode);
     }
 
     return airportRepository.update(id, data);
@@ -134,19 +148,8 @@ export const airportService = {
 
   async deleteAirport(id: string, session: Session) {
     checkPermission(session, 'delete');
-
-    const existing = await airportRepository.findById(id);
-    if (!existing) throw new NotFoundError(`Airport not found: ${id}`);
-
-    const [routeCount, staffCount] = await Promise.all([
-      airportRepository.countRoutes(id),
-      airportRepository.countStaffAssignments(id),
-    ]);
-
-    if (routeCount > 0 || staffCount > 0) {
-      throw new ConflictError(`Cannot delete airport in use: ${id}`);
-    }
-
+    await getAirportByIdOrThrow(id);
+    await assertAirportDeletable(id);
     return airportRepository.delete(id);
   },
 };

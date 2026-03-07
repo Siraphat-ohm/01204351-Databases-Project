@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma';
 import {
-  paymentAdminInclude,
   type CreatePaymentInput,
 } from '@/types/payment.type';
 import type { Prisma } from '@/generated/prisma/client';
@@ -13,34 +12,27 @@ type PaymentFindManyArgs = {
   where?: Prisma.TransactionWhereInput;
   skip?: number;
   take?: number;
+  include?: Prisma.TransactionInclude;
 };
 
 export const paymentRepository = {
-  findById: (id: string) =>
-    prisma.transaction.findUnique({
-      where: { id },
-      include: paymentAdminInclude,
-    }),
+  findById: (id: string, include?: Prisma.TransactionInclude) =>
+    prisma.transaction.findUniqueOrThrow({ where: { id }, include }),
 
-  findByStripePaymentIntentId: (stripePaymentIntentId: string) =>
-    prisma.transaction.findUnique({
-      where: { stripePaymentIntentId },
-      include: paymentAdminInclude,
-    }),
+  findByStripePaymentIntentId: (stripePaymentIntentId: string, include?: Prisma.TransactionInclude) =>
+    prisma.transaction.findUniqueOrThrow({ where: { stripePaymentIntentId }, include }),
 
-  findByBookingId: (bookingId: string) =>
+  findByBookingId: (bookingId: string, include?: Prisma.TransactionInclude) =>
     prisma.transaction.findMany({
       where: { bookingId },
-      include: paymentAdminInclude,
+      include,
       orderBy: { createdAt: 'desc' },
     }),
 
-  findByUserId: (userId: string) =>
+  findByUserId: (userId: string, include?: Prisma.TransactionInclude) =>
     prisma.transaction.findMany({
-      where: {
-        booking: { userId },
-      },
-      include: paymentAdminInclude,
+      where: { booking: { userId } },
+      include,
       orderBy: { createdAt: 'desc' },
     }),
 
@@ -49,7 +41,7 @@ export const paymentRepository = {
       where: args?.where,
       skip: args?.skip,
       take: args?.take,
-      include: paymentAdminInclude,
+      include: args?.include,
       orderBy: { createdAt: 'desc' },
     }),
 
@@ -58,14 +50,14 @@ export const paymentRepository = {
       where: args.where,
       skip: args.skip,
       take: args.take,
-      include: paymentAdminInclude,
+      include: args.include,
       orderBy: { createdAt: 'desc' },
     }),
 
   count: (where?: Prisma.TransactionWhereInput) =>
     prisma.transaction.count({ where }),
 
-  create: (input: CreatePaymentInput) =>
+  create: (input: CreatePaymentInput, include?: Prisma.TransactionInclude) =>
     prisma.transaction.create({
       data: {
         bookingId: input.bookingId,
@@ -77,10 +69,10 @@ export const paymentRepository = {
         paymentMethodRef: input.paymentMethodRef,
         stripePaymentIntentId: input.stripePaymentIntentId,
       },
-      include: paymentAdminInclude,
+      include,
     }),
 
-  createPayment: (input: CreatePaymentInput) =>
+  createPayment: (input: CreatePaymentInput, include?: Prisma.TransactionInclude) =>
     prisma.transaction.create({
       data: {
         bookingId: input.bookingId,
@@ -92,14 +84,11 @@ export const paymentRepository = {
         paymentMethodRef: input.paymentMethodRef,
         stripePaymentIntentId: input.stripePaymentIntentId,
       },
-      include: paymentAdminInclude,
+      include,
     }),
 
-  delete: (id: string) =>
-    prisma.transaction.delete({
-      where: { id },
-      include: paymentAdminInclude,
-    }),
+  delete: (id: string, include?: Prisma.TransactionInclude) =>
+    prisma.transaction.delete({ where: { id }, include }),
 
   updateStatus: (
     id: string,
@@ -112,12 +101,9 @@ export const paymentRepository = {
       refundedAt?: Date;
       refundReason?: string;
     },
+    include?: Prisma.TransactionInclude,
   ) =>
-    prisma.transaction.update({
-      where: { id },
-      data,
-      include: paymentAdminInclude,
-    }),
+    prisma.transaction.update({ where: { id }, data, include }),
 
   createRefund: (data: {
     bookingId: string;
@@ -125,7 +111,7 @@ export const paymentRepository = {
     currency: string;
     reason?: string;
     originalTransactionId: string;
-  }) =>
+  }, include?: Prisma.TransactionInclude) =>
     prisma.transaction.create({
       data: {
         bookingId: data.bookingId,
@@ -137,6 +123,6 @@ export const paymentRepository = {
         refundReason: data.reason,
         originalTransactionId: data.originalTransactionId,
       },
-      include: paymentAdminInclude,
+      include,
     }),
 };

@@ -1,39 +1,33 @@
-import type { PaginatedResponse } from '@/types/common';
-import type { Prisma } from '@/generated/prisma/client';
-import { resolvePagination, type PaginationParams } from '@/services/_shared/pagination';
-
-type PaymentListItem = Awaited<ReturnType<typeof paymentRepository.findAll>>[number];
-import { stripe } from "@/lib/stripe";
-import { bookingRepository } from "@/repositories/booking.repository";
-import { paymentRepository } from "@/repositories/payment.repository";
-import { ticketService } from "@/services/ticket.services";
+import { stripe } from '@/lib/stripe';
+import { bookingRepository } from '@/repositories/booking.repository';
+import { paymentRepository } from '@/repositories/payment.repository';
+import { ticketService } from '@/services/ticket.services';
 import {
   markPaymentStatusSchema,
   refundPaymentSchema,
+  paymentAdminInclude,
+  type PaymentAdmin,
+  type PaymentListItem,
+  type PaymentServiceAction,
   type RefundPaymentInput,
-} from "@/types/payment.type";
-import { TransactionStatus, TransactionType, BookingStatus } from "@/generated/prisma/client";
-import { canAccessPayment } from "@/auth/permissions";
-import type { ServiceSession as Session } from "@/services/_shared/session";
-import {
-  hasPermission,
-  makeCheckPermission,
-} from "@/services/_shared/authorization";
-import { NotFoundError, ConflictError, UnauthorizedError } from "@/lib/errors";
+} from '@/types/payment.type';
+import type { PaginatedResponse } from '@/types/common';
+import type { Prisma } from '@/generated/prisma/client';
+import { TransactionStatus, TransactionType, BookingStatus } from '@/generated/prisma/client';
+import { canAccessPayment } from '@/auth/permissions';
+import type { ServiceSession as Session } from '@/services/_shared/session';
+import { makePermissionHelpers } from '@/services/_shared/authorization';
+import { resolvePagination, type PaginationParams } from '@/services/_shared/pagination';
+import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
 
-const checkPermission = (
-  session: Session,
-  action: "create" | "read" | "refund" | "read-all",
-) =>
-  makeCheckPermission(
-    canAccessPayment,
-    'payment',
-    (a) => new UnauthorizedError(a),
-  );
-
-function canReadAll(session: Session) {
-  return hasPermission(session, "read-all", canAccessPayment);
-}
+const {
+  checkPermission,
+  hasPermission: hasPaymentPermission,
+} = makePermissionHelpers<PaymentServiceAction>(
+  canAccessPayment,
+  'payment',
+  (a) => new UnauthorizedError(a),
+);
 
 export const paymentService = {
 
@@ -55,8 +49,8 @@ async createCheckoutSession(
       const booking = await bookingRepository.findById(bId);
       if (!booking) throw new NotFoundError(`Booking not found: ${bId}`);
 
-      if (!canReadAll(session) && booking.userId !== session.user.id) {
-        throw new UnauthorizedError("create");
+      if (!hasPaymentPermission(session, 'read-all') && booking.userId !== session.user.id) {
+        throw new UnauthorizedError('create');
       }
 
       // Create a pending transaction record for this specific flight
@@ -64,7 +58,7 @@ async createCheckoutSession(
         bookingId: booking.id,
         amount: Number(booking.totalPrice),
         currency: booking.currency,
-      });
+      }, paymentAdminInclude);
       transactionIds.push(transaction.id);
 
       // Get tickets for this flight and add to line items
@@ -76,7 +70,7 @@ async createCheckoutSession(
             currency: booking.currency.toLowerCase(),
             product_data: {
               name: `Flight ${booking.bookingRef} - ${ticket.firstName} ${ticket.lastName}`,
-              description: `Seat: ${ticket.seatNumber || "Unassigned"}`,
+              description: `Seat: ${ticket.seatNumber || 'Unassigned'}`,
             },
             unit_amount: Math.round(total * 100),
           },
@@ -88,8 +82,8 @@ async createCheckoutSession(
     }
 
     // 2. Create the unified Stripe session
-    const joinedBookingIds = ids.join(",");
-    const joinedTransactionIds = transactionIds.join(",");
+    const joinedBookingIds = ids.join(',');
+    const joinedTransactionIds = transactionIds.join(',');
 
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -98,16 +92,15 @@ async createCheckoutSession(
       // Pass all IDs back to the confirmation page
       success_url: `${origin}/confirmation?bookingId=${joinedBookingIds}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/payment?bookingId=${joinedBookingIds}&canceled=true`,
-metadata: {
-    transactionIds: joinedTransactionIds,
-  },
-  payment_intent_data: {
-    // THIS LINE IS CRITICAL. Without this, the webhook sees empty metadata.
-    metadata: {
-      transactionIds: joinedTransactionIds,
-    },
-  },
-});
+      metadata: {
+        transactionIds: joinedTransactionIds,
+      },
+      payment_intent_data: {
+        metadata: {
+          transactionIds: joinedTransactionIds,
+        },
+      },
+    });
 
     // 3. Link the Stripe Intent to all DB transactions
     await Promise.all(
@@ -131,7 +124,7 @@ metadata: {
       amount: input.amount,
       currency: input.currency,
       paymentMethodType: input.method as any,
-    });
+    }, paymentAdminInclude);
 
     return payment;
   },
@@ -155,7 +148,7 @@ metadata: {
     // represents a system user or skip the permission check.
     checkPermission(session, "create");
 
-    const existing = await paymentRepository.findById(id);
+    const existing = await paymentRepository.findById(id, paymentAdminInclude) as PaymentAdmin;
     if (!existing) throw new NotFoundError(`Payment record not found: ${id}`);
 
     // If already success, don't repeat (idempotency)
@@ -175,7 +168,7 @@ metadata: {
     });
 
     // 1. Update the Payment/Transaction record
-    const updated = await paymentRepository.updateStatus(id, data);
+    const updated = await paymentRepository.updateStatus(id, data, paymentAdminInclude);
 
     // 2. Update the linked Booking to CONFIRMED
     // This is the line that was likely not being hit
@@ -191,8 +184,7 @@ metadata: {
   ) {
     checkPermission(session, "create");
 
-    const existing = await paymentRepository.findById(id);
-    if (!existing) throw new NotFoundError(`Payment not found: ${id}`);
+    const existing = await paymentRepository.findById(id, paymentAdminInclude) as PaymentAdmin;
 
     if (existing.status === TransactionStatus.FAILED) {
       return existing;
@@ -202,14 +194,13 @@ metadata: {
       status: TransactionStatus.FAILED,
       failureCode: input.failureCode,
       failureMessage: input.failureMessage,
-    });
+    }, paymentAdminInclude);
   },
 
   async refundPayment(id: string, input: RefundPaymentInput, session: Session) {
     checkPermission(session, "refund");
 
-    const payment = await paymentRepository.findById(id);
-    if (!payment) throw new NotFoundError(`Payment not found: ${id}`);
+    const payment = await paymentRepository.findById(id, paymentAdminInclude) as PaymentAdmin;
 
     if (payment.status !== TransactionStatus.SUCCESS) {
       throw new ConflictError("Only successful payments can be refunded");
@@ -226,7 +217,6 @@ metadata: {
       throw new ConflictError("Refund exceeds original amount");
     }
 
-    // 🔥 Real Stripe refund
     const stripeRefund = await stripe.refunds.create({
       payment_intent: payment.stripeChargeId,
       amount: Math.round(refundAmount * 100),
@@ -241,7 +231,7 @@ metadata: {
       currency: payment.currency,
       reason: data.reason,
       originalTransactionId: payment.id,
-    });
+    }, paymentAdminInclude);
 
     await paymentRepository.updateStatus(payment.id, {
       status: TransactionStatus.REFUNDED,
@@ -253,7 +243,7 @@ metadata: {
   },
 
   async refundBookingForReaccommodation(bookingId: string, reason?: string) {
-    const payments = await paymentRepository.findByBookingId(bookingId);
+    const payments = await paymentRepository.findByBookingId(bookingId, paymentAdminInclude) as PaymentAdmin[];
     const payment = payments.find((p) => p.type === TransactionType.PAYMENT && p.status === TransactionStatus.SUCCESS);
     if (!payment) throw new NotFoundError(`Payment not found for booking: ${bookingId}`);
 
@@ -263,7 +253,7 @@ metadata: {
       currency: payment.currency,
       reason: reason ?? 'Reaccommodation cancellation',
       originalTransactionId: payment.id,
-    });
+    }, paymentAdminInclude);
 
     await paymentRepository.updateStatus(payment.id, {
       status: TransactionStatus.REFUNDED,
@@ -283,7 +273,7 @@ metadata: {
     const { page, limit, skip } = resolvePagination(params);
     const where = (params as any)?.where;
     const [data, total] = await Promise.all([
-      paymentRepository.findMany({ where, skip, take: limit }),
+      paymentRepository.findMany({ where, skip, take: limit, include: paymentAdminInclude }) as Promise<PaymentAdmin[]>,
       paymentRepository.count(where),
     ]);
 

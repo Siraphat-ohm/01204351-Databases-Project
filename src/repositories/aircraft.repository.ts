@@ -7,17 +7,11 @@ import {
 import { Prisma } from '@/generated/prisma/client';
 
 export const aircraftRepository = {
-  findById: (id: string) =>
-    prisma.aircraft.findUnique({
-      where: { id },
-      include: aircraftAdminInclude,
-    }),
+  findById: (id: string, include?: Prisma.AircraftInclude) =>
+    prisma.aircraft.findUniqueOrThrow({ where: { id }, include }),
 
-  findByTailNumber: (tailNumber: string) =>
-    prisma.aircraft.findUnique({
-      where: { tailNumber },
-      include: aircraftAdminInclude,
-    }),
+  findByTailNumber: (tailNumber: string, include?: Prisma.AircraftInclude) =>
+    prisma.aircraft.findUniqueOrThrow({ where: { tailNumber }, include }),
 
   findAll: (args?: { where?: Prisma.AircraftWhereInput; skip?: number; take?: number }) =>
     prisma.aircraft.findMany({
