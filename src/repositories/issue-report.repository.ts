@@ -79,23 +79,19 @@ export const issueReportRepository = {
   ) {
     await connectMongo();
 
-    const adminResolution =
-      (input.status === 'resolved' || input.status === 'closed') && input.resolvedBy
-        ? {
-            resolvedBy: input.resolvedBy,
-            note: input.note ?? 'Resolved by admin',
-            resolvedAt: new Date(),
-          }
-        : undefined;
+    const updateData: any = { status: input.status };
+
+    if (input.resolvedBy || input.note) {
+      updateData.adminResolution = {
+        resolvedBy: input.resolvedBy || 'system',
+        note: input.note ?? (input.status === 'resolved' || input.status === 'closed' ? 'Resolved by admin' : ''),
+        resolvedAt: new Date(),
+      };
+    }
 
     return IssueReport.findByIdAndUpdate(
       id,
-      {
-        $set: {
-          status: input.status,
-          ...(adminResolution ? { adminResolution } : {}),
-        },
-      },
+      { $set: updateData },
       { new: true },
     ).lean();
   },
@@ -106,26 +102,23 @@ export const issueReportRepository = {
   ) {
     await connectMongo();
 
-    const adminResolution =
-      (input.status === 'resolved' || input.status === 'closed') && input.resolvedBy
-        ? {
-            resolvedBy: input.resolvedBy,
-            note: input.note ?? 'Resolved by admin',
-            resolvedAt: new Date(),
-          }
-        : undefined;
+    const updateData: any = {};
+    if (input.category !== undefined) updateData.category = input.category;
+    if (input.description !== undefined) updateData.description = input.description;
+    if (input.attachments !== undefined) updateData.attachments = input.attachments;
+    if (input.status !== undefined) updateData.status = input.status;
+
+    if (input.resolvedBy || input.note) {
+      updateData.adminResolution = {
+        resolvedBy: input.resolvedBy || 'system',
+        note: input.note ?? (input.status === 'resolved' || input.status === 'closed' ? 'Resolved by admin' : ''),
+        resolvedAt: new Date(),
+      };
+    }
 
     return IssueReport.findByIdAndUpdate(
       id,
-      {
-        $set: {
-          ...(input.category !== undefined ? { category: input.category } : {}),
-          ...(input.description !== undefined ? { description: input.description } : {}),
-          ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
-          ...(input.status !== undefined ? { status: input.status } : {}),
-          ...(adminResolution ? { adminResolution } : {}),
-        },
-      },
+      { $set: updateData },
       { new: true },
     ).lean();
   },

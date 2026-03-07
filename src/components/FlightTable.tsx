@@ -70,10 +70,12 @@ interface SortConfig {
   direction: 'asc' | 'desc';
 }
 
-export function FlightTable({ data, totalPages }: { data: FlightTableRow[], totalPages: number }) {
+export function FlightTable({ data, totalPages, userRole }: { data: FlightTableRow[], totalPages: number, userRole?: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const isAdmin = userRole === 'ADMIN';
 
   const [expandedRows, setExpandedRows] = useState<string[]>([]);
   
@@ -270,35 +272,37 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
           <Table.Td>
              {flight.gate ? <Text size="sm">{flight.gate}</Text> : <Text size="xs" c="dimmed">-</Text>}
           </Table.Td>
-          <Table.Td>
-            <Group gap={4} justify="flex-end">
-              <Tooltip label="View Tickets">
-                <ActionIcon 
-                  component={Link} 
-                  href={`/admin/dashboard/flights/${flight.id}/tickets`} 
-                  variant="subtle" 
-                  color="grape" 
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Ticket size={16} />
-                </ActionIcon>
-              </Tooltip>
-              <Tooltip label="Edit Flight">
-                <ActionIcon component={Link} href={`/admin/dashboard/flights/${flight.id}/edit`} variant="subtle" color="blue" onClick={(e) => e.stopPropagation()}>
-                  <Pencil size={16} />
-                </ActionIcon>
-              </Tooltip>
-              <Tooltip label="Delete Flight">
-                <ActionIcon 
-                  variant="subtle" 
-                  color="red" 
-                  onClick={(e) => handleDeleteClick(flight, e)}
-                >
-                  <Trash size={16} />
-                </ActionIcon>
-              </Tooltip>
-            </Group>
-          </Table.Td>
+          {isAdmin && (
+            <Table.Td>
+              <Group gap={4} justify="flex-end">
+                <Tooltip label="View Tickets">
+                  <ActionIcon 
+                    component={Link} 
+                    href={`/admin/dashboard/flights/${flight.id}/tickets`} 
+                    variant="subtle" 
+                    color="grape" 
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Ticket size={16} />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Edit Flight">
+                  <ActionIcon component={Link} href={`/admin/dashboard/flights/${flight.id}/edit`} variant="subtle" color="blue" onClick={(e) => e.stopPropagation()}>
+                    <Pencil size={16} />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Delete Flight">
+                  <ActionIcon 
+                    variant="subtle" 
+                    color="red" 
+                    onClick={(e) => handleDeleteClick(flight, e)}
+                  >
+                    <Trash size={16} />
+                  </ActionIcon>
+                </Tooltip>
+              </Group>
+            </Table.Td>
+          )}
         </Table.Tr>
 
         {isExpanded && (
@@ -400,9 +404,11 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
           <Title order={2}>Flight Operations</Title>
           <Text c="dimmed" size="sm">Monitor real-time flight status</Text>
         </div>
-        <Button component={Link} href="/admin/dashboard/flights/create" leftSection={<Plus size={16} />}>
-          New Flight
-        </Button>
+        {isAdmin && (
+          <Button component={Link} href="/admin/dashboard/flights/create" leftSection={<Plus size={16} />}>
+            New Flight
+          </Button>
+        )}
       </Group>
 
       {/* --- SEARCH BAR --- */}
@@ -487,7 +493,7 @@ export function FlightTable({ data, totalPages }: { data: FlightTableRow[], tota
                 <Table.Th onClick={() => handleSort('departureTime')} style={{ cursor: 'pointer' }}><Group gap={4}>STD <SortIcon columnKey="departureTime" /></Group></Table.Th>
                 <Table.Th onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}><Group gap={4}>Status <SortIcon columnKey="status" /></Group></Table.Th>
                 <Table.Th>Gate</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Actions</Table.Th>
+                {isAdmin && <Table.Th style={{ textAlign: 'right' }}>Actions</Table.Th>}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>{rows.length ? rows : <Table.Tr><Table.Td colSpan={6} align="center" py="xl"><Text c="dimmed">No flights found matching your criteria</Text></Table.Td></Table.Tr>}</Table.Tbody>

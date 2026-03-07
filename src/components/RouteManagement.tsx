@@ -26,12 +26,15 @@ interface RouteManagementProps {
   initialRoutes: RouteAdmin[];
   totalPages: number;
   currentPage: number;
+  userRole?: string;
 }
 
-export function RouteManagement({ initialRoutes, totalPages, currentPage }: RouteManagementProps) {
+export function RouteManagement({ initialRoutes, totalPages, currentPage, userRole }: RouteManagementProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const isAdmin = userRole === 'ADMIN';
 
   const [originSearch, setOriginSearch] = useState(searchParams.get('origin') || '');
   const [destSearch, setDestSearch] = useState(searchParams.get('destination') || '');
@@ -148,17 +151,19 @@ export function RouteManagement({ initialRoutes, totalPages, currentPage }: Rout
           {route.flights?.length || 0} Flights
         </Badge>
       </Table.Td>
-      <Table.Td>
-        <Group gap={4} justify="flex-end">
-          <ActionIcon variant="subtle" color="red" onClick={() => { 
-            setRouteToDelete(route); 
-            setDeleteError(null); 
-            openDelete(); 
-          }}>
-            <Trash size={16} />
-          </ActionIcon>
-        </Group>
-      </Table.Td>
+      {isAdmin && (
+        <Table.Td>
+          <Group gap={4} justify="flex-end">
+            <ActionIcon variant="subtle" color="red" onClick={() => { 
+              setRouteToDelete(route); 
+              setDeleteError(null); 
+              openDelete(); 
+            }}>
+              <Trash size={16} />
+            </ActionIcon>
+          </Group>
+        </Table.Td>
+      )}
     </Table.Tr>
   ));
 
@@ -169,9 +174,11 @@ export function RouteManagement({ initialRoutes, totalPages, currentPage }: Rout
           <Title order={2}>Route Management</Title>
           <Text c="dimmed" size="sm">Manage origin and destination network pairs</Text>
         </div>
-        <Button component={Link} href="/admin/dashboard/routes/create" leftSection={<Plus size={16} />}>
-          Add Route
-        </Button>
+        {isAdmin && (
+          <Button component={Link} href="/admin/dashboard/routes/create" leftSection={<Plus size={16} />}>
+            Add Route
+          </Button>
+        )}
       </Group>
 
       <Paper shadow="xs" p="md" mb="lg" withBorder>
@@ -217,7 +224,7 @@ export function RouteManagement({ initialRoutes, totalPages, currentPage }: Rout
                 <Table.Th>Distance</Table.Th>
                 <Table.Th>Est. Duration</Table.Th>
                 <Table.Th>Active Operations</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Actions</Table.Th>
+                {isAdmin && <Table.Th style={{ textAlign: 'right' }}>Actions</Table.Th>}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>

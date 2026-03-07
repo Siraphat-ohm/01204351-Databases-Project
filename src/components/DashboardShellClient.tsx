@@ -38,6 +38,7 @@ const navData = [
   { category: 'Management' },
   { label: 'Users & Crew', icon: Users, link: '/admin/dashboard/users' },             
   { label: 'Customer Issues', icon: MessageSquareWarning, link: '/admin/dashboard/issues', alert: true }, 
+  { label: 'Report Issue', icon: MessageSquareWarning, link: '/admin/dashboard/report-issue' }, 
   { category: 'System' },
   { label: 'Payment Logs', icon: Archive, link: '/admin/dashboard/payment-logs' },
   { label: 'Flight Operation Logs', icon: FileClock, link: '/admin/dashboard/ops-log' },            
@@ -84,8 +85,22 @@ export default function DashboardShellClient({
   const displayRole = user?.role?.replace('_', ' ') || "Staff";
 
   const renderNavItems = () => {
-    return navData.map((item, index) => {
-      if (item.category) {
+    const isAdmin = user?.role === 'ADMIN';
+
+    return navData
+      .filter(item => {
+        if (isAdmin) return true;
+        // Staff filter
+        if (item.category === 'Management') return false;
+        if (item.category === 'System') return false;
+        if (item.label === 'Users & Crew') return false;
+        if (item.label === 'Customer Issues') return false;
+        if (item.label === 'Payment Logs') return false;
+        if (item.label === 'Flight Operation Logs') return false;
+        return true;
+      })
+      .map((item, index) => {
+        if (item.category) {
         return (
           <Text 
             key={index} 
@@ -178,8 +193,8 @@ export default function DashboardShellClient({
                
                <Menu.Dropdown>
                  <Menu.Label>Application</Menu.Label>
-                 <Menu.Item leftSection={<Settings size={14} />} component={Link} href="/admin/dashboard/profile_settings">
-                   Profile settings
+                 <Menu.Item leftSection={<Settings size={14} />} component={Link} href="/admin/dashboard/settings">
+                   Account settings
                  </Menu.Item>
                  <Menu.Divider />
                  

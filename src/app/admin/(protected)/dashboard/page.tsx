@@ -16,7 +16,7 @@ export default async function DashboardPage() {
     const dashboardData = await dashboardService.getExecutiveOverview(session as any);
     
     // Render the Client Component and pass the data
-    return <DashboardOverview data={dashboardData} />;
+    return <DashboardOverview data={dashboardData} userRole={session.user.role} />;
 
   } catch (error: any) {
     return (

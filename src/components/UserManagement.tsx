@@ -11,8 +11,8 @@ import { useState, useTransition, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { notifications } from '@mantine/notifications';
 
-import { UserAdmin } from '@/types/user.type'; 
-import { Role } from '@/generated/prisma/client';
+import { UserAdmin, ROLES } from '@/types/user.type'; 
+import type { Role } from '@/generated/prisma/client';
 import { adminUpdateUserRoleAction } from '@/actions/user-actions';
 
 
@@ -21,12 +21,15 @@ interface UserManagementProps {
   initialUsers: UserAdmin[];
   totalPages: number;
   currentPage: number;
+  userRole?: string;
 }
 
-export function UserManagement({ initialUsers, totalPages, currentPage }: UserManagementProps) {
+export function UserManagement({ initialUsers, totalPages, currentPage, userRole }: UserManagementProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const isAdmin = userRole === 'ADMIN';
 
   // Initialize Search & Filter from URL
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
@@ -184,25 +187,27 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
            )}
         </Table.Td>
 
-        <Table.Td>
-          <Group gap={4} justify="flex-end">
-            <Tooltip label="Edit User">
-              <ActionIcon variant="subtle" color="yellow" onClick={() => router.push(`/admin/dashboard/users/${user.id}/edit`)}>
-                <Pencil size={16} />
-              </ActionIcon>
-            </Tooltip>
-            <Tooltip label="Manage Role">
-              <ActionIcon variant="subtle" color="blue" onClick={() => handleEditRoleClick(user)}>
-                <ShieldCheck size={16} />
-              </ActionIcon>
-            </Tooltip>
-            <Tooltip label="Deactivate">
-              <ActionIcon variant="subtle" color="red">
-                <Trash size={16} />
-              </ActionIcon>
-            </Tooltip>
-          </Group>
-        </Table.Td>
+        {isAdmin && (
+          <Table.Td>
+            <Group gap={4} justify="flex-end">
+              <Tooltip label="Edit User">
+                <ActionIcon variant="subtle" color="yellow" onClick={() => router.push(`/admin/dashboard/users/${user.id}/edit`)}>
+                  <Pencil size={16} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="Manage Role">
+                <ActionIcon variant="subtle" color="blue" onClick={() => handleEditRoleClick(user)}>
+                  <ShieldCheck size={16} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="Deactivate">
+                <ActionIcon variant="subtle" color="red">
+                  <Trash size={16} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
+          </Table.Td>
+        )}
       </Table.Tr>
     );
   });
@@ -214,9 +219,11 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
           <Title order={2}>Users & Crew</Title>
           <Text c="dimmed" size="sm">Manage system access and staff profiles</Text>
         </div>
-        <Button leftSection={<Plus size={16} />}>
-          Add User
-        </Button>
+        {isAdmin && (
+          <Button leftSection={<Plus size={16} />} onClick={() => router.push('/admin/dashboard/users/create')}>
+            Add User
+          </Button>
+        )}
       </Group>
 
       {/* ────────────────────────────────────────────────
@@ -237,7 +244,7 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
             <Select 
               label="Role"
               placeholder="All Roles"
-              data={['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC', 'PASSENGER']}
+              data={ROLES as any}
               value={roleFilter}
               onChange={setRoleFilter}
               clearable
@@ -279,7 +286,7 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
                 <Table.Th>Employee ID</Table.Th>
                 <Table.Th>Rank / Position</Table.Th>
                 <Table.Th>Base Station</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Actions</Table.Th>
+                {isAdmin && <Table.Th style={{ textAlign: 'right' }}>Actions</Table.Th>}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -331,7 +338,7 @@ export function UserManagement({ initialUsers, totalPages, currentPage }: UserMa
             <Select
               label="System Role"
               description="Warning: Changing a user's role alters their dashboard access."
-              data={['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC', 'PASSENGER']}
+              data={ROLES as any}
               value={editRole}
               onChange={(val) => setEditRole(val || '')}
               allowDeselect={false}

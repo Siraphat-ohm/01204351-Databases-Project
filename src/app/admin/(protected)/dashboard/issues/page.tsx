@@ -10,7 +10,7 @@ interface PageProps {
 export default async function IssuesPage({ searchParams }: PageProps) {
   const session = await getServerSession();
   
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role === 'PASSENGER') {
     redirect('/admin/login');
   }
 
@@ -22,7 +22,7 @@ export default async function IssuesPage({ searchParams }: PageProps) {
   const search = typeof resolvedParams.search === 'string' ? resolvedParams.search : '';
   const statusFilter = typeof resolvedParams.status === 'string' ? resolvedParams.status : '';
 
-  // 1. Build the database query (where clause)
+  // 1. Build the database query (where clause) - Mongoose compatible!
   const where: any = {};
 
   if (statusFilter) {
@@ -30,11 +30,9 @@ export default async function IssuesPage({ searchParams }: PageProps) {
   }
 
   if (search) {
-    where.OR = [
-      { category: { contains: search, mode: 'insensitive' } },
-      { description: { contains: search, mode: 'insensitive' } },
-      // Optional: If you want to search by user email as well
-      // { user: { email: { contains: search, mode: 'insensitive' } } }
+    where.$or = [
+      { category: { $regex: search, $options: 'i' } },
+      { description: { $regex: search, $options: 'i' } },
     ];
   }
 
@@ -58,6 +56,7 @@ export default async function IssuesPage({ searchParams }: PageProps) {
       status: issueData.status,
       attachments: issueData.attachments || [],
       createdAt: issueData.createdAt, 
+      adminResolution: issueData.adminResolution,
       user: issueData.user ? {
         name: issueData.user.name || null,
         email: issueData.user.email,
@@ -72,6 +71,7 @@ export default async function IssuesPage({ searchParams }: PageProps) {
       initialIssues={sanitizedIssues} 
       totalPages={response.meta.totalPages}
       currentPage={page}
+      userRole={session.user.role}
     />
   );
 }

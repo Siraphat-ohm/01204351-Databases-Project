@@ -32,12 +32,15 @@ interface PaymentLogManagementProps {
   initialLogs: PaymentLog[];
   totalPages: number;
   currentPage: number;
+  userRole?: string;
 }
 
-export function PaymentLogManagement({ initialLogs, totalPages, currentPage }: PaymentLogManagementProps) {
+export function PaymentLogManagement({ initialLogs, totalPages, currentPage, userRole }: PaymentLogManagementProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const isAdmin = userRole === 'ADMIN';
 
   // Initialize search state from URL
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
@@ -383,24 +386,26 @@ export function PaymentLogManagement({ initialLogs, totalPages, currentPage }: P
             </Paper>
 
             {/* Admin Action: Manual Override */}
-            <Paper p="sm" withBorder mt="md" radius="md">
-              <Text size="sm" fw={600} mb="xs">Manual Status Override</Text>
-              <Select
-                data={[
-                  { value: 'pending', label: 'Pending' },
-                  { value: 'success', label: 'Success' },
-                  { value: 'failed', label: 'Failed' },
-                  { value: 'refunded', label: 'Refunded' }
-                ]}
-                value={selectedLog.status}
-                onChange={handleStatusChange}
-                disabled={isPending}
-                allowDeselect={false}
-              />
-              <Text size="xs" c="dimmed" mt="xs">
-                Warning: Changing this status does not trigger an actual refund or capture at the gateway. It only updates internal records.
-              </Text>
-            </Paper>
+            {isAdmin && (
+              <Paper p="sm" withBorder mt="md" radius="md">
+                <Text size="sm" fw={600} mb="xs">Manual Status Override</Text>
+                <Select
+                  data={[
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'success', label: 'Success' },
+                    { value: 'failed', label: 'Failed' },
+                    { value: 'refunded', label: 'Refunded' }
+                  ]}
+                  value={selectedLog.status}
+                  onChange={handleStatusChange}
+                  disabled={isPending}
+                  allowDeselect={false}
+                />
+                <Text size="xs" c="dimmed" mt="xs">
+                  Warning: Changing this status does not trigger an actual refund or capture at the gateway. It only updates internal records.
+                </Text>
+              </Paper>
+            )}
           </Stack>
         )}
       </Modal>

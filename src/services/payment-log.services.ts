@@ -16,6 +16,10 @@ import {
 
 import { NotFoundError, UnauthorizedError } from '@/lib/errors';
 
+function isStaff(session: Session) {
+  return hasAnyRole(session, ['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC']);
+}
+
 function isAdmin(session: Session) {
   return hasAnyRole(session, ['ADMIN']);
 }
@@ -24,7 +28,7 @@ async function assertCanReadBooking(session: Session, bookingId: string) {
   const booking = await bookingRepository.findById(bookingId);
   if (!booking) throw new NotFoundError(`Booking not found: ${bookingId}`);
 
-  if (!isAdmin(session) && booking.userId !== session.user.id) {
+  if (!isStaff(session) && booking.userId !== session.user.id) {
     throw new UnauthorizedError('read');
   }
 
@@ -48,7 +52,7 @@ export const paymentLogService = {
   },
 
   async findAll(session: Session) {
-    if (!isAdmin(session)) throw new UnauthorizedError('read-all');
+    if (!isStaff(session)) throw new UnauthorizedError('read-all');
     return paymentLogRepository.findAll();
   },
 
@@ -56,7 +60,7 @@ export const paymentLogService = {
     session: Session,
     params?: PaginationParams<Record<string, unknown>>,
   ): Promise<PaginatedResponse<Awaited<ReturnType<typeof paymentLogRepository.findAll>>[number]>> {
-    if (!isAdmin(session)) throw new UnauthorizedError('read-all');
+    if (!isStaff(session)) throw new UnauthorizedError('read-all');
 
     const { page, limit, skip } = resolvePagination(params);
     const where = (params as any)?.where;

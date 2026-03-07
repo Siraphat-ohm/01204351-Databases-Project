@@ -30,11 +30,9 @@ export default async function PaymentLogsPage({ searchParams }: PageProps) {
   }
 
   if (search) {
-    where.OR = [
-      // If bookingId is a string in your DB, this works perfectly. 
-      // If it's a strict ObjectId, you might need to filter only by gateway/transaction IDs.
-      { bookingId: { contains: search, mode: 'insensitive' } },
-      { gateway: { contains: search, mode: 'insensitive' } },
+    where.$or = [
+      { bookingId: { $regex: search, $options: 'i' } },
+      { gateway: { $regex: search, $options: 'i' } },
     ];
   }
 
@@ -71,6 +69,7 @@ export default async function PaymentLogsPage({ searchParams }: PageProps) {
       initialLogs={sanitizedLogs} 
       totalPages={response.meta.totalPages}
       currentPage={page}
+      userRole={session.user.role}
     />
   );
 }

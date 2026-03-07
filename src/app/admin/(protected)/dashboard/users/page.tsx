@@ -11,7 +11,7 @@ interface PageProps {
 export default async function UsersPage({ searchParams }: PageProps) {
   const session = await getServerSession();
   
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role === 'PASSENGER') {
     redirect('/admin/login'); 
   }
 
@@ -50,6 +50,7 @@ export default async function UsersPage({ searchParams }: PageProps) {
       initialUsers={response.data as any} 
       totalPages={response.meta.totalPages}
       currentPage={page}
+      userRole={session.user.role}
     />
   );
 }

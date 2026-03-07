@@ -59,7 +59,7 @@ export default function AdminLoginPage() {
           <IconLock size={40} color="var(--mantine-color-blue-6)" />
         </Center>
         <Title ta="center" order={2}>
-          Admin Portal
+          Staff Portal
         </Title>
         <Text c="dimmed" size="sm" ta="center" mt={5} mb={30}>
           Authorized personnel only.
@@ -80,8 +80,8 @@ export default function AdminLoginPage() {
 
           <form onSubmit={handleAdminLogin}>
             <TextInput 
-              label="Admin Email" 
-              placeholder="admin@yourcompany.com" 
+              label="Staff Email" 
+              placeholder="staff@yokairline.com" 
               value={email}
               onChange={(e) => setEmail(e.currentTarget.value)}
               required 

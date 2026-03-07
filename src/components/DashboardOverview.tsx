@@ -23,6 +23,8 @@ import { notifications } from '@mantine/notifications';
 
 import { ReportTemplate } from './ReportTemplate';
 
+
+
 const LiveMapbox = dynamic(() => import('./LiveMapBox'), { 
   ssr: false,
   loading: () => <p>Loading Map...</p> 
@@ -43,10 +45,11 @@ interface DashboardData {
   liveMapRoutes?: FlightRoute[]; 
 }
 
-export function DashboardOverview({ data }: { data: DashboardData }) {
+export function DashboardOverview({ data, userRole }: { data: DashboardData; userRole?: string }) {
   const [isMapExpanded, { open: openMap, close: closeMap }] = useDisclosure(false);
   const [liveRoutes, setLiveRoutes] = useState<FlightRoute[]>(data.liveMapRoutes || []);
-  
+
+  const isAdmin = userRole === 'ADMIN';
 
   const hiddenTemplateRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -142,68 +145,80 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
   return (
     <>
       {/* 🌟 Header moved here so it controls the export */}
-      <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', display: 'none' }} ref={hiddenTemplateRef}>
-        <ReportTemplate data={data} />
-      </div>
+      {isAdmin && (
+        <div style={{ position: 'absolute', top: '-10000px', left: '-10000px', display: 'none' }} ref={hiddenTemplateRef}>
+            <ReportTemplate data={data} />
+        </div>
+      )}
 
       <Group justify="space-between" mb="lg">
         <div>
-          <Title order={2}>Executive Dashboard</Title>
-          <Text c="dimmed">Overview of Airline Operations & Performance</Text>
+          <Title order={2}>{isAdmin ? 'Executive Dashboard' : 'Staff Operations Overview'}</Title>
+          <Text c="dimmed">
+            {isAdmin 
+              ? 'Overview of Airline Operations & Performance' 
+              : 'Real-time flight status and operational updates'}
+          </Text>
         </div>
-        <Button 
-          variant="filled" 
-          color="blue"
-          leftSection={<Download size={16} />} 
-          onClick={handleExportPDF}
-          loading={isExporting}
-        >
-          Export Report
-        </Button>
+        {isAdmin && (
+          <Button 
+            variant="filled" 
+            color="blue"
+            leftSection={<Download size={16} />} 
+            onClick={handleExportPDF}
+            loading={isExporting}
+          >
+            Export Report
+          </Button>
+        )}
       </Group>
 
       {/* 🌟 Wrap the dashboard content in a div with the ref */}
       <div style={{ paddingBottom: 20, padding: '10px' }}>
         
         {/* --- 1. Top Stats Cards --- */}
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="lg">
-          <Paper shadow="xs" p="md" radius="md" withBorder>
-            <Group justify="space-between">
-              <div>
-                <Text c="dimmed" tt="uppercase" fw={700} size="xs">Overall Income</Text>
-                <Text fw={700} size="xl">${data.stats.income.toLocaleString()}</Text>
-              </div>
-              <ThemeIcon color="green" variant="light" size={38} radius="md">
-                <Wallet size={20} />
-              </ThemeIcon>
-            </Group>
-            <Text c="green" size="xs" fw={500} mt="md">+12% from last month</Text>
-          </Paper>
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: isAdmin ? 4 : 2 }} mb="lg">
+          {isAdmin && (
+            <Paper shadow="xs" p="md" radius="md" withBorder>
+              <Group justify="space-between">
+                <div>
+                  <Text c="dimmed" tt="uppercase" fw={700} size="xs">Overall Income</Text>
+                  <Text fw={700} size="xl">${data.stats.income.toLocaleString()}</Text>
+                </div>
+                <ThemeIcon color="green" variant="light" size={38} radius="md">
+                  <Wallet size={20} />
+                </ThemeIcon>
+              </Group>
+              <Text c="green" size="xs" fw={500} mt="md">+12% from last month</Text>
+            </Paper>
+          )}
+
+          {isAdmin && (
+            <Paper shadow="xs" p="md" radius="md" withBorder>
+              <Group justify="space-between">
+                <div>
+                  <Text c="dimmed" tt="uppercase" fw={700} size="xs">Active Users</Text>
+                  <Text fw={700} size="xl">{data.stats.activeUsers.toLocaleString()}</Text>
+                </div>
+                <ThemeIcon color="blue" variant="light" size={38} radius="md">
+                  <Users size={20} />
+                </ThemeIcon>
+              </Group>
+              <Text c="dimmed" size="xs" mt="md">Currently online</Text>
+            </Paper>
+          )}
 
           <Paper shadow="xs" p="md" radius="md" withBorder>
             <Group justify="space-between">
               <div>
-                <Text c="dimmed" tt="uppercase" fw={700} size="xs">Active Users</Text>
-                <Text fw={700} size="xl">{data.stats.activeUsers.toLocaleString()}</Text>
-              </div>
-              <ThemeIcon color="blue" variant="light" size={38} radius="md">
-                <Users size={20} />
-              </ThemeIcon>
-            </Group>
-            <Text c="dimmed" size="xs" mt="md">Currently online</Text>
-          </Paper>
-
-          <Paper shadow="xs" p="md" radius="md" withBorder>
-            <Group justify="space-between">
-              <div>
-                <Text c="dimmed" tt="uppercase" fw={700} size="xs">Tickets Today</Text>
+                <Text c="dimmed" tt="uppercase" fw={700} size="xs">{isAdmin ? 'Tickets Today' : 'Current Bookings'}</Text>
                 <Text fw={700} size="xl">{data.stats.reservationsToday}</Text>
               </div>
               <ThemeIcon color="grape" variant="light" size={38} radius="md">
                 <Ticket size={20} />
               </ThemeIcon>
             </Group>
-            <Text c="green" size="xs" fw={500} mt="md">+5% target reached</Text>
+            <Text c="green" size="xs" fw={500} mt="md">{isAdmin ? '+5% target reached' : 'Processed today'}</Text>
           </Paper>
 
           <Paper shadow="xs" p="md" radius="md" withBorder>
@@ -289,7 +304,7 @@ export function DashboardOverview({ data }: { data: DashboardData }) {
             <Card shadow="xs" padding="lg" radius="md" withBorder h="100%">
               <Group justify="space-between" mb="md">
                  <Text fw={700}>Upcoming Flights</Text>
-                 <Button variant="subtle" size="xs" rightSection={<ArrowUpRight size={14} />} data-html2canvas-ignore>
+                 <Button variant="subtle" size="xs" rightSection={<ArrowUpRight size={14} />} data-html2canvas-ignore href="/admin/dashboard/flights" component="a">
                    View All
                  </Button>
               </Group>

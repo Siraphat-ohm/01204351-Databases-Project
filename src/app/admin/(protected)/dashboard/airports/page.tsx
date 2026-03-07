@@ -28,6 +28,7 @@ export default async function AirportsPage({ searchParams }: PageProps) {
       initialAirports={response.data as any} 
       totalPages={response.meta.totalPages}
       currentPage={page}
+      userRole={session.user.role}
     />
   );
 }

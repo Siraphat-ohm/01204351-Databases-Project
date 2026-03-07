@@ -1,5 +1,6 @@
 import { FlightOpsLogManagement } from "@/components/FlightOpsLogManagement";
 import { flightOpsLogService } from "@/services/flight-ops-log.services"; 
+import { flightRepository } from "@/repositories/flight.repository";
 import { getServerSession } from "@/services/auth.services";
 import { redirect } from "next/navigation";
 
@@ -9,7 +10,7 @@ interface PageProps {
 
 export default async function FlightOpsLogsPage({ searchParams }: PageProps) {
   const session = await getServerSession();
-  
+
   if (!session) {
     redirect('/admin/login');
   }
@@ -17,50 +18,58 @@ export default async function FlightOpsLogsPage({ searchParams }: PageProps) {
   const resolvedParams = await searchParams;
   const page = Number(resolvedParams.page) || 1;
   const limit = 15; // Set pagination limit
-  const search = typeof resolvedParams.search === 'string' ? resolvedParams.search.toLowerCase() : '';
+  const search = typeof resolvedParams.search === 'string' ? resolvedParams.search : '';
 
-  let rawLogs = [];
-  try {
-    // Fetch all logs from the database
-    rawLogs = await flightOpsLogService.findAll(session as any);
-  } catch (err) {
-    redirect('/admin/dashboard'); 
+  // 1. Build the database query (where clause) - Mongoose compatible!
+  const where: any = {};
+
+  if (search) {
+    where.$or = [
+      { flightId: { $regex: search, $options: 'i' } },
+      { captainName: { $regex: search, $options: 'i' } },
+    ];
   }
 
-  // 1. Filter data natively on the Server
-  const filteredLogs = rawLogs.filter((log: any) => {
-    if (!search) return true;
-    const flightId = log.flightId?.toString().toLowerCase() || '';
-    const captain = log.captainName?.toLowerCase() || '';
-    return flightId.includes(search) || captain.includes(search);
+  // 2. Fetch paginated and filtered data natively from the Database
+  const response = await flightOpsLogService.findAllPaginated(session as any, {
+    page,
+    limit,
+    where
+  } as any);
+
+  // 3. Fetch flight details for display (avoid N+1)
+  const flightIds = Array.from(new Set(response.data.map((log: any) => log.flightId)));
+  const flights = await flightRepository.findAll({
+    where: { id: { in: flightIds } }
   });
 
-  // 2. Handle Pagination Calculation
-  const totalPages = Math.ceil(filteredLogs.length / limit) || 1;
-  const skip = (page - 1) * limit;
-  const paginatedLogs = filteredLogs.slice(skip, skip + limit);
+  const flightMap = new Map(flights.map(f => [f.id, f]));
 
-  // 3. Sanitize data strictly for the Client Component (drop hidden buffers)
-  const sanitizedLogs = paginatedLogs.map((log: any) => {
+  // 4. Sanitize data strictly for the Client Component
+  const sanitizedLogs = response.data.map((log: any) => {
     const lData = typeof log.toJSON === 'function' ? log.toJSON() : log;
+    const flight: any = flightMap.get(lData.flightId);
 
     return {
       id: lData._id?.toString() || lData.id,
       flightId: lData.flightId?.toString() || 'Unknown',
+      flightCode: flight?.flightCode || 'Unknown',
+      route: flight ? `${flight.route.origin.iataCode} - ${flight.route.destination.iataCode}` : 'Unknown',
+
       captainName: lData.captainName,
-      
+
       gateChanges: (lData.gateChanges || []).map((gc: any) => ({
         from: gc.from,
         to: gc.to,
         reason: gc.reason,
-        time: new Date(gc.time).toISOString(),
+        time: gc.time ? new Date(gc.time).toISOString() : null,
       })),
-      
+
       weatherConditions: lData.weatherConditions ? {
         origin: lData.weatherConditions.origin,
         destination: lData.weatherConditions.destination
       } : null,
-      
+
       incidents: lData.incidents || [],
       maintenanceChecklist: JSON.parse(JSON.stringify(lData.maintenanceChecklist || {})), 
       createdAt: lData.createdAt ? new Date(lData.createdAt).toISOString() : new Date().toISOString(),
@@ -71,7 +80,7 @@ export default async function FlightOpsLogsPage({ searchParams }: PageProps) {
     <FlightOpsLogManagement 
       initialLogs={sanitizedLogs} 
       userRole={session.user.role} 
-      totalPages={totalPages}
+      totalPages={response.meta.totalPages}
       currentPage={page}
     />
   );

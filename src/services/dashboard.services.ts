@@ -23,7 +23,7 @@ function checkPermission(
   action: 'read' | 'export',
 ) {
   // Utilizing the hasAnyRole helper similar to issueReportService
-  if (!hasAnyRole(session, ['ADMIN', 'MANAGER', 'STAFF'])) {
+  if (!hasAnyRole(session, ['ADMIN', 'MANAGER', 'STAFF', 'GROUND_STAFF', 'PILOT', 'CABIN_CREW', 'MECHANIC'])) {
     throw new UnauthorizedError(action);
   }
 }

@@ -22,7 +22,13 @@ import { NotFoundError, UnauthorizedError } from '@/lib/errors';
 const {
   checkPermission,
 } = makePermissionHelpers<UserServiceAction>(
-  (roleName, _action) => roleName === 'ADMIN',
+  (roleName, action) => {
+    if (roleName === 'ADMIN') return true;
+    if (action === 'read' || action === 'read-all') {
+      return ['PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC'].includes(roleName);
+    }
+    return false;
+  },
   'user',
   (action) => new UnauthorizedError(action),
 );

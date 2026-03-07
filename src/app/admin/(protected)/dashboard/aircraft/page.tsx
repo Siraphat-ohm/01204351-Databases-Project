@@ -54,6 +54,7 @@ export default async function AircraftPage({ searchParams }: PageProps) {
       aircraftTypes={aircraftTypes as any}
       totalPages={response.meta.totalPages}
       currentPage={page}
+      userRole={session.user.role}
     />
   );
 }

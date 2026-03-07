@@ -33,14 +33,17 @@ interface IssueManagementProps {
   initialIssues: IssueReport[];
   totalPages: number;
   currentPage: number;
+  userRole?: string;
 }
 
-export function IssueManagement({ initialIssues, totalPages, currentPage }: IssueManagementProps) {
+export function IssueManagement({ initialIssues, totalPages, currentPage, userRole }: IssueManagementProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Initialize search states from the URL
+  const isAdmin = userRole === 'ADMIN';
+
+  // Initialize Search & Filter from URL
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [statusFilter, setStatusFilter] = useState<string | null>(searchParams.get('status'));
 
@@ -56,6 +59,7 @@ export function IssueManagement({ initialIssues, totalPages, currentPage }: Issu
   const [opened, { open, close }] = useDisclosure(false);
   const [selectedIssue, setSelectedIssue] = useState<IssueReport | null>(null);
   const [adminNote, setAdminNote] = useState(''); 
+  const [tempStatus, setTempStatus] = useState<string>('');
   const [updateError, setUpdateError] = useState<string | null>(null);
 
   // Status Helpers
@@ -120,19 +124,20 @@ export function IssueManagement({ initialIssues, totalPages, currentPage }: Issu
   // ────────────────────────────────────────────────
   // ISSUE MODAL HANDLERS
   // ────────────────────────────────────────────────
-  const handleViewIssue = (issue: IssueReport) => {
+  const handleViewIssue = (issue: any) => {
     setSelectedIssue(issue);
-    setAdminNote('');
+    setAdminNote(issue.adminResolution?.note || '');
+    setTempStatus(issue.status);
     setUpdateError(null);
     open();
   };
 
-  const handleStatusChange = (newStatus: string | null) => {
-    if (!selectedIssue || !newStatus || newStatus === selectedIssue.status) return;
+  const handleUpdateIssue = () => {
+    if (!selectedIssue || !tempStatus) return;
 
     startTransition(async () => {
       const payload = {
-        status: newStatus as IssueStatus,
+        status: tempStatus as IssueStatus,
         note: adminNote.trim() !== '' ? adminNote : undefined,
       };
 
@@ -143,10 +148,10 @@ export function IssueManagement({ initialIssues, totalPages, currentPage }: Issu
       } else {
         // Optimistically update local state so the modal reflects the change immediately
         setSelectedIssue({ ...selectedIssue, status: payload.status });
-        setAdminNote(''); 
-        notifications.show({ title: "Status Updated", message: "Issue status has been saved.", color: "green", icon: <CheckCircle size={18} /> });
+        notifications.show({ title: "Updated", message: "Issue has been saved.", color: "green", icon: <CheckCircle size={18} /> });
         // Refresh the server data behind the scenes to update the table
         router.refresh();
+        close();
       }
     });
   };
@@ -364,33 +369,57 @@ export function IssueManagement({ initialIssues, totalPages, currentPage }: Issu
               </Paper>
             </Group>
 
+            {/* Resolution History / Existing Note */}
+            {selectedIssue.adminResolution && (
+              <Paper p="sm" withBorder bg="blue.0" radius="md">
+                <Text size="xs" c="blue.7" fw={700} mb={4}>RESOLUTION HISTORY</Text>
+                <Text size="sm" mb={4}>{selectedIssue.adminResolution.note}</Text>
+                <Text size="xs" c="dimmed">
+                  Updated on: {new Date(selectedIssue.adminResolution.resolvedAt).toLocaleString('en-GB')}
+                </Text>
+              </Paper>
+            )}
+
             {/* Admin Action: Change Status & Note */}
-            <Paper p="sm" withBorder mt="md" radius="md">
-              <Text size="sm" fw={600} mb="xs">Update Resolution Status</Text>
-              <Stack gap="sm">
-                <Textarea 
-                  placeholder="Optional note for this status update..."
-                  value={adminNote}
-                  onChange={(e) => setAdminNote(e.currentTarget.value)}
-                  disabled={isPending}
-                  autosize
-                  minRows={2}
-                />
-                <Select
-                  data={[
-                    { value: 'open', label: 'Open' },
-                    { value: 'investigating', label: 'Investigating' },
-                    { value: 'resolved', label: 'Resolved' },
-                    { value: 'closed', label: 'Closed' }
-                  ]}
-                  value={selectedIssue.status}
-                  onChange={handleStatusChange}
-                  disabled={isPending}
-                  allowDeselect={false}
-                  placeholder="Select new status..."
-                />
-              </Stack>
-            </Paper>
+            {isAdmin && (
+              <Paper p="sm" withBorder mt="md" radius="md">
+                <Text size="sm" fw={600} mb="xs">Update Resolution Status</Text>
+                <Stack gap="sm">
+                  <Textarea 
+                    label="Admin Note"
+                    placeholder="Note for this update..."
+                    value={adminNote}
+                    onChange={(e) => setAdminNote(e.currentTarget.value)}
+                    disabled={isPending}
+                    autosize
+                    minRows={2}
+                  />
+                  <Select
+                    label="Status"
+                    data={[
+                      { value: 'open', label: 'Open' },
+                      { value: 'investigating', label: 'Investigating' },
+                      { value: 'resolved', label: 'Resolved' },
+                      { value: 'closed', label: 'Closed' }
+                    ]}
+                    value={tempStatus}
+                    onChange={(val) => setTempStatus(val || '')}
+                    disabled={isPending}
+                    allowDeselect={false}
+                    placeholder="Select new status..."
+                  />
+                  <Button 
+                    fullWidth 
+                    mt="sm" 
+                    onClick={handleUpdateIssue} 
+                    loading={isPending}
+                    color="blue"
+                  >
+                    Save Changes
+                  </Button>
+                </Stack>
+              </Paper>
+            )}
           </Stack>
         )}
       </Modal>

@@ -29,12 +29,15 @@ interface AirportManagementProps {
   initialAirports: Airport[];
   totalPages: number;
   currentPage: number;
+  userRole?: string;
 }
 
-export function AirportManagement({ initialAirports, totalPages, currentPage }: AirportManagementProps) {
+export function AirportManagement({ initialAirports, totalPages, currentPage, userRole }: AirportManagementProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const isAdmin = userRole === 'ADMIN';
 
   // Initialize Search from URL
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
@@ -152,24 +155,26 @@ export function AirportManagement({ initialAirports, totalPages, currentPage }: 
           <Text size="sm">{airport.country}</Text>
         </Group>
       </Table.Td>
-      <Table.Td>
-        <Group gap={4} justify="flex-end">
-          <ActionIcon component={Link} href={`/admin/dashboard/airports/${airport.id}/edit`} variant="subtle" color="blue">
-             <Pencil size={16} />
-          </ActionIcon>
-          <ActionIcon 
-            variant="subtle" 
-            color="red" 
-            onClick={() => { 
-              setAirportToDelete(airport); 
-              setDeleteError(null); // Reset error state on open
-              openDelete(); 
-            }}
-          >
-            <Trash size={16} />
-          </ActionIcon>
-        </Group>
-      </Table.Td>
+      {isAdmin && (
+        <Table.Td>
+          <Group gap={4} justify="flex-end">
+            {/* <ActionIcon component={Link} href={`/admin/dashboard/airports/${airport.id}/edit`} variant="subtle" color="blue">
+               <Pencil size={16} />
+            </ActionIcon> */}
+            <ActionIcon 
+              variant="subtle" 
+              color="red" 
+              onClick={() => { 
+                setAirportToDelete(airport); 
+                setDeleteError(null); // Reset error state on open
+                openDelete(); 
+              }}
+            >
+              <Trash size={16} />
+            </ActionIcon>
+          </Group>
+        </Table.Td>
+      )}
     </Table.Tr>
   ));
 
@@ -180,9 +185,11 @@ export function AirportManagement({ initialAirports, totalPages, currentPage }: 
           <Title order={2}>Airport Management</Title>
           <Text c="dimmed" size="sm">Manage global destinations and base stations</Text>
         </div>
-        <Button component={Link} href="/admin/dashboard/airports/create" leftSection={<Plus size={16} />}>
-          Add Airport
-        </Button>
+        {isAdmin && (
+          <Button component={Link} href="/admin/dashboard/airports/create" leftSection={<Plus size={16} />}>
+            Add Airport
+          </Button>
+        )}
       </Group>
 
       {/* ────────────────────────────────────────────────
@@ -222,7 +229,7 @@ export function AirportManagement({ initialAirports, totalPages, currentPage }: 
                 <Table.Th>Airport Name</Table.Th>
                 <Table.Th>City</Table.Th>
                 <Table.Th>Country</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Actions</Table.Th>
+                {isAdmin && <Table.Th style={{ textAlign: 'right' }}>Actions</Table.Th>}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>

@@ -13,9 +13,9 @@ export default async function AdminProtectedLayout({
     headers: await headers(), 
   });
 
-  // If there is no session, or the user is not an ADMIN,
+  // If there is no session, or the user is a PASSENGER,
   // bounce them specifically to the admin login page.
-  if (!session || session.user.role !== "ADMIN") {
+  if (!session || session.user.role === "PASSENGER") {
     redirect("/admin/login"); 
   }
 
