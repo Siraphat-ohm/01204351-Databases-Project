@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Container,
@@ -21,7 +21,7 @@ import { IconLock, IconAlertCircle } from "@tabler/icons-react";
 import { Navbar } from "@/components/Navbar";
 import { useAuthSession } from "@/services/auth-client.service";
 
-export default function PaymentPage() {
+function PaymentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const bookingIdQuery = searchParams.get("bookingId"); 
@@ -114,7 +114,7 @@ export default function PaymentPage() {
 
   if (isPending || initializing) {
     return (
-      <Center h="100vh">
+      <Center h="50vh">
         <Stack align="center">
           <Loader size="xl" />
           <Text c="dimmed">Preparing secure payment...</Text>
@@ -125,96 +125,104 @@ export default function PaymentPage() {
 
   if (!session?.user) {
     return (
-      <Center h="100vh">
-        <Alert color="red">You must be logged in.</Alert>
-      </Center>
+      <Alert color="red">You must be logged in.</Alert>
     );
   }
 
   return (
-    <>
-      <Navbar />
-      <Container size="sm" py="xl">
-        <Stack gap="xl">
-          <Box>
-            <Title order={2}>Finalize Your Booking</Title>
-            <Text c="dimmed">
-              You will be redirected to a secure payment gateway.
-            </Text>
-          </Box>
+    <Container size="sm" py="xl">
+      <Stack gap="xl">
+        <Box>
+          <Title order={2}>Finalize Your Booking</Title>
+          <Text c="dimmed">
+            You will be redirected to a secure payment gateway.
+          </Text>
+        </Box>
 
-          <Paper withBorder p="lg" radius="md">
-            <Text fw={700} mb="sm">Booking Reference{bookingsData.length > 1 ? 's' : ''}</Text>
-            
-            <Group gap="sm" mb="md">
-              {bookingsData.length > 0 ? (
-                bookingsData.map((b, i) => (
-                  <Badge key={b.id || i} variant="outline" color="blue" size="lg">
-                    {b.bookingRef || "PENDING"} {bookingsData.length > 1 && `(Trip ${i + 1})`}
-                  </Badge>
-                ))
-              ) : (
-                <Badge variant="outline" color="gray" size="lg">PENDING</Badge>
-              )}
-            </Group>
-
-            {/* Optional Breakdown for Round Trips */}
-            {bookingsData.length > 1 && (
-              <Box mb="md">
-                <Text size="sm" c="dimmed" mb="xs">Price Breakdown</Text>
-                {bookingsData.map((b, i) => (
-                  <Group justify="space-between" key={b.id || i} mb={4}>
-                    <Text size="sm">Trip {i + 1} ({b.bookingRef || "Pending"})</Text>
-                    <Text size="sm">THB {Number(b.totalPrice || 0).toLocaleString()}</Text>
-                  </Group>
-                ))}
-              </Box>
+        <Paper withBorder p="lg" radius="md">
+          <Text fw={700} mb="sm">Booking Reference{bookingsData.length > 1 ? 's' : ''}</Text>
+          
+          <Group gap="sm" mb="md">
+            {bookingsData.length > 0 ? (
+              bookingsData.map((b, i) => (
+                <Badge key={b.id || i} variant="outline" color="blue" size="lg">
+                  {b.bookingRef || "PENDING"} {bookingsData.length > 1 && `(Trip ${i + 1})`}
+                </Badge>
+              ))
+            ) : (
+              <Badge variant="outline" color="gray" size="lg">PENDING</Badge>
             )}
+          </Group>
 
-            <Divider my="sm" />
-
-            <Group justify="space-between">
-              <Text size="xl" fw={900}>Grand Total</Text>
-              <Text size="xl" fw={900} c="blue.9">
-                THB {grandTotal.toLocaleString()}
-              </Text>
-            </Group>
-          </Paper>
-
-          {error && (
-            <Alert color="red" icon={<IconAlertCircle size={18} />}>
-              {error}
-            </Alert>
+          {/* Optional Breakdown for Round Trips */}
+          {bookingsData.length > 1 && (
+            <Box mb="md">
+              <Text size="sm" c="dimmed" mb="xs">Price Breakdown</Text>
+              {bookingsData.map((b, i) => (
+                <Group justify="space-between" key={b.id || i} mb={4}>
+                  <Text size="sm">Trip {i + 1} ({b.bookingRef || "Pending"})</Text>
+                  <Text size="sm">THB {Number(b.totalPrice || 0).toLocaleString()}</Text>
+                </Group>
+              ))}
+            </Box>
           )}
 
-          <Paper withBorder p="xl" radius="md">
-            <Stack>
-              <Alert color="blue" icon={<IconLock size={18} />} variant="light">
-                Payment is securely processed by Stripe.
-              </Alert>
+          <Divider my="sm" />
 
-              <Button
-                fullWidth
-                size="lg"
-                color="green"
-                loading={loading}
-                onClick={handleStripeCheckout}
-              >
-                Pay THB {grandTotal.toLocaleString()}
-              </Button>
+          <Group justify="space-between">
+            <Text size="xl" fw={900}>Grand Total</Text>
+            <Text size="xl" fw={900} c="blue.9">
+              THB {grandTotal.toLocaleString()}
+            </Text>
+          </Group>
+        </Paper>
 
-              <Button
-                variant="subtle"
-                color="gray"
-                onClick={() => router.back()}
-                disabled={loading}
-              >
-                Cancel
-              </Button>
-            </Stack>
-          </Paper>
-        </Stack>
-      </Container>
-    </>
+        {error && (
+          <Alert color="red" icon={<IconAlertCircle size={18} />}>
+            {error}
+          </Alert>
+        )}
+
+        <Paper withBorder p="xl" radius="md">
+          <Stack>
+            <Alert color="blue" icon={<IconLock size={18} />} variant="light">
+              Payment is securely processed by Stripe.
+            </Alert>
+
+            <Button
+              fullWidth
+              size="lg"
+              color="green"
+              loading={loading}
+              onClick={handleStripeCheckout}
+            >
+              Pay THB {grandTotal.toLocaleString()}
+            </Button>
+
+            <Button
+              variant="subtle"
+              color="gray"
+              onClick={() => router.back()}
+              disabled={loading}
+            >
+              Cancel
+            </Button>
+          </Stack>
+        </Paper>
+      </Stack>
+    </Container>
+  );
+}
+
+export default function PaymentPage() {
+  return (
+    <Suspense fallback={
+      <Center h="50vh">
+        <Loader size="xl" />
+      </Center>
+    }>
+      <Navbar />
+      <PaymentContent />
+    </Suspense>
   );
 }

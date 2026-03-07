@@ -191,10 +191,11 @@ useEffect(() => {
               <DateInput 
                 label="Depart" 
                 value={searchData.departure}
-                onChange={(val) => {
-                  onDepartureChange(val);
-                  if (val && searchData.return && val > searchData.return) {
-                    onReturnChange(val);
+                onChange={(val: any) => {
+                  const date = val ? new Date(val) : null;
+                  onDepartureChange(date);
+                  if (date && searchData.return && date > searchData.return) {
+                    onReturnChange(date);
                   }
                 }}
                 minDate={today}
@@ -203,7 +204,7 @@ useEffect(() => {
               <DateInput 
                 label="Return" 
                 value={searchData.returnDate || searchData.return} 
-                onChange={onReturnChange}
+                onChange={(val: any) => onReturnChange(val ? new Date(val) : null)}
                 minDate={minReturnDate} 
                 style={{ flex: 1 }} 
                 disabled={searchData.type === 'one-way'}

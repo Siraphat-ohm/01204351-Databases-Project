@@ -592,7 +592,6 @@ const availableFlights = useMemo(() => {
 export default function FlightSearchPage() {
   return (
     <main>
-      <Navbar />
       <Suspense
         fallback={
           <Center py="xl">
@@ -600,6 +599,7 @@ export default function FlightSearchPage() {
           </Center>
         }
       >
+        <Navbar />
         <SearchResults />
       </Suspense>
     </main>

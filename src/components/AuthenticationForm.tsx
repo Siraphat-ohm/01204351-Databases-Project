@@ -10,12 +10,12 @@ import {
   Group,
   PaperProps,
   Button,
-  Divider,
   Anchor,
   Stack,
   Container,
 } from '@mantine/core';
-import { signIn } from 'next-auth/react';
+import { signInWithEmail, signUpWithEmail } from '@/services/auth-client.service';
+import { notifications } from '@mantine/notifications';
 
 export function AuthenticationForm(props: PaperProps) {
   const [type, toggle] = useToggle(['login', 'register']);
@@ -34,14 +34,34 @@ export function AuthenticationForm(props: PaperProps) {
 
   const handleSubmit = async (values: typeof form.values) => {
     if (type === 'login') {
-      await signIn('credentials', {
+      const result = await signInWithEmail({
         email: values.email,
         password: values.password,
-        callbackUrl: '/',
+        callbackURL: '/',
       });
+
+      if (!result.ok && result.error) {
+        notifications.show({
+          title: 'Login failed',
+          message: result.error,
+          color: 'red',
+        });
+      }
     } else {
-      console.log('Registering:', values);
-      // Add your signup logic/API call here
+      const result = await signUpWithEmail({
+        email: values.email,
+        password: values.password,
+        name: values.name,
+        callbackURL: '/',
+      });
+
+      if (!result.ok && result.error) {
+        notifications.show({
+          title: 'Registration failed',
+          message: result.error,
+          color: 'red',
+        });
+      }
     }
   };
 

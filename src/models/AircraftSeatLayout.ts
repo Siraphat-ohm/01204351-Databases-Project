@@ -27,7 +27,7 @@ export interface ICabinSection {
 
 export interface IAircraftSeatLayout extends Document {
   aircraftTypeIataCode: string; // FK → AircraftType.iataCode in Postgres
-  model: string; // e.g. "Airbus A320-200"
+  aircraftModel: string; // e.g. "Airbus A320-200"
   totalCapacity: number;
   cabins: ICabinSection[];
   seats: ISeatDef[];
@@ -77,7 +77,7 @@ const AircraftSeatLayoutSchema = new Schema<IAircraftSeatLayout>(
       unique: true,
       index: true,
     },
-    model: { type: String, required: true },
+    aircraftModel: { type: String, required: true },
     totalCapacity: { type: Number, required: true },
     cabins: { type: [CabinSectionSchema], required: true },
     seats: { type: [SeatDefSchema], required: true },

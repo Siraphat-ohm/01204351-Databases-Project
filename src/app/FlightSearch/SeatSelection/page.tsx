@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import React from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { 
@@ -66,7 +66,7 @@ const SeatButton = React.memo(function SeatButton({ label, isOccupied, isSelecte
   );
 });
 
-export default function SeatSelectionPage() {
+function SeatSelectionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const departFlightCode = searchParams.get("departFlightCode");
@@ -131,11 +131,8 @@ export default function SeatSelectionPage() {
     return ecoPrice;
   }, [flight]);
 
-  // 🚨 UPDATED: Now looks inside seatMap.layout.seatOverrides for status and surcharge
   const getSeatDetails = useCallback((seatLabel: string) => {
-    // Look up the specific seat by its label (e.g., "1D") from the seatOverrides object
     const seatObj = seatMap?.layout?.seatOverrides?.[seatLabel] || {};
-    
     const rowNum = parseInt(seatLabel.match(/\d+/)?.[0] || "0", 10);
     
     let cabinClass = "ECONOMY";
@@ -328,7 +325,7 @@ export default function SeatSelectionPage() {
     ));
   }, [seatMap, selectedSeats, getSeatDetails, handleSeatClick]);
 
-  if (loading || isAuthLoading) return <Center h="100vh"><Loader size="xl" /></Center>;
+  if (loading || isAuthLoading) return <Center h="50vh"><Loader size="xl" /></Center>;
   
   const allPassengersFilled = selectedSeats.length === requiredSeats && selectedSeats.every(s => {
     const p = passengerData[s];
@@ -338,211 +335,220 @@ export default function SeatSelectionPage() {
   const canProceed = allPassengersFilled && isContactFilled;
 
   return (
-    <>
-      <Navbar />
-      <Container size="xl" py="xl">
-        <Title order={2} mb="md">
-          {currentStep === "DEPART" ? "Select Departure Seats" : "Select Return Seats"}
-          {isRoundTrip && (
-            <Badge ml="sm" size="lg" color="blue" variant="light">
-              Step {currentStep === "DEPART" ? "1" : "2"} of 2
-            </Badge>
-          )}
-        </Title>
-        <Paper withBorder p="xl" radius="md" mb="xl" shadow="xs">
-          <Grid align="center">
-            <Grid.Col span={{ base: 12, md: 5 }}>
-              <Group justify="space-between" wrap="nowrap">
-                <Box>
-                  <Text size="xs" c="dimmed" fw={700} tt="uppercase">
-                    {currentStep === "DEPART" ? "Departure Flight" : "Return Flight"}
-                  </Text>
-                  <Text fw={900} size="xl">{flight?.route?.origin?.iataCode}</Text>
-                  <Text size="sm" fw={500}>{formatUTCTime(flight?.departureTime)}</Text>
-                  <Text size="xs" c="dimmed">{formatDate(flight?.departureTime)}</Text>
-                </Box>
-                
-                <Stack align="center" gap={0} flex={1}>
-                  <IconPlane size={20} color="var(--mantine-color-blue-6)" />
-                  <Divider w="60%" color="gray.3" />
-                </Stack>
-
-                <Box ta="right">
-                  <Text size="xs" c="dimmed" fw={700} tt="uppercase">Arrival</Text>
-                  <Text fw={900} size="xl">{flight?.route?.destination?.iataCode}</Text>
-                  <Text size="sm" fw={500}>{formatUTCTime(flight?.arrivalTime)}</Text>
-                  <Text size="xs" c="dimmed">{formatDate(flight?.arrivalTime)}</Text>
-                </Box>
-              </Group>
-            </Grid.Col>
-
-            <Grid.Col span={{ base: 12, md: 2 }}>
-                <Center>
-                    <Badge variant="light" size="lg" leftSection={<IconClock size={14}/>}>
-                        Direct
-                    </Badge>
-                </Center>
-            </Grid.Col>
-
-            <Grid.Col span={{ base: 12, md: 5 }}>
-              <Paper withBorder p="xs" bg="gray.0" radius="sm">
-                <Text size="xs" fw={700} c="dimmed" mb={5} ta="center">PRICE GUIDE (PER SEAT)</Text>
-                <Group justify="center" gap="lg">
-                  {seatMap?.layout?.cabins?.map((cabin: any) => (
-                    <Stack gap={0} key={cabin.cabin} align="center">
-                      <Text size="xs" fw={800} c="blue">{cabin.cabin}</Text>
-                      <Text size="xs" fw={700}>THB {getBasePriceForCabin(cabin.cabin).toLocaleString()}</Text>
-                    </Stack>
-                  ))}
-                </Group>
-              </Paper>
-            </Grid.Col>
-          </Grid>
-        </Paper>
-
-        <Grid gutter="xl">
-          <Grid.Col span={{ base: 12, md: 7 }}>
-            <Paper withBorder p="xl" radius="lg">
-              <Stack gap="xl">
-                {/* Visual Legend Added Here */}
-                <Group justify="center" gap="xl" mb="md">
-                  <Group gap="xs"><IconArmchair size={20} color="var(--mantine-color-blue-6)" /><Text size="sm">Available</Text></Group>
-                  <Group gap="xs"><IconArmchair size={20} color="var(--mantine-color-blue-filled)" /><Text size="sm" fw={700}>Selected</Text></Group>
-                  <Group gap="xs"><IconArmchair size={20} color="var(--mantine-color-dark-2)" /><Text size="sm" c="dimmed">Occupied</Text></Group>
-                </Group>
-                
-                {renderedSeatMap}
+    <Container size="xl" py="xl">
+      <Title order={2} mb="md">
+        {currentStep === "DEPART" ? "Select Departure Seats" : "Select Return Seats"}
+        {isRoundTrip && (
+          <Badge ml="sm" size="lg" color="blue" variant="light">
+            Step {currentStep === "DEPART" ? "1" : "2"} of 2
+          </Badge>
+        )}
+      </Title>
+      <Paper withBorder p="xl" radius="md" mb="xl" shadow="xs">
+        <Grid align="center">
+          <Grid.Col span={{ base: 12, md: 5 }}>
+            <Group justify="space-between" wrap="nowrap">
+              <Box>
+                <Text size="xs" c="dimmed" fw={700} tt="uppercase">
+                  {currentStep === "DEPART" ? "Departure Flight" : "Return Flight"}
+                </Text>
+                <Text fw={900} size="xl">{flight?.route?.origin?.iataCode}</Text>
+                <Text size="sm" fw={500}>{formatUTCTime(flight?.departureTime)}</Text>
+                <Text size="xs" c="dimmed">{formatDate(flight?.departureTime)}</Text>
+              </Box>
+              
+              <Stack align="center" gap={0} flex={1}>
+                <IconPlane size={20} color="var(--mantine-color-blue-6)" />
+                <Divider w="60%" color="gray.3" />
               </Stack>
-            </Paper>
+
+              <Box ta="right">
+                <Text size="xs" c="dimmed" fw={700} tt="uppercase">Arrival</Text>
+                <Text fw={900} size="xl">{flight?.route?.destination?.iataCode}</Text>
+                <Text size="sm" fw={500}>{formatUTCTime(flight?.arrivalTime)}</Text>
+                <Text size="xs" c="dimmed">{formatDate(flight?.arrivalTime)}</Text>
+              </Box>
+            </Group>
+          </Grid.Col>
+
+          <Grid.Col span={{ base: 12, md: 2 }}>
+              <Center>
+                  <Badge variant="light" size="lg" leftSection={<IconClock size={14}/>}>
+                      Direct
+                  </Badge>
+              </Center>
           </Grid.Col>
 
           <Grid.Col span={{ base: 12, md: 5 }}>
-            <Paper withBorder p="md" radius="md" pos="sticky" top={20}>
-              <Group justify="space-between" mb="md">
-                <Title order={4}>Passengers ({requiredSeats})</Title>
-                <Group gap={8}>
-                  <ActionIcon variant="light" color="red" onClick={decreasePassengers} disabled={requiredSeats <= 1}>
-                    <IconUserMinus size={18} />
-                  </ActionIcon>
-                  <ActionIcon variant="light" color="blue" onClick={() => setRequiredSeats(r => r + 1)}>
-                    <IconUserPlus size={18} />
-                  </ActionIcon>
-                </Group>
+            <Paper withBorder p="xs" bg="gray.0" radius="sm">
+              <Text size="xs" fw={700} c="dimmed" mb={5} ta="center">PRICE GUIDE (PER SEAT)</Text>
+              <Group justify="center" gap="lg">
+                {seatMap?.layout?.cabins?.map((cabin: any) => (
+                  <Stack gap={0} key={cabin.cabin} align="center">
+                    <Text size="xs" fw={800} c="blue">{cabin.cabin}</Text>
+                    <Text size="xs" fw={700}>THB {getBasePriceForCabin(cabin.cabin).toLocaleString()}</Text>
+                  </Stack>
+                ))}
               </Group>
-
-              {selectedSeats.length === 0 ? (
-                <Alert icon={<IconAlertCircle size={16} />} color="blue" variant="light">
-                  Please select {requiredSeats} seat{requiredSeats > 1 ? 's' : ''} from the map.
-                </Alert>
-              ) : (
-                <Stack gap="lg">
-                  {selectedSeats.map(code => {
-                    const { cabinClass, finalPrice } = getSeatDetails(code);
-                    return (
-                      <Paper withBorder p="sm" radius="md" key={code} bg="gray.0">
-                        <Group justify="space-between" mb="sm">
-                          <Group gap="xs">
-                            <Badge size="md" variant="filled" color={cabinClass === "FIRST" ? "gold" : cabinClass === "BUSINESS" ? "indigo" : "blue"}>
-                              Seat {code} ({cabinClass})
-                            </Badge>
-                          </Group>
-                          <Group gap="sm">
-                            <Text size="sm" fw={700} c="blue.9">THB {finalPrice.toLocaleString()}</Text>
-                            <ActionIcon color="red" variant="subtle" size="sm" onClick={() => handleSeatClick(code)}>
-                              ✕
-                            </ActionIcon>
-                          </Group>
-                        </Group>
-
-                        <Stack gap="xs">
-                          <Group grow>
-                            <TextInput 
-                              placeholder="First Name"
-                              leftSection={<IconUser size={16} />}
-                              value={passengerData[code]?.firstName || ""}
-                              onChange={(e) => updatePassengerField(code, 'firstName', e.target.value)}
-                              required
-                            />
-                            <TextInput 
-                              placeholder="Last Name"
-                              value={passengerData[code]?.lastName || ""}
-                              onChange={(e) => updatePassengerField(code, 'lastName', e.target.value)}
-                              required
-                            />
-                          </Group>
-                          <TextInput 
-                            placeholder="Passenger Email"
-                            leftSection={<IconMail size={16} />}
-                            value={passengerData[code]?.email || ""}
-                            onChange={(e) => updatePassengerField(code, 'email', e.target.value)}
-                            required
-                          />
-                        </Stack>
-                      </Paper>
-                    );
-                  })}
-
-                  <Paper withBorder p="sm" radius="md" bg="blue.0" style={{ borderColor: 'var(--mantine-color-blue-2)' }}>
-                    <Text fw={700} size="sm" mb="xs" c="blue.9">Booking Contact Information</Text>
-                    <Stack gap="xs">
-                      <TextInput 
-                        placeholder="Primary Email Address"
-                        leftSection={<IconMail size={16} />}
-                        value={contactEmail}
-                        onChange={(e) => setContactEmail(e.target.value)}
-                        required
-                      />
-                      <TextInput 
-                        placeholder="Primary Phone Number"
-                        leftSection={<IconPhone size={16} />}
-                        value={contactPhone}
-                        onChange={(e) => setContactPhone(e.target.value)}
-                        required
-                      />
-                    </Stack>
-                  </Paper>
-                </Stack>
-              )}
-
-              <Divider my="xl" />
-              <Group justify="space-between">
-                <Text fw={700}>Total Amount (Current Flight)</Text>
-                <Text fw={900} size="xl" c="blue.9">THB {totalPrice.toLocaleString()}</Text>
-              </Group>
-
-              <Button 
-                fullWidth 
-                mt="xl" 
-                size="lg" 
-                color={currentStep === "DEPART" && isRoundTrip ? "blue" : "green"} 
-                disabled={!canProceed || isBooking}
-                loading={isBooking}
-                onClick={handleProceed}
-                leftSection={currentStep === "DEPART" && isRoundTrip ? undefined : <IconCheck size={20} />}
-              >
-                {currentStep === "DEPART" && isRoundTrip ? "Select Return Seats" : "Proceed to Payment"}
-              </Button>
-
-              {currentStep === "RETURN" && (
-                <Button 
-                  fullWidth 
-                  mt="sm" 
-                  variant="subtle" 
-                  color="gray"
-                  leftSection={<IconArrowLeft size={16} />}
-                  onClick={() => {
-                    setCurrentStep("DEPART");
-                    setSelectedSeats([]);
-                    setPassengerData({});
-                  }}
-                >
-                  Back to Departure Selection
-                </Button>
-              )}
             </Paper>
           </Grid.Col>
         </Grid>
-      </Container>
-    </>
+      </Paper>
+
+      <Grid gutter="xl">
+        <Grid.Col span={{ base: 12, md: 7 }}>
+          <Paper withBorder p="xl" radius="lg">
+            <Stack gap="xl">
+              <Group justify="center" gap="xl" mb="md">
+                <Group gap="xs"><IconArmchair size={20} color="var(--mantine-color-blue-6)" /><Text size="sm">Available</Text></Group>
+                <Group gap="xs"><IconArmchair size={20} color="var(--mantine-color-blue-filled)" /><Text size="sm" fw={700}>Selected</Text></Group>
+                <Group gap="xs"><IconArmchair size={20} color="var(--mantine-color-dark-2)" /><Text size="sm" c="dimmed">Occupied</Text></Group>
+              </Group>
+              
+              {renderedSeatMap}
+            </Stack>
+          </Paper>
+        </Grid.Col>
+
+        <Grid.Col span={{ base: 12, md: 5 }}>
+          <Paper withBorder p="md" radius="md" pos="sticky" top={20}>
+            <Group justify="space-between" mb="md">
+              <Title order={4}>Passengers ({requiredSeats})</Title>
+              <Group gap={8}>
+                <ActionIcon variant="light" color="red" onClick={decreasePassengers} disabled={requiredSeats <= 1}>
+                  <IconUserMinus size={18} />
+                </ActionIcon>
+                <ActionIcon variant="light" color="blue" onClick={() => setRequiredSeats(r => r + 1)}>
+                  <IconUserPlus size={18} />
+                </ActionIcon>
+              </Group>
+            </Group>
+
+            {selectedSeats.length === 0 ? (
+              <Alert icon={<IconAlertCircle size={16} />} color="blue" variant="light">
+                Please select {requiredSeats} seat{requiredSeats > 1 ? 's' : ''} from the map.
+              </Alert>
+            ) : (
+              <Stack gap="lg">
+                {selectedSeats.map(code => {
+                  const { cabinClass, finalPrice } = getSeatDetails(code);
+                  return (
+                    <Paper withBorder p="sm" radius="md" key={code} bg="gray.0">
+                      <Group justify="space-between" mb="sm">
+                        <Group gap="xs">
+                          <Badge size="md" variant="filled" color={cabinClass === "FIRST" ? "gold" : cabinClass === "BUSINESS" ? "indigo" : "blue"}>
+                            Seat {code} ({cabinClass})
+                          </Badge>
+                        </Group>
+                        <Group gap="sm">
+                          <Text size="sm" fw={700} c="blue.9">THB {finalPrice.toLocaleString()}</Text>
+                          <ActionIcon color="red" variant="subtle" size="sm" onClick={() => handleSeatClick(code)}>
+                            ✕
+                          </ActionIcon>
+                        </Group>
+                      </Group>
+
+                      <Stack gap="xs">
+                        <Group grow>
+                          <TextInput 
+                            placeholder="First Name"
+                            leftSection={<IconUser size={16} />}
+                            value={passengerData[code]?.firstName || ""}
+                            onChange={(e) => updatePassengerField(code, 'firstName', e.target.value)}
+                            required
+                          />
+                          <TextInput 
+                            placeholder="Last Name"
+                            value={passengerData[code]?.lastName || ""}
+                            onChange={(e) => updatePassengerField(code, 'lastName', e.target.value)}
+                            required
+                          />
+                        </Group>
+                        <TextInput 
+                          placeholder="Passenger Email"
+                          leftSection={<IconMail size={16} />}
+                          value={passengerData[code]?.email || ""}
+                          onChange={(e) => updatePassengerField(code, 'email', e.target.value)}
+                          required
+                        />
+                      </Stack>
+                    </Paper>
+                  );
+                })}
+
+                <Paper withBorder p="sm" radius="md" bg="blue.0" style={{ borderColor: 'var(--mantine-color-blue-2)' }}>
+                  <Text fw={700} size="sm" mb="xs" c="blue.9">Booking Contact Information</Text>
+                  <Stack gap="xs">
+                    <TextInput 
+                      placeholder="Primary Email Address"
+                      leftSection={<IconMail size={16} />}
+                      value={contactEmail}
+                      onChange={(e) => setContactEmail(e.target.value)}
+                      required
+                    />
+                    <TextInput 
+                      placeholder="Primary Phone Number"
+                      leftSection={<IconPhone size={16} />}
+                      value={contactPhone}
+                      onChange={(e) => setContactPhone(e.target.value)}
+                      required
+                    />
+                  </Stack>
+                </Paper>
+              </Stack>
+            )}
+
+            <Divider my="xl" />
+            <Group justify="space-between">
+              <Text fw={700}>Total Amount (Current Flight)</Text>
+              <Text fw={900} size="xl" c="blue.9">THB {totalPrice.toLocaleString()}</Text>
+            </Group>
+
+            <Button 
+              fullWidth 
+              mt="xl" 
+              size="lg" 
+              color={currentStep === "DEPART" && isRoundTrip ? "blue" : "green"} 
+              disabled={!canProceed || isBooking}
+              loading={isBooking}
+              onClick={handleProceed}
+              leftSection={currentStep === "DEPART" && isRoundTrip ? undefined : <IconCheck size={20} />}
+            >
+              {currentStep === "DEPART" && isRoundTrip ? "Select Return Seats" : "Proceed to Payment"}
+            </Button>
+
+            {currentStep === "RETURN" && (
+              <Button 
+                fullWidth 
+                mt="sm" 
+                variant="subtle" 
+                color="gray"
+                leftSection={<IconArrowLeft size={16} />}
+                onClick={() => {
+                  setCurrentStep("DEPART");
+                  setSelectedSeats([]);
+                  setPassengerData({});
+                }}
+              >
+                Back to Departure Selection
+              </Button>
+            )}
+          </Paper>
+        </Grid.Col>
+      </Grid>
+    </Container>
+  );
+}
+
+export default function SeatSelectionPage() {
+  return (
+    <Suspense fallback={
+      <Center h="50vh">
+        <Loader size="xl" />
+      </Center>
+    }>
+      <Navbar />
+      <SeatSelectionContent />
+    </Suspense>
   );
 }
