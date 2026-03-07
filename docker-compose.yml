@@ -1,7 +1,7 @@
 services:
-  mysql:
-    image: mysql:9.6.0
-    container_name: airline_mysql
+  postgres:
+    image: postgres:17
+    container_name: airline_postgres
     restart: always
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
