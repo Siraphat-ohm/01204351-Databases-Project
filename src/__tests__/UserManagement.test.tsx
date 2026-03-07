@@ -48,13 +48,14 @@ const mockUsers = [
 ];
 
 describe('UserManagement Component', () => {
-  const renderComponent = (users = mockUsers as any, totalPages = 1, currentPage = 1) => {
+  const renderComponent = (users = mockUsers as any, totalPages = 1, currentPage = 1, role = 'ADMIN') => {
     return render(
       <MantineProvider>
         <UserManagement 
           initialUsers={users} 
           totalPages={totalPages} 
           currentPage={currentPage} 
+          userRole={role}
         />
       </MantineProvider>
     );
@@ -103,9 +104,8 @@ describe('UserManagement Component', () => {
   it('opens manage role modal when shield icon is clicked', async () => {
     renderComponent();
     
-    const buttons = screen.getAllByRole('button');
-    // Button index 3 is typically the Manage Role button for the first user
-    fireEvent.click(buttons[3]); 
+    const manageRoleButton = screen.getAllByRole('button', { name: /Manage Role/i })[0];
+    fireEvent.click(manageRoleButton); 
     
     expect(await screen.findByText(/Manage User Role/i)).toBeInTheDocument();
     expect(screen.getAllByText('admin@example.com').length).toBeGreaterThan(0);

@@ -196,7 +196,7 @@ export function UserManagement({ initialUsers, totalPages, currentPage, userRole
                 </ActionIcon>
               </Tooltip>
               <Tooltip label="Manage Role">
-                <ActionIcon variant="subtle" color="blue" onClick={() => handleEditRoleClick(user)}>
+                <ActionIcon variant="subtle" color="blue" onClick={() => handleEditRoleClick(user)} aria-label="Manage Role">
                   <ShieldCheck size={16} />
                 </ActionIcon>
               </Tooltip>

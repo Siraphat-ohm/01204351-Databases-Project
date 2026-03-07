@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# YokAirline ✈️
 
-## Getting Started
+YokAirline is a comprehensive Airline Management System built with Next.js, featuring real-time flight tracking, staff operations management, and a robust administrative dashboard.
 
-First, run the development server:
+## 🚀 Getting Started with Bun
 
+This project is optimized for [Bun](https://bun.sh/). Follow these steps to get your local environment running.
+
+### 1. Clone & Install
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repository-url>
+cd 01204351-Databases-Project
+bun install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Environment Configuration
+Copy the example environment file and fill in your secrets (Database URLs, Stripe keys, Mapbox tokens).
+```bash
+cp .env.example .env
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Start Database Services
+The project requires PostgreSQL and MongoDB. You can start them using Docker:
+```bash
+docker-compose up -d
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Database Setup
+Generate the Prisma client and sync your schema with the PostgreSQL database.
+```bash
+bun db:generate
+bun db:migrate
+```
 
-## Learn More
+### 5. Seed Initial Data
+Populate the database with airports, routes, staff profiles, and aircraft.
+```bash
+bun db:seed
+bun db:seed-seats
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 6. Run the Application
+Start the development server:
+```bash
+bun dev
+```
+Open [http://localhost:3000/admin/login](http://localhost:3000/admin/login) to access the staff portal.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 7. Run Tests
+Execute the test suite using Bun:
+```bash
+bun test
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🛠 Tech Stack
+- **Framework:** Next.js 15 (App Router)
+- **Runtime:** Bun
+- **UI/Styling:** Mantine UI, Lucide Icons
+- **Database (SQL):** PostgreSQL + Prisma (Core entities)
+- **Database (NoSQL):** MongoDB + Mongoose (Operational logs)
+- **Auth:** Better Auth
+- **Payments:** Stripe
+- **Maps:** Mapbox GL
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📜 Available Scripts
+- `bun dev`: Start development server.
+- `bun build`: Build for production.
+- `bun start`: Start production server.
+- `bun test`: Run the test suite.
+- `bun db:migrate`: Run Prisma migrations.
+- `bun db:seed`: Seed primary data.
+- `bun db:seed-seats`: Seed aircraft layouts.
+- `bun db:reset`: Reset and re-migrate the database.

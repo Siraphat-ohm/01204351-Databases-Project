@@ -218,6 +218,7 @@ export const flightService = {
     checkPermission(session, 'update');
     const data = updateFlightSchema.parse(input);
     const existing = await flightRepository.findById(id);
+    if (!existing) throw new NotFoundError(`Flight not found: ${id}`);
     if (data.flightCode && data.flightCode !== existing.flightCode) {
       await assertFlightCodeAvailable(data.flightCode);
     }
@@ -226,7 +227,8 @@ export const flightService = {
 
   async updateStatus(id: string, status: UpdateFlightInput['status'], session: Session) {
     checkPermission(session, 'manage-status');
-    await flightRepository.findById(id);
+    const flight = await flightRepository.findById(id);
+    if (!flight) throw new NotFoundError(`Flight not found: ${id}`);
     return flightRepository.update(id, { status });
   },
 
@@ -363,7 +365,8 @@ export const flightService = {
 
   async deleteFlight(id: string, session: Session) {
     checkPermission(session, 'delete');
-    await flightRepository.findById(id);
+    const flight = await flightRepository.findById(id);
+    if (!flight) throw new NotFoundError(`Flight not found: ${id}`);
     await assertFlightDeletable(id);
     return flightRepository.delete(id);
   },

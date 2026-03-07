@@ -44,10 +44,10 @@ const mockDashboardData = {
 };
 
 describe('DashboardOverview Component', () => {
-  const renderComponent = (data = mockDashboardData) => {
+  const renderComponent = (data = mockDashboardData, role = 'ADMIN') => {
     return render(
       <MantineProvider>
-        <DashboardOverview data={data} />
+        <DashboardOverview data={data} userRole={role} />
       </MantineProvider>
     );
   };

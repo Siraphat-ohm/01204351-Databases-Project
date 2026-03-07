@@ -30,6 +30,7 @@ export const staffService = {
     checkPermission(session, 'read');
 
     const staff = await staffRepository.findById(id, staffAdminInclude);
+    if (!staff) throw new NotFoundError(`Staff profile not found: ${id}`);
     return staff as StaffAdmin;
   },
 
@@ -67,10 +68,10 @@ export const staffService = {
 
     const data = createStaffSchema.parse(input);
 
-    const userExists = await staffRepository.findByUserId(data.userId).then(() => true).catch(() => false);
+    const userExists = await staffRepository.findByUserId(data.userId).catch(() => null);
     if (userExists) throw new ConflictError('User already has a staff profile');
 
-    const employeeExists = await staffRepository.findByEmployeeId(data.employeeId).then(() => true).catch(() => false);
+    const employeeExists = await staffRepository.findByEmployeeId(data.employeeId).catch(() => null);
     if (employeeExists) throw new ConflictError('Employee ID already exists');
 
     return staffRepository.create(data, staffAdminInclude);

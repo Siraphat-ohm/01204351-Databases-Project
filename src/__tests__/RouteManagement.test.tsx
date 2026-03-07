@@ -31,10 +31,10 @@ const mockRoutes = [
 ];
 
 describe('RouteManagement Component', () => {
-  const renderComponent = (routes = mockRoutes, totalPages = 1, currentPage = 1) => {
+  const renderComponent = (routes = mockRoutes, totalPages = 1, currentPage = 1, role = 'ADMIN') => {
     return render(
       <MantineProvider>
-        <RouteManagement initialRoutes={routes} totalPages={totalPages} currentPage={currentPage} />
+        <RouteManagement initialRoutes={routes} totalPages={totalPages} currentPage={currentPage} userRole={role} />
       </MantineProvider>
     );
   };

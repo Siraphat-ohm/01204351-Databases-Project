@@ -23,6 +23,8 @@ const mockLogs = [
   {
     id: 'log-1',
     flightId: 'FLIGHT-12345678',
+    flightCode: 'TG123',
+    route: 'BKK - CNX',
     captainName: 'Capt. Smith',
     gateChanges: [],
     weatherConditions: { origin: 'Clear', destination: 'Rainy' },
@@ -36,14 +38,15 @@ describe('FlightOpsLogManagement Component', () => {
   const renderComponent = (logs = mockLogs, role = 'ADMIN', totalPages = 1, currentPage = 1) => {
     return render(
       <MantineProvider>
-        <FlightOpsLogManagement initialLogs={logs} userRole={role} totalPages={totalPages} currentPage={currentPage} />
+        <FlightOpsLogManagement initialLogs={logs as any} userRole={role} totalPages={totalPages} currentPage={currentPage} />
       </MantineProvider>
     );
   };
 
   it('renders flight ops logs data correctly', () => {
     renderComponent();
-    expect(screen.getByText('FLIGHT-1')).toBeInTheDocument(); // Truncated display
+    expect(screen.getByText('TG123')).toBeInTheDocument();
+    expect(screen.getByText('BKK - CNX')).toBeInTheDocument();
     expect(screen.getByText('Capt. Smith')).toBeInTheDocument();
     expect(screen.getByText('1 Incidents')).toBeInTheDocument();
   });

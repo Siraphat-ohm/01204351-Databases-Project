@@ -10,7 +10,8 @@
     "db:migrate": "bunx prisma migrate dev",
     "db:seed": "bunx tsx prisma/seed.ts",
     "db:seed-seats": "bunx tsx prisma/seed-seats.ts",
-    "db:reset": "bunx prisma migrate reset"
+    "db:reset": "bunx prisma migrate reset",
+    "test": "bunx jest"
   },
   "dependencies": {
     "@mantine/core": "^8.3.14",
@@ -41,6 +42,7 @@
     "stripe": "^20.4.0",
     "swagger-ui-react": "^5.31.2",
     "tabler": "^1.0.0-alpha.8",
+    "yokairlines": ".",
     "zod": "^4.3.6",
     "zod-openapi": "^5.4.6"
   },
