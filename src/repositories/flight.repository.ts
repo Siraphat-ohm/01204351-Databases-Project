@@ -42,9 +42,9 @@ export const flightRepository = {
   findByCode: (flightCode: string, include?: Prisma.FlightInclude) =>
     prisma.flight.findUniqueOrThrow({ where: { flightCode }, include }),
 
-  findDetailByCode: (params: FlightCodeSearchParams, include?: Prisma.FlightInclude) => {
+  findDetailByCode: (params: FlightCodeSearchParams) => {
     const { flightCode } = FlightCodeSearchSchema.parse(params);
-    return prisma.flight.findUniqueOrThrow({ where: { flightCode }, include });
+    return prisma.flight.findUniqueOrThrow({ where: { flightCode }, include: flightAdminInclude });
   },
 
   findAll: (args?: { where?: Prisma.FlightWhereInput; skip?: number; take?: number }) =>
