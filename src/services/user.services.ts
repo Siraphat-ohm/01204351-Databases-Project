@@ -35,12 +35,16 @@ const {
 
 export const userService = {
   async findMe(session: Session) {
-    return userRepository.findByIdSelf(session.user.id);
+    const user = await userRepository.findByIdSelf(session.user.id);
+    if (!user) throw new NotFoundError(`User not found: ${session.user.id}`);
+    return user;
   },
 
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
-    return userRepository.findByIdAdmin(id);
+    const user = await userRepository.findByIdAdmin(id);
+    if (!user) throw new NotFoundError(`User not found: ${id}`);
+    return user;
   },
 
   async findAll(session: Session) {
@@ -74,7 +78,8 @@ export const userService = {
 
   async updateMyProfile(input: UpdateMyProfileInput, session: Session) {
     const data = updateMyProfileSchema.parse(input);
-    await userRepository.findByIdSelf(session.user.id);
+    const user = await userRepository.findByIdSelf(session.user.id);
+    if (!user) throw new NotFoundError(`User not found: ${session.user.id}`);
     return userRepository.updateMyProfile(session.user.id, data);
   },
 
@@ -82,7 +87,8 @@ export const userService = {
     checkPermission(session, 'update-role');
 
     const data = updateUserRoleSchema.parse(input);
-    await userRepository.findByIdAdmin(id);
+    const user = await userRepository.findByIdAdmin(id);
+    if (!user) throw new NotFoundError(`User not found: ${id}`);
     return userRepository.updateRole(id, data.role);
   },
 
@@ -90,13 +96,15 @@ export const userService = {
     checkPermission(session, 'update');
 
     const data = updateMyProfileSchema.parse(input);
-    await userRepository.findByIdAdmin(id);
+    const user = await userRepository.findByIdAdmin(id);
+    if (!user) throw new NotFoundError(`User not found: ${id}`);
     return userRepository.update(id, data);
   },
 
   async deleteUser(id: string, session: Session) {
     checkPermission(session, 'delete');
-    await userRepository.findByIdAdmin(id);
+    const user = await userRepository.findByIdAdmin(id);
+    if (!user) throw new NotFoundError(`User not found: ${id}`);
     return userRepository.delete(id);
   },
 };

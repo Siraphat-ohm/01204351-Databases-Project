@@ -12,7 +12,7 @@ import type { ServiceSession as Session } from '@/services/_shared/session';
 import type { PaginatedResponse } from '@/types/common';
 import type { Prisma } from '@/generated/prisma/client';
 import { makePermissionHelpers } from '@/services/_shared/authorization';
-import { ConflictError, UnauthorizedError } from '@/lib/errors';
+import { ConflictError, NotFoundError, UnauthorizedError } from '@/lib/errors';
 import {
   resolvePagination,
   type PaginationParams,
@@ -25,12 +25,8 @@ const { checkPermission } = makePermissionHelpers<AircraftServiceAction>(
 );
 
 async function assertTailNumberAvailable(tailNumber: string) {
-  try {
-    await aircraftRepository.findByTailNumber(tailNumber);
-    throw new ConflictError(`Aircraft already exists: ${tailNumber}`);
-  } catch (e) {
-    if (e instanceof ConflictError) throw e;
-  }
+  const existing = await aircraftRepository.findByTailNumber(tailNumber).catch(() => null);
+  if (existing) throw new ConflictError(`Aircraft already exists: ${tailNumber}`);
 }
 
 async function assertAircraftDeletable(id: string) {
@@ -41,7 +37,9 @@ async function assertAircraftDeletable(id: string) {
 export const aircraftService = {
   async findById(id: string, session: Session) {
     checkPermission(session, 'read');
-    return aircraftRepository.findById(id);
+    const aircraft = await aircraftRepository.findById(id);
+    if (!aircraft) throw new NotFoundError(`Aircraft not found: ${id}`);
+    return aircraft;
   },
 
   async findAll(session: Session) {

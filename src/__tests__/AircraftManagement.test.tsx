@@ -41,7 +41,7 @@ const mockAircrafts = [
 ];
 
 describe('AircraftManagement Component', () => {
-  const renderComponent = (aircrafts = mockAircrafts, types = mockAircraftTypes, totalPages = 1, currentPage = 1) => {
+  const renderComponent = (aircrafts = mockAircrafts, types = mockAircraftTypes, totalPages = 1, currentPage = 1, role = 'ADMIN') => {
     return render(
       <MantineProvider>
         <AircraftManagement 
@@ -49,6 +49,7 @@ describe('AircraftManagement Component', () => {
           aircraftTypes={types}
           totalPages={totalPages} 
           currentPage={currentPage} 
+          userRole={role}
         />
       </MantineProvider>
     );
