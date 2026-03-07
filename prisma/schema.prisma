@@ -289,13 +289,6 @@ model Transaction {
   type      TransactionType   @default(PAYMENT)
 
   paymentMethodType String?
-  paymentMethodRef  String?
-
-  stripePaymentIntentId String? @unique
-  stripeChargeId        String?
-
-  failureCode    String?
-  failureMessage String?
 
   refundedAt            DateTime?
   refundReason          String?
@@ -304,13 +297,13 @@ model Transaction {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  stripeSessionId String? @unique
-
   booking Booking @relation(fields: [bookingId], references: [id])
+  originalTransaction Transaction?  @relation("TransactionRefunds", fields: [originalTransactionId], references: [id])
+  refundTransactions  Transaction[] @relation("TransactionRefunds")
 
   @@index([bookingId])
   @@index([status])
-  @@index([stripePaymentIntentId])
+  @@index([originalTransactionId])
 }
 
 model Session {
