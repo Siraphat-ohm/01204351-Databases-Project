@@ -7,8 +7,8 @@ import {
 import { Prisma, Role } from '@/generated/prisma/client';
 
 export const userRepository = {
-  findByIdAdmin: (id: string, include?: Prisma.UserInclude) =>
-    prisma.user.findUniqueOrThrow({ where: { id }, include }),
+  findByIdAdmin: (id: string) =>
+    prisma.user.findUniqueOrThrow({ where: { id }, select: userAdminSelect }),
 
   findByIdSelf: (id: string) =>
     prisma.user.findUniqueOrThrow({ where: { id }, select: userSelfSelect }),
