@@ -169,7 +169,6 @@ export function IssueReportForm({ initialFlights = [] }: IssueReportFormProps) {
                           <InputBase
                             label="Related Flight"
                             description="Search by flight code"
-                            placeholder="Type to search flights (e.g. TG123)"
                             component="button"
                             type="button"
                             pointer
