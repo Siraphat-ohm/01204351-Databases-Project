@@ -7,8 +7,8 @@
 ## สมาชิกในกลุ่ม
 
 - [นายสิรภัทร ทัพภะ](https://github.com/Siraphat-ohm)  6710504409
-- [นายธิติ ทรงพลวารินทร์](https://github.com/Thiti) 6710503992
-- [นายพงศ์พล บุญศิริ](https://github.com/Pongpol) 6710504131
+- [นายธิติ ทรงพลวารินทร์](https://github.com/ThitiSo) 6710503992
+- [นายพงศ์พล บุญศิริ](https://github.com/slowyier) 6710504131
 
 ---
 
