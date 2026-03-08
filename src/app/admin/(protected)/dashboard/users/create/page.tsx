@@ -11,7 +11,7 @@ export default async function CreateUserPage() {
   }
 
   // Fetch airports for base/station selection
-  let airports = [];
+  let airports: Awaited<ReturnType<typeof airportService.findAll>> = [];
   try {
     airports = await airportService.findAll(session as any);
   } catch (error) {
