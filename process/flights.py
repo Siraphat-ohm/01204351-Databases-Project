@@ -1,34 +1,75 @@
+import csv
 import json
-import os
 import random
 from datetime import datetime, timedelta
-from typing import Dict, List
+from pathlib import Path
+from typing import Dict, List, Tuple
 
-OUTPUT_DIR = "../prisma/data"
+OUTPUT_DIR = Path("../prisma/data")
+ROUTES_FILE = Path("routes.dat")  # Your OpenFlights file
+
+
+def load_openflights_routes(
+    filepath: Path, target_route_count: int = 40
+) -> List[Tuple[str, str, int, int]]:
+    """
+    Parses OpenFlights routes.dat, picks a random sample of routes,
+    and estimates the distance and duration.
+    """
+    print(f"📖 Reading OpenFlights data from {filepath}...")
+
+    unique_route_pairs = set()
+
+    try:
+        with filepath.open("r", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            for row in reader:
+                # OpenFlights format: Airline, ID, Source, ID, Dest, ID, Codeshare, Stops, Equip
+                if len(row) >= 6:
+                    origin = row[2]
+                    dest = row[4]
+                    # Skip invalid data ('\N' is OpenFlights' null value)
+                    if origin != "\\N" and dest != "\\N":
+                        unique_route_pairs.add((origin, dest))
+    except FileNotFoundError:
+        print(f"❌ Could not find {filepath}. Please ensure the file exists.")
+        return []
+
+    print(f"✅ Found {len(unique_route_pairs):,} unique routes in dataset.")
+
+    # Pick a random sample to keep DB size manageable
+    routes_list = list(unique_route_pairs)
+    if len(routes_list) > target_route_count:
+        sampled_routes = random.sample(routes_list, target_route_count)
+    else:
+        sampled_routes = routes_list
+
+    final_routes = []
+    for origin, dest in sampled_routes:
+        # Since OpenFlights routes.dat doesn't include distance/time, we simulate it.
+        # Random duration between 1 hour (60 mins) and 14 hours (840 mins)
+        duration_mins = random.randint(60, 840)
+
+        # Estimate distance: Commercial jets fly roughly 800 km/h (13.3 km/min)
+        distance_km = int(duration_mins * 13.3)
+
+        final_routes.append((origin, dest, distance_km, duration_mins))
+
+    return final_routes
 
 
 def generate_flight_code(airline_code: str = "YOK", flight_number: int = 1) -> str:
-    """Generate flight code like YOK101, YOK102, etc."""
-    return f"{airline_code}{flight_number:03d}"
+    return f"{airline_code}{flight_number:05d}"
 
 
 def calculate_arrival_time(departure_time: datetime, duration_mins: int) -> datetime:
-    """Calculate arrival time based on departure and duration."""
     return departure_time + timedelta(minutes=duration_mins)
 
 
-def calculate_base_price(distance_km: int, class_multiplier: float = 1.0) -> float:
-    """
-    Calculate base price based on distance.
-    Formula: Base price = (distance * 0.15) + 50
-    Short haul (< 1000km): ~$200-300
-    Medium haul (1000-3000km): ~$300-500
-    Long haul (> 3000km): ~$500-1000+
-    """
+def calculate_base_price(distance_km: int) -> float:
     base = (distance_km * 0.15) + 50
-    # Add some randomness (±15%)
     variation = random.uniform(0.85, 1.15)
-    return round(base * variation * class_multiplier, 2)
+    return round(base * variation, 2)
 
 
 def generate_flights_for_route(
@@ -38,152 +79,95 @@ def generate_flights_for_route(
     distance_km: int,
     duration_mins: int,
     start_flight_number: int,
-    days_range: int = 90,
-    flights_per_day: int = 2,
-) -> List[Dict]:
-    """Generate multiple flights for a given route."""
+    days_range: int = 180,
+    flights_per_day: int = 3,
+) -> Tuple[List[Dict], int]:
+
     flights = []
     current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    current_flight_number = start_flight_number
 
-    # Generate flights for the next X days
     for day in range(days_range):
         flight_date = current_date + timedelta(days=day)
 
-        # Generate multiple flights per day
         for flight_of_day in range(flights_per_day):
-            flight_number = (
-                start_flight_number + (day * flights_per_day) + flight_of_day
-            )
-
-            # Varied departure times throughout the day
             if flight_of_day == 0:
-                # Morning flight (6 AM - 10 AM)
                 hour = random.randint(6, 10)
+            elif flight_of_day == 1:
+                hour = random.randint(12, 16)
             else:
-                # Afternoon/Evening flight (2 PM - 8 PM)
-                hour = random.randint(14, 20)
+                hour = random.randint(18, 23)
 
             minute = random.choice([0, 15, 30, 45])
-
             departure_time = flight_date.replace(hour=hour, minute=minute)
             arrival_time = calculate_arrival_time(departure_time, duration_mins)
 
-            # Determine status based on departure time
             now = datetime.now()
             if departure_time < now - timedelta(hours=2):
-                # Flight has already arrived
                 status = "ARRIVED"
             elif departure_time < now:
-                # Flight has departed but not arrived yet
                 status = "DEPARTED"
             elif departure_time < now + timedelta(hours=2):
-                # Flight is boarding
                 status = "BOARDING"
             else:
-                # Future flight
                 status = random.choice(
                     ["SCHEDULED"] * 95 + ["DELAYED"] * 3 + ["CANCELLED"] * 2
                 )
 
-            # Generate gate (A1-A20, B1-B20, C1-C20)
-            terminal = random.choice(["A", "B", "C"])
-            gate_num = random.randint(1, 20)
-            gate = f"{terminal}{gate_num}"
-
-            # Calculate base price (economy class)
-            base_price = calculate_base_price(distance_km)
+            gate = f"{random.choice(['A', 'B', 'C', 'D', 'E'])}{random.randint(1, 40)}"
 
             flights.append(
                 {
-                    "flightCode": generate_flight_code("YOK", flight_number),
+                    "flightCode": generate_flight_code("YOK", current_flight_number),
                     "routeId": route_id,
-                    "origin": origin,  # For reference only, not in DB
-                    "dest": dest,  # For reference only, not in DB
-                    "departureTime": departure_time.isoformat(),
-                    "arrivalTime": arrival_time.isoformat(),
+                    "origin": origin,
+                    "dest": dest,
+                    "departureTime": departure_time.isoformat() + "Z",
+                    "arrivalTime": arrival_time.isoformat() + "Z",
                     "status": status,
                     "gate": gate,
-                    "basePrice": base_price,
+                    "basePrice": calculate_base_price(distance_km),
                 }
             )
+            current_flight_number += 1
 
-    return flights
+    return flights, current_flight_number
 
 
-def generate_all_flights():
-    """Generate flights for predefined popular routes."""
+def run_generator():
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    print("--- Yok Airlines x OpenFlights Generator ---")
 
-    print("🛫 Generating Flights...")
+    # Target 40 routes * 180 days * 3 flights/day = 21,600 flights
+    all_routes = load_openflights_routes(ROUTES_FILE, target_route_count=40)
 
-    # Popular routes (you should adjust these based on your actual routes)
-    # Format: (origin, dest, distance_km, duration_mins)
-    popular_routes = [
-        # Domestic Thailand
-        ("BKK", "CNX", 600, 75),  # Bangkok to Chiang Mai
-        ("BKK", "HKT", 680, 85),  # Bangkok to Phuket
-        ("BKK", "HDY", 450, 60),  # Bangkok to Hat Yai
-        ("BKK", "KBV", 650, 80),  # Bangkok to Krabi
-        ("BKK", "USM", 760, 95),  # Bangkok to Koh Samui
-        # Regional Asia
-        ("BKK", "SIN", 1430, 150),  # Bangkok to Singapore
-        ("BKK", "KUL", 1180, 130),  # Bangkok to Kuala Lumpur
-        ("BKK", "HKG", 1700, 165),  # Bangkok to Hong Kong
-        ("BKK", "TPE", 2300, 210),  # Bangkok to Taipei
-        ("BKK", "ICN", 3590, 340),  # Bangkok to Seoul
-        ("BKK", "NRT", 4600, 380),  # Bangkok to Tokyo
-        # Long Haul
-        ("BKK", "SYD", 7520, 560),  # Bangkok to Sydney
-        ("BKK", "LHR", 9560, 720),  # Bangkok to London
-        ("BKK", "CDG", 9450, 710),  # Bangkok to Paris
-    ]
+    if not all_routes:
+        return
 
     all_flights = []
-    flight_number = 100  # Starting flight number
+    current_flight_number = 10000
 
-    for origin, dest, distance, duration in popular_routes:
-        # Generate 2 flights per day for 90 days = 180 flights per route
-        route_flights = generate_flights_for_route(
-            route_id=0,  # Will be set by seed script
+    print(f"\n🛫 Generating flights for {len(all_routes)} selected routes...")
+    for origin, dest, distance, duration in all_routes:
+        route_flights, next_flight_number = generate_flights_for_route(
+            route_id=0,
             origin=origin,
             dest=dest,
             distance_km=distance,
             duration_mins=duration,
-            start_flight_number=flight_number,
-            days_range=90,
-            flights_per_day=2,
+            start_flight_number=current_flight_number,
+            days_range=180,
+            flights_per_day=3,
         )
         all_flights.extend(route_flights)
-        flight_number += len(route_flights)
-        print(f"   Generated {len(route_flights)} flights for {origin} → {dest}")
+        current_flight_number = next_flight_number
+        print(f"  Generated {len(route_flights)} flights for {origin} ⇄ {dest}")
 
-    return all_flights
+    output_path = OUTPUT_DIR / "flights.json"
+    with output_path.open("w", encoding="utf-8") as f:
+        json.dump(all_flights, f, indent=2, ensure_ascii=False)
 
-
-def run_generator():
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-
-    print("--- Yok Airlines Flight Generator ---")
-    flights = generate_all_flights()
-
-    # Save to JSON
-    output_path = os.path.join(OUTPUT_DIR, "flights.json")
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(flights, f, indent=2, ensure_ascii=False)
-
-    print(f"\n💾 Saved {len(flights)} flights to {output_path}")
-    print(f"📊 Flight Statistics:")
-
-    # Statistics
-    statuses = {}
-    for flight in flights:
-        status = flight["status"]
-        statuses[status] = statuses.get(status, 0) + 1
-
-    for status, count in sorted(statuses.items()):
-        print(f"   {status}: {count}")
-
-    print("\n✨ Flight generation completed!")
+    print(f"\n💾 Saved {len(all_flights):,} flights to {output_path}")
 
 
 if __name__ == "__main__":

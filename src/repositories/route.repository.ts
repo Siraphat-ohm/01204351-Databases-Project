@@ -1,0 +1,171 @@
+import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@/generated/prisma/client';
+import {
+  routePublicSelect,
+  type CreateRouteInput,
+  type UpdateRouteInput,
+} from '@/types/route.type';
+
+type RouteFindManyArgs = {
+  where?: Prisma.RouteWhereInput;
+  skip?: number;
+  take?: number;
+  include?: Prisma.RouteInclude;
+};
+
+export const routeRepository = {
+  isAdminRole: (role: string) => role?.trim().toUpperCase() === 'ADMIN',
+
+  findByIdPublic: (id: string) =>
+    prisma.route.findUnique({
+      where: { id },
+      select: routePublicSelect,
+    }),
+
+  findByIdAdmin: (id: string, include?: Prisma.RouteInclude) =>
+    prisma.route.findUnique({
+      where: { id },
+      include,
+    }),
+
+  findByIdForRole: (id: string, role: string) => {
+    if (routeRepository.isAdminRole(role)) return routeRepository.findByIdAdmin(id);
+    return routeRepository.findByIdPublic(id);
+  },
+
+  findByIataCodes: (originCode: string, destCode: string) =>
+    prisma.route.findFirst({
+      where: {
+        origin:      { iataCode: originCode },
+        destination: { iataCode: destCode },
+      },
+      select: routePublicSelect,
+    }),
+
+  findByAirportIds: (originAirportId: string, destAirportId: string) =>
+    prisma.route.findUnique({
+      where: {
+        originAirportId_destAirportId: { originAirportId, destAirportId },
+      },
+    }),
+
+  findByAirportIdsEitherDirection: (airportAId: string, airportBId: string) =>
+    prisma.route.findFirst({
+      where: {
+        OR: [
+          {
+            originAirportId: airportAId,
+            destAirportId: airportBId,
+          },
+          {
+            originAirportId: airportBId,
+            destAirportId: airportAId,
+          },
+        ],
+      },
+    }),
+
+  findDistinctOrigins: () =>
+    prisma.airport.findMany({
+      where: { origins: { some: {} } },
+      select: {
+        id:       true,
+        iataCode: true,
+        name:     true,
+        city:     true,
+        country:  true,
+      },
+      orderBy: { iataCode: 'asc' },
+    }),
+
+  findDestinationsByOrigin: (originCode: string) =>
+    prisma.airport.findMany({
+      where: {
+        destinations: {
+          some: { origin: { iataCode: originCode } },
+        },
+      },
+      select: {
+        id:       true,
+        iataCode: true,
+        name:     true,
+        city:     true,
+        country:  true,
+      },
+      orderBy: { iataCode: 'asc' },
+    }),
+
+  findAll: (args?: RouteFindManyArgs) =>
+    prisma.route.findMany({
+      where: args?.where,
+      skip: args?.skip,
+      take: args?.take,
+      include: args?.include,
+      orderBy: [
+        { origin:      { iataCode: 'asc' } },
+        { destination: { iataCode: 'asc' } },
+      ],
+    }),
+
+  findMany: (args: RouteFindManyArgs) =>
+    prisma.route.findMany({
+      where: args.where,
+      skip: args.skip,
+      take: args.take,
+      include: args.include,
+      orderBy: [
+        { origin:      { iataCode: 'asc' } },
+        { destination: { iataCode: 'asc' } },
+      ],
+    }),
+
+  count: (where?: Prisma.RouteWhereInput) =>
+    prisma.route.count({ where }),
+
+  create: (data: Omit<CreateRouteInput, 'createReturn'>, include?: Prisma.RouteInclude) =>
+    prisma.route.create({
+      data: {
+        originAirportId: data.originAirportId,
+        destAirportId:   data.destAirportId,
+        distanceKm:      data.distanceKm,
+        durationMins:    data.durationMins,
+      },
+      include,
+    }),
+
+  createWithReturn: (data: Omit<CreateRouteInput, 'createReturn'>, include?: Prisma.RouteInclude) =>
+    prisma.$transaction([
+      prisma.route.create({
+        data: {
+          originAirportId: data.originAirportId,
+          destAirportId:   data.destAirportId,
+          distanceKm:      data.distanceKm,
+          durationMins:    data.durationMins,
+        },
+        include,
+      }),
+      prisma.route.create({
+        data: {
+          originAirportId: data.destAirportId,
+          destAirportId:   data.originAirportId,
+          distanceKm:      data.distanceKm,
+          durationMins:    data.durationMins,
+        },
+        include,
+      }),
+    ]),
+
+  update: (id: string, data: UpdateRouteInput, include?: Prisma.RouteInclude) =>
+    prisma.route.update({ where: { id }, data, include }),
+
+  delete: (id: string) =>
+    prisma.route.delete({ where: { id } }),
+
+  countActiveFlights: (routeId: string) =>
+    prisma.flight.count({
+      where: {
+        routeId,
+        status: { in: ['SCHEDULED', 'BOARDING', 'DEPARTED'] },
+      },
+    }),
+};

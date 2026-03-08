@@ -1,674 +1,864 @@
-import fs from "fs";
-import path from "path";
+import "dotenv/config";
 import {
   PrismaClient,
-  AircraftStatus,
   Role,
   Rank,
+  AircraftStatus,
   FlightStatus,
   BookingStatus,
   TicketClass,
-  EmergencyStatus,
+  TransactionStatus,
+  TransactionType,
 } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import pg from "pg";
+import { faker } from "@faker-js/faker";
+import Papa from "papaparse";
+import bcrypt from "bcrypt";
+import { seedMongoData } from "./helpers/mongo-seed.helper";
+import { seedSqlData } from "./helpers/sql-seed.helper";
+import {
+  AIRCRAFT_COUNTS,
+  AIRCRAFT_TYPE_DEFS,
+  ALLOWED_AIRPORT_TYPES,
+  ASIAN_COUNTRIES,
+  FALLBACK_AIRPORTS,
+  OURAIRPORTS_CSV_URL,
+  PASSENGER_NATIONALITIES,
+  PAYMENT_METHODS,
+  REFUND_REASONS,
+  ROUTE_PAIRS,
+  SEAT_LAYOUT_DEFS,
+  SEED_DEFAULT_PASSWORD,
+  STAFF_DEFS,
+  TAIL_LETTERS,
+  TAIL_PREFIX,
+} from "./helpers/seed-config.helper";
+import {
+  addDays,
+  addMinutes,
+  chunkArray,
+  createCuid,
+  durationMins,
+  haversineKm,
+  makeBookingRef,
+  pick,
+  randInt,
+  uniqueCode,
+} from "./helpers/seed-utils.helper";
 
-const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+const pg = require("pg") as typeof import("pg");
 
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
-const prisma = new PrismaClient({
-  adapter,
-});
+type CabinName = "FIRST" | "BUSINESS" | "ECONOMY";
 
-// File paths
-const airportsFilePath = path.join(process.cwd(), "prisma/data/airports.json");
-const planesFilePath = path.join(process.cwd(), "prisma/data/planes.json");
-const routesFilePath = path.join(process.cwd(), "prisma/data/routes.json");
-const countriesFilePath = path.join(
-  process.cwd(),
-  "prisma/data/countries.json",
-);
-const flightsFilePath = path.join(process.cwd(), "prisma/data/flights.json");
-const bookingsFilePath = path.join(process.cwd(), "prisma/data/bookings.json");
-const emergencyTypesFilePath = path.join(
-  process.cwd(),
-  "prisma/data/emergency-types.json",
-);
-
-const adminsFilePath = path.join(process.cwd(), "prisma/data/admins.json");
-const pilotsFilePath = path.join(process.cwd(), "prisma/data/pilots.json");
-const crewsFilePath = path.join(process.cwd(), "prisma/data/crews.json");
-const passengersFilePath = path.join(
-  process.cwd(),
-  "prisma/data/passengers.json",
-);
-
-// Interfaces
-interface CountryData {
-  name: string;
-  code: string;
+interface LoadedCabin {
+  cabin: string;
+  rowStart: number;
+  rowEnd: number;
+  columns: string[];
+  blockedSeats: string[];
 }
 
-interface AirportData {
-  name: string;
-  city: string;
-  country: string;
-  iataCode: string;
+interface LoadedLayout {
+  aircraftTypeIataCode: string;
+  cabins: LoadedCabin[];
 }
 
-interface PlaneTypeData {
-  model: string;
-  code: string;
-  capacityEco: number;
-  capacityBiz: number;
+const seatCache = new Map<
+  string,
+  {
+    allSeats: string[];
+    classMap: Map<string, TicketClass>;
+    cabinMap: Map<TicketClass, string[]>;
+  }
+>();
+
+function cabinToTicketClass(cabin: CabinName): TicketClass {
+  if (cabin === "FIRST") return TicketClass.FIRST_CLASS;
+  if (cabin === "BUSINESS") return TicketClass.BUSINESS;
+  return TicketClass.ECONOMY;
 }
 
-interface RouteData {
-  origin: string;
-  dest: string;
-  distance: number;
-  duration: number;
+function buildSeatCache(layouts: Map<string, LoadedLayout>) {
+  for (const [iataCode, layout] of layouts.entries()) {
+    const allSeats: string[] = [];
+    const classMap = new Map<string, TicketClass>();
+    const cabinMap = new Map<TicketClass, string[]>();
+
+    for (const cabin of layout.cabins) {
+      const ticketClass = cabinToTicketClass(cabin.cabin as CabinName);
+      const cabinSeats: string[] = [];
+
+      for (let row = cabin.rowStart; row <= cabin.rowEnd; row++) {
+        for (const col of cabin.columns) {
+          const seatLabel = `${row}${col}`;
+          if (!cabin.blockedSeats.includes(seatLabel)) {
+            allSeats.push(seatLabel);
+            cabinSeats.push(seatLabel);
+            classMap.set(seatLabel, ticketClass);
+          }
+        }
+      }
+
+      cabinMap.set(ticketClass, cabinSeats);
+    }
+
+    seatCache.set(iataCode, { allSeats, classMap, cabinMap });
+  }
 }
 
-interface UserSeed {
-  username: string;
-  email: string;
-  passwordHash: string;
-  role: Role;
-  firstName: string;
-  lastName: string;
-  phone?: string;
-  staffProfile?: {
-    employeeId: string;
-    rank?: Rank;
-    licenseNumber?: string;
-    flightHours?: number;
-    skills?: string[];
+function generateSeatForAircraft(aircraftTypeIataCode: string, cls: TicketClass): string | null {
+  const seats = seatCache.get(aircraftTypeIataCode)?.cabinMap.get(cls);
+  return seats && seats.length > 0 ? pick(seats) : null;
+}
+
+function allSeatsForCabin(aircraftTypeIataCode: string, cls: TicketClass): string[] {
+  return seatCache.get(aircraftTypeIataCode)?.cabinMap.get(cls) ?? [];
+}
+
+function allSeatsForAircraft(aircraftTypeIataCode: string): string[] {
+  return seatCache.get(aircraftTypeIataCode)?.allSeats ?? [];
+}
+
+function ticketClassForSeat(aircraftTypeIataCode: string, seatLabel: string): TicketClass | null {
+  return seatCache.get(aircraftTypeIataCode)?.classMap.get(seatLabel) ?? null;
+}
+
+function aircraftHasClass(aircraftTypeIataCode: string, cls: TicketClass): boolean {
+  const seats = seatCache.get(aircraftTypeIataCode)?.cabinMap.get(cls);
+  return Boolean(seats && seats.length > 0);
+}
+
+async function fetchOurAirports() {
+  console.log("📡 Fetching airports from OurAirports...");
+
+  let csv = "";
+  try {
+    const res = await fetch(OURAIRPORTS_CSV_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    csv = await res.text();
+  } catch {
+    console.warn("  ⚠️  Could not fetch OurAirports — using fallback data only");
+  }
+
+  const map = new Map<string, any>();
+
+  if (csv) {
+    const { data } = Papa.parse<any>(csv, { header: true, skipEmptyLines: true });
+    for (const row of data) {
+      const iata = row.iata_code?.trim();
+      if (!iata || iata.length !== 3) continue;
+      if (!ALLOWED_AIRPORT_TYPES.has(row.type)) continue;
+      if (!ASIAN_COUNTRIES.has(row.iso_country)) continue;
+      if (row.scheduled_service !== "yes") continue;
+      if (map.has(iata)) continue;
+
+      map.set(iata, {
+        id: createCuid(),
+        iataCode: iata,
+        name: row.name.trim(),
+        city: row.municipality?.trim() || row.name.trim(),
+        country: row.iso_country.trim(),
+        lat: parseFloat(row.latitude_deg),
+        lon: parseFloat(row.longitude_deg),
+      });
+    }
+  }
+
+  for (const fb of FALLBACK_AIRPORTS) {
+    if (!map.has(fb.iataCode)) {
+      map.set(fb.iataCode, { id: createCuid(), ...fb });
+    }
+  }
+
+  const neededIatas = new Set(ROUTE_PAIRS.flat());
+  const filtered = Array.from(map.values()).filter((a) => neededIatas.has(a.iataCode));
+
+  console.log(`✅ ${filtered.length} airports loaded in memory`);
+  return filtered;
+}
+
+async function seedAircraftTypes() {
+  console.log("🛩️  Seeding aircraft types...");
+  const typesData = AIRCRAFT_TYPE_DEFS.map((def) => ({ id: createCuid(), ...def }));
+  await prisma.aircraftType.createMany({ data: typesData });
+  return typesData;
+}
+
+async function seedSeatLayouts(aircraftTypes: { id: string; iataCode: string }[]) {
+  console.log("💺 Seeding seat layouts into Postgres...");
+  const iataToId = new Map(aircraftTypes.map((t) => [t.iataCode, t.id]));
+
+  for (const def of SEAT_LAYOUT_DEFS) {
+    const aircraftTypeId = iataToId.get(def.iataCode);
+    if (!aircraftTypeId) continue;
+
+    await prisma.seatLayoutTemplate.create({
+      data: {
+        aircraftTypeId,
+        reference: def.reference,
+        cabins: {
+          create: def.cabins.map((c, i) => ({
+            cabin: c.cabin as any,
+            rowStart: c.rowStart,
+            rowEnd: c.rowEnd,
+            columns: c.columns,
+            aisleAfter: c.aisleAfter,
+            exitRows: c.exitRows,
+            blockedSeats: c.blockedSeats,
+            sortOrder: i,
+          })),
+        },
+      },
+    });
+  }
+
+  console.log(`   ✅ ${SEAT_LAYOUT_DEFS.length} seat layouts`);
+}
+
+async function loadSeatLayouts(): Promise<Map<string, LoadedLayout>> {
+  const templates = await prisma.seatLayoutTemplate.findMany({
+    include: {
+      cabins: { orderBy: { sortOrder: "asc" } },
+      aircraftType: { select: { iataCode: true } },
+    },
+  });
+
+  const map = new Map<string, LoadedLayout>();
+  for (const t of templates) {
+    map.set(t.aircraftType.iataCode, {
+      aircraftTypeIataCode: t.aircraftType.iataCode,
+      cabins: t.cabins.map((c) => ({
+        cabin: c.cabin,
+        rowStart: c.rowStart,
+        rowEnd: c.rowEnd,
+        columns: c.columns,
+        blockedSeats: c.blockedSeats,
+      })),
+    });
+  }
+
+  return map;
+}
+
+async function seedAircraft(types: any[]) {
+  console.log("✈️  Seeding aircraft fleet...");
+  const fleetData: any[] = [];
+  let tailIdx = 0;
+
+  for (const type of types) {
+    const count = AIRCRAFT_COUNTS[type.iataCode] ?? 2;
+    for (let i = 0; i < count; i++) {
+      const letter = TAIL_LETTERS[Math.floor(tailIdx / 9) % TAIL_LETTERS.length];
+      const num = (tailIdx % 9) + 1;
+      const tailNumber = `${TAIL_PREFIX}${letter}${num}`;
+      tailIdx++;
+
+      const status =
+        i === count - 1 && count >= 3 ? AircraftStatus.MAINTENANCE : AircraftStatus.ACTIVE;
+
+      fleetData.push({
+        id: createCuid(),
+        tailNumber,
+        status,
+        aircraftTypeId: type.id,
+      });
+    }
+  }
+
+  await prisma.aircraft.createMany({ data: fleetData });
+  return fleetData;
+}
+
+async function seedAirports(airportsData: any[]) {
+  console.log("🏙️  Seeding airports...");
+  await prisma.airport.createMany({ data: airportsData });
+  return airportsData;
+}
+
+async function seedRoutes(airportCoords: any[]) {
+  console.log("🗺️  Seeding routes...");
+
+  const routesData: any[] = [];
+  const iataToNode = new Map(airportCoords.map((a) => [a.iataCode, a]));
+  const seenPairs = new Set<string>();
+
+  for (const [oa, da] of ROUTE_PAIRS) {
+    const oCoords = iataToNode.get(oa);
+    const dCoords = iataToNode.get(da);
+    if (!oCoords || !dCoords) continue;
+
+    const distKm = haversineKm(oCoords.lat, oCoords.lon, dCoords.lat, dCoords.lon);
+    const mins = durationMins(distKm);
+
+    for (const [from, to] of [
+      [oCoords, dCoords],
+      [dCoords, oCoords],
+    ] as const) {
+      const key = `${from.iataCode}-${to.iataCode}`;
+      if (seenPairs.has(key)) continue;
+      seenPairs.add(key);
+
+      routesData.push({
+        id: createCuid(),
+        originAirportId: from.id,
+        destAirportId: to.id,
+        distanceKm: distKm,
+        durationMins: mins,
+      });
+    }
+  }
+
+  await prisma.route.createMany({ data: routesData });
+  return routesData;
+}
+
+async function seedUsers(dbAirports: any[], passengerCount = 200) {
+  console.log("👤 Seeding passengers and staff...");
+
+  const usersData: any[] = [];
+  const accountsData: any[] = [];
+  const staffProfilesData: any[] = [];
+
+  const passwordHash = await bcrypt.hash(SEED_DEFAULT_PASSWORD, 12);
+  const bkkAirport = dbAirports.find((a) => a.iataCode === "BKK") ?? dbAirports[0];
+  const thaiAirports = dbAirports.filter((a) => ["BKK", "DMK", "HKT", "CNX"].includes(a.iataCode));
+
+  const adminUserId = createCuid();
+  usersData.push({
+    id: adminUserId,
+    email: "admin@yokairlines.com",
+    name: "YokAirlines Admin",
+    phone: faker.phone.number(),
+    role: Role.ADMIN,
+    emailVerified: true,
+    image: null,
+  });
+  accountsData.push({
+    id: createCuid(),
+    accountId: adminUserId,
+    providerId: "credential",
+    userId: adminUserId,
+    password: passwordHash,
+  });
+  staffProfilesData.push({
+    id: createCuid(),
+    userId: adminUserId,
+    employeeId: "YK0000",
+    role: Role.ADMIN,
+    rank: Rank.MANAGER,
+    baseAirportId: bkkAirport.id,
+    stationId: bkkAirport.id,
+  });
+
+  for (let i = 0; i < passengerCount; i++) {
+    const userId = createCuid();
+    const firstName = faker.person.firstName();
+    const lastName = faker.person.lastName();
+
+    usersData.push({
+      id: userId,
+      email: faker.internet.email({ firstName, lastName }).toLowerCase(),
+      name: `${firstName} ${lastName}`,
+      phone: faker.phone.number(),
+      role: Role.PASSENGER,
+      emailVerified: Math.random() > 0.1,
+      image: Math.random() > 0.6 ? faker.image.avatar() : null,
+    });
+
+    accountsData.push({
+      id: createCuid(),
+      accountId: userId,
+      providerId: "credential",
+      userId,
+      password: passwordHash,
+    });
+  }
+
+  let empNum = 1000;
+  for (const def of STAFF_DEFS) {
+    for (let i = 0; i < def.count; i++) {
+      empNum++;
+      const employeeId = `YK${empNum}`;
+      const userId = createCuid();
+      const firstName = faker.person.firstName();
+      const lastName = faker.person.lastName();
+
+      usersData.push({
+        id: userId,
+        email: `${employeeId.toLowerCase()}@yokairlines.com`,
+        name: `${firstName} ${lastName}`,
+        phone: faker.phone.number(),
+        role: def.role,
+        emailVerified: true,
+      });
+
+      accountsData.push({
+        id: createCuid(),
+        accountId: userId,
+        providerId: "credential",
+        userId,
+        password: passwordHash,
+      });
+
+      staffProfilesData.push({
+        id: createCuid(),
+        userId,
+        employeeId,
+        role: def.role,
+        rank: def.rank,
+        baseAirportId: bkkAirport.id,
+        stationId: pick(thaiAirports.length ? thaiAirports : dbAirports).id,
+      });
+    }
+  }
+
+  for (const chunk of chunkArray(usersData, 5000)) {
+    await prisma.user.createMany({ data: chunk });
+  }
+  for (const chunk of chunkArray(accountsData, 5000)) {
+    await prisma.account.createMany({ data: chunk });
+  }
+  await prisma.staffProfile.createMany({ data: staffProfilesData });
+
+  console.log("  👑 Admin login: admin@yokairlines.com");
+  console.log(`  🔑 Seed credential password: ${SEED_DEFAULT_PASSWORD}`);
+
+  return {
+    passengers: usersData.filter((u) => u.role === Role.PASSENGER),
+    staffProfiles: staffProfilesData,
   };
 }
 
-interface FlightSeed {
-  flightCode: string;
-  origin: string;
-  dest: string;
-  departureTime: string;
-  arrivalTime: string;
-  status: string;
-  gate: string;
-  basePrice: number;
+function roundFare(value: number) {
+  return Math.max(500, Math.round(value / 10) * 10);
 }
 
-interface TicketSeed {
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  passportNumber: string | null;
-  gender: string;
-  seatNumber: string;
-  class: string;
-  price: number;
+function calcPrices(distanceKm: number, departure: Date) {
+  const baseEco = 900 + distanceKm * 4;
+
+  const hour = departure.getHours();
+  const day = departure.getDay();
+  const isWeekend = day === 0 || day === 6;
+  const isPeakHour = [6, 7, 8, 17, 18, 19, 20].includes(hour);
+
+  const now = new Date();
+  const leadDays = Math.floor((departure.getTime() - now.getTime()) / 86_400_000);
+
+  const weekendFactor = isWeekend ? 1.12 : 1;
+  const peakFactor = isPeakHour ? 1.1 : 1;
+  const leadFactor = leadDays >= 14 ? 1.02 : leadDays >= 3 ? 1.08 : 1.18;
+  const randomFactor = 0.98 + Math.random() * 0.18;
+
+  const eco = roundFare(baseEco * weekendFactor * peakFactor * leadFactor * randomFactor);
+  return {
+    basePriceEconomy: eco,
+    basePriceBusiness: roundFare(eco * 3.8),
+    basePriceFirst: roundFare(eco * 7.8),
+  };
 }
 
-interface BookingSeed {
-  bookingRef: string;
-  flightCode: string;
-  status: string;
-  totalPrice: number;
-  contactEmail: string;
-  contactPhone: string;
-  createdAt: string;
-  tickets: TicketSeed[];
+function variedTicketPrice(basePrice: number, cls: TicketClass) {
+  const variance =
+    cls === TicketClass.FIRST_CLASS
+      ? 1.02 + Math.random() * 0.2
+      : cls === TicketClass.BUSINESS
+        ? 1 + Math.random() * 0.18
+        : 0.98 + Math.random() * 0.16;
+
+  return roundFare(basePrice * variance);
 }
 
-interface EmergencyTaskTemplateSeed {
-  role: Role;
-  description: string;
-  priority: number;
-}
+async function seedFlights(routes: any[], aircraft: any[], aircraftTypes: any[], staffProfiles: any[]) {
+  console.log("🛫 Seeding flights (30-day schedule)...");
 
-interface EmergencyTypeSeed {
-  code: string;
-  name: string;
-  description: string;
-  templates: EmergencyTaskTemplateSeed[];
-}
+  const activeAircraft = aircraft.filter((_: any, i: number) => i % 3 !== 2);
+  const DEPARTURE_HOURS = [6, 9, 13, 17, 21];
+  const usedCodes = new Set<string>();
+  const typeIdToIata = new Map(aircraftTypes.map((t: any) => [t.id, t.iataCode]));
+  const captains = staffProfiles.filter((p: any) => p.role === Role.PILOT && p.rank === Rank.CAPTAIN);
 
-// Utility functions
-function chunkArray<T>(array: T[], size: number): T[][] {
-  const result: T[][] = [];
-  for (let i = 0; i < array.length; i += size) {
-    result.push(array.slice(i, i + size));
-  }
-  return result;
-}
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-function readJsonFile<T>(filePath: string): T[] {
-  if (!fs.existsSync(filePath)) return [];
-  return JSON.parse(fs.readFileSync(filePath, "utf-8"));
-}
+  const flightsData: any[] = [];
 
-// Seeding functions
-async function seedCountries() {
-  console.log("🌍 Seeding Countries...");
-  const countries = readJsonFile<CountryData>(countriesFilePath);
-  if (!countries.length) return;
+  for (const route of routes) {
+    const mins = route.durationMins ?? durationMins(route.distanceKm);
 
-  await prisma.country.createMany({
-    data: countries.map((c) => ({
-      code: c.code,
-      name: c.name,
-    })),
-    skipDuplicates: true,
-  });
+    for (let day = -7; day < 30; day++) {
+      for (const hour of DEPARTURE_HOURS) {
+        if (Math.random() > 0.6) continue;
 
-  console.log(`   ✅ Processed ${countries.length} countries`);
-}
+        const ac = pick(activeAircraft);
+        const departure = addDays(today, day);
+        departure.setHours(
+          hour,
+          pick([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]),
+          0,
+          0,
+        );
+        const arrival = addMinutes(departure, mins);
+        const prices = calcPrices(route.distanceKm, departure);
 
-async function seedAirports() {
-  console.log("✈️ Seeding Airports...");
-  const airports = readJsonFile<AirportData>(airportsFilePath);
-  if (!airports.length) return;
-
-  const airportData = airports.map((a) => ({
-    iataCode: a.iataCode,
-    name: a.name,
-    city: a.city,
-    country: a.country,
-  }));
-
-  const chunks = chunkArray(airportData, 500);
-
-  for (const chunk of chunks) {
-    await prisma.airport.createMany({
-      data: chunk,
-      skipDuplicates: true,
-    });
-  }
-
-  console.log(`   ✅ Processed ${airports.length} airports`);
-}
-
-async function seedAircraft() {
-  console.log("🛩️ Seeding Aircraft...");
-  const planeTypes = readJsonFile<PlaneTypeData>(planesFilePath);
-  if (!planeTypes.length) return;
-
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-  for (const [index, typeData] of planeTypes.entries()) {
-    const aircraftType = await prisma.aircraftType.upsert({
-      where: { iataCode: typeData.code },
-      update: {
-        model: typeData.model,
-        capacityEco: typeData.capacityEco,
-        capacityBiz: typeData.capacityBiz,
-      },
-      create: {
-        iataCode: typeData.code,
-        model: typeData.model,
-        capacityEco: typeData.capacityEco,
-        capacityBiz: typeData.capacityBiz,
-      },
-    });
-
-    const fleetLetter = alphabet[index % 26];
-    const planesData = [];
-
-    for (let i = 0; i < 3; i++) {
-      const sequenceLetter = alphabet[i];
-      const tailNumber = `HS-Y${fleetLetter}${sequenceLetter}`;
-      planesData.push({
-        tailNumber,
-        aircraftTypeId: aircraftType.id,
-        status: AircraftStatus.ACTIVE,
-      });
-    }
-
-    await prisma.aircraft.createMany({
-      data: planesData,
-      skipDuplicates: true,
-    });
-  }
-
-  console.log("   ✅ Aircraft seeded");
-}
-
-async function seedRoutes() {
-  console.log("🗺️ Seeding Routes...");
-  const routes = readJsonFile<RouteData>(routesFilePath);
-  if (!routes.length) return;
-
-  const dbAirports = await prisma.airport.findMany({
-    select: { id: true, iataCode: true },
-  });
-
-  const airportMap = new Map(dbAirports.map((a) => [a.iataCode, a.id]));
-
-  const validRoutes = routes
-    .map((route) => {
-      const originId = airportMap.get(route.origin);
-      const destId = airportMap.get(route.dest);
-      if (!originId || !destId) return null;
-
-      return {
-        originAirportId: originId,
-        destAirportId: destId,
-        distanceKm: route.distance,
-        durationMins: route.duration,
-      };
-    })
-    .filter((r): r is NonNullable<typeof r> => r !== null);
-
-  const chunks = chunkArray(validRoutes, 500);
-
-  for (const chunk of chunks) {
-    await prisma.route.createMany({
-      data: chunk,
-      skipDuplicates: true,
-    });
-  }
-
-  console.log(`   ✅ Processed ${validRoutes.length} routes`);
-}
-
-async function seedUsersFromFile(filePath: string) {
-  const users = readJsonFile<UserSeed>(filePath);
-  if (!users.length) return;
-
-  const bkk = await prisma.airport.findUnique({
-    where: { iataCode: "BKK" },
-  });
-
-  for (const u of users) {
-    await prisma.user.upsert({
-      where: { email: u.email },
-      update: {},
-      create: {
-        username: u.username,
-        email: u.email,
-        passwordHash: u.passwordHash,
-        role: u.role,
-        firstName: u.firstName,
-        lastName: u.lastName,
-        phone: u.phone,
-        staffProfile: u.staffProfile
-          ? {
-              create: {
-                employeeId: u.staffProfile.employeeId,
-                role: u.role,
-                rank: u.staffProfile.rank,
-                baseAirportId: bkk?.id,
-              },
-            }
-          : undefined,
-      },
-    });
-  }
-
-  console.log(
-    `   ✅ Processed ${users.length} users from ${path.basename(filePath)}`,
-  );
-}
-
-async function seedAllUsers() {
-  console.log("👥 Seeding Users...");
-  await seedUsersFromFile(adminsFilePath);
-  await seedUsersFromFile(pilotsFilePath);
-  await seedUsersFromFile(crewsFilePath);
-  await seedUsersFromFile(passengersFilePath);
-}
-
-async function seedFlights() {
-  console.log("🛫 Seeding Flights...");
-  const flights = readJsonFile<FlightSeed>(flightsFilePath);
-  if (!flights.length) {
-    console.log("   ⚠️  No flights found");
-    return;
-  }
-
-  const routes = await prisma.route.findMany({
-    include: {
-      origin: { select: { iataCode: true } },
-      destination: { select: { iataCode: true } },
-    },
-  });
-
-  const routeMap = new Map(
-    routes.map((r) => [`${r.origin.iataCode}-${r.destination.iataCode}`, r.id]),
-  );
-
-  const aircraft = await prisma.aircraft.findMany({
-    where: { status: "ACTIVE" },
-  });
-
-  const pilots = await prisma.staffProfile.findMany({
-    where: {
-      role: "PILOT",
-      rank: { in: ["CAPTAIN", "FIRST_OFFICER"] },
-    },
-  });
-
-  const batchSize = 100;
-  let successCount = 0;
-  let skipCount = 0;
-
-  for (let i = 0; i < flights.length; i += batchSize) {
-    const batch = flights.slice(i, i + batchSize);
-
-    const flightData = batch
-      .map((flight) => {
-        const routeId = routeMap.get(`${flight.origin}-${flight.dest}`);
-        if (!routeId) {
-          skipCount++;
-          return null;
+        let status: FlightStatus = FlightStatus.SCHEDULED;
+        if (day < -1) status = FlightStatus.ARRIVED;
+        else if (day === -1 || (day === 0 && hour < new Date().getHours())) {
+          const roll = Math.random();
+          status =
+            roll > 0.92
+              ? FlightStatus.DELAYED
+              : roll > 0.03
+                ? FlightStatus.DEPARTED
+                : FlightStatus.DIVERTED;
+        } else if (day === 0 && hour === new Date().getHours()) {
+          status = Math.random() > 0.3 ? FlightStatus.BOARDING : FlightStatus.DELAYED;
         }
 
-        const randomAircraft =
-          aircraft[Math.floor(Math.random() * aircraft.length)];
-
-        let captainId = null;
-        if (pilots.length > 0 && Math.random() > 0.3) {
-          const randomPilot = pilots[Math.floor(Math.random() * pilots.length)];
-          captainId = randomPilot.id;
-        }
-
-        return {
-          flightCode: flight.flightCode,
-          routeId,
-          aircraftId: randomAircraft?.id,
-          captainId,
-          gate: flight.gate,
-          departureTime: new Date(flight.departureTime),
-          arrivalTime: new Date(flight.arrivalTime),
-          status: flight.status as FlightStatus,
-          basePrice: flight.basePrice,
-        };
-      })
-      .filter((f): f is NonNullable<typeof f> => f !== null);
-
-    if (flightData.length) {
-      await prisma.flight.createMany({
-        data: flightData,
-        skipDuplicates: true,
-      });
-      successCount += flightData.length;
-    }
-  }
-
-  console.log(`   ✅ Flights created: ${successCount}, skipped: ${skipCount}`);
-}
-
-async function seedBookings() {
-  console.log("🎫 Seeding Bookings...");
-
-  const bookings = readJsonFile<BookingSeed>(bookingsFilePath);
-  if (!bookings.length) {
-    console.log("   ⚠️  No bookings found");
-    return;
-  }
-
-  const flights = await prisma.flight.findMany({
-    select: { id: true, flightCode: true },
-  });
-
-  const flightMap = new Map(flights.map((f) => [f.flightCode, f.id]));
-
-  const passengers = await prisma.user.findMany({
-    where: { role: "PASSENGER" },
-    select: { id: true },
-  });
-
-  if (passengers.length === 0) {
-    console.log("   ⚠️  No passengers found");
-    return;
-  }
-
-  let successCount = 0;
-  let skipCount = 0;
-  let ticketCount = 0;
-
-  for (const booking of bookings) {
-    const flightId = flightMap.get(booking.flightCode);
-
-    if (!flightId) {
-      skipCount++;
-      continue;
-    }
-
-    const randomPassenger =
-      passengers[Math.floor(Math.random() * passengers.length)];
-
-    try {
-      await prisma.booking.create({
-        data: {
-          bookingRef: booking.bookingRef,
-          userId: randomPassenger.id,
-          flightId: flightId,
-          status: booking.status as BookingStatus,
-          totalPrice: booking.totalPrice,
-          contactEmail: booking.contactEmail,
-          contactPhone: booking.contactPhone,
-          createdAt: new Date(booking.createdAt),
-          tickets: {
-            create: booking.tickets.map((ticket) => ({
-              firstName: ticket.firstName,
-              lastName: ticket.lastName,
-              dateOfBirth: ticket.dateOfBirth
-                ? new Date(ticket.dateOfBirth)
-                : null,
-              passportNumber: ticket.passportNumber,
-              gender: ticket.gender,
-              seatNumber: ticket.seatNumber,
-              class: ticket.class as TicketClass,
-              price: ticket.price,
-            })),
-          },
-        },
-      });
-
-      successCount++;
-      ticketCount += booking.tickets.length;
-    } catch (error) {
-      skipCount++;
-    }
-
-    if (successCount % 50 === 0 && successCount > 0) {
-      console.log(`   📊 Progress: ${successCount} bookings processed`);
-    }
-  }
-
-  console.log(
-    `   ✅ Created ${successCount} bookings with ${ticketCount} tickets`,
-  );
-  if (skipCount > 0) {
-    console.log(`   ⚠️  Skipped ${skipCount} bookings`);
-  }
-}
-
-async function seedEmergencyTypes() {
-  console.log("🚨 Seeding Emergency Types...");
-
-  const emergencyTypes = readJsonFile<EmergencyTypeSeed>(
-    emergencyTypesFilePath,
-  );
-
-  if (!emergencyTypes.length) {
-    console.log("   ⚠️  No emergency types found");
-    return;
-  }
-
-  let typesCreated = 0;
-  let templatesCreated = 0;
-
-  for (const emergencyType of emergencyTypes) {
-    const created = await prisma.emergencyType.upsert({
-      where: { code: emergencyType.code },
-      update: {
-        name: emergencyType.name,
-        description: emergencyType.description,
-      },
-      create: {
-        code: emergencyType.code,
-        name: emergencyType.name,
-        description: emergencyType.description,
-        templates: {
-          create: emergencyType.templates.map((template) => ({
-            role: template.role,
-            description: template.description,
-            priority: template.priority,
-          })),
-        },
-      },
-      include: {
-        templates: true,
-      },
-    });
-
-    typesCreated++;
-
-    if (created.templates.length === 0) {
-      await prisma.emergencyTaskTemplate.deleteMany({
-        where: { emergencyTypeId: created.id },
-      });
-
-      await prisma.emergencyTaskTemplate.createMany({
-        data: emergencyType.templates.map((template) => ({
-          emergencyTypeId: created.id,
-          role: template.role,
-          description: template.description,
-          priority: template.priority,
-        })),
-      });
-      templatesCreated += emergencyType.templates.length;
-    } else {
-      templatesCreated += created.templates.length;
-    }
-  }
-
-  console.log(
-    `   ✅ Processed ${typesCreated} emergency types with ${templatesCreated} templates`,
-  );
-}
-
-async function seedEmergencyIncidents() {
-  console.log("🚨 Seeding Emergency Incidents (testing)...");
-
-  const flights = await prisma.flight.findMany({
-    where: {
-      status: { in: ["DEPARTED", "BOARDING", "ARRIVED"] },
-    },
-    take: 20,
-  });
-
-  if (flights.length === 0) {
-    console.log("   ⚠️  No suitable flights found");
-    return;
-  }
-
-  const emergencyTypes = await prisma.emergencyType.findMany({
-    include: { templates: true },
-  });
-
-  if (emergencyTypes.length === 0) {
-    console.log("   ⚠️  No emergency types found");
-    return;
-  }
-
-  let incidentsCreated = 0;
-  let tasksCreated = 0;
-
-  const numIncidents = Math.floor(Math.random() * 6) + 5;
-
-  for (let i = 0; i < numIncidents && i < flights.length; i++) {
-    const flight = flights[i];
-
-    const weights = emergencyTypes.map((type) => {
-      if (type.code.startsWith("MED-002")) return 30;
-      if (type.code.startsWith("MED-001")) return 10;
-      if (type.code.startsWith("SEC-001")) return 15;
-      if (type.code.startsWith("WX-001")) return 20;
-      if (type.code.startsWith("TECH")) return 5;
-      return 1;
-    });
-
-    const totalWeight = weights.reduce((a, b) => a + b, 0);
-    let random = Math.random() * totalWeight;
-    let selectedType = emergencyTypes[0];
-
-    for (let j = 0; j < emergencyTypes.length; j++) {
-      random -= weights[j];
-      if (random <= 0) {
-        selectedType = emergencyTypes[j];
-        break;
+        flightsData.push({
+          id: createCuid(),
+          flightCode: uniqueCode("YK", usedCodes, 5),
+          routeId: route.id,
+          aircraftId: ac.id,
+          captainId: captains.length && Math.random() > 0.1 ? pick(captains).id : null,
+          gate: `${pick(["A", "B", "C", "D", "E"])}${randInt(1, 30)}`,
+          departureTime: departure,
+          arrivalTime: arrival,
+          status,
+          basePriceEconomy: prices.basePriceEconomy,
+          basePriceBusiness: prices.basePriceBusiness,
+          basePriceFirst: prices.basePriceFirst,
+          aircraftTypeIataCode: typeIdToIata.get(ac.aircraftTypeId) ?? "320",
+        });
       }
     }
-
-    const status: EmergencyStatus = Math.random() < 0.8 ? "RESOLVED" : "ACTIVE";
-
-    const declaredAt = new Date(
-      flight.departureTime.getTime() + Math.random() * 3600000,
-    );
-
-    const resolvedAt =
-      status === "RESOLVED"
-        ? new Date(declaredAt.getTime() + Math.random() * 1800000)
-        : null;
-
-    const incident = await prisma.emergencyIncident.create({
-      data: {
-        flightId: flight.id,
-        emergencyTypeId: selectedType.id,
-        status: status,
-        declaredAt: declaredAt,
-        resolvedAt: resolvedAt,
-        tasks: {
-          create: selectedType.templates.map((template) => ({
-            description: template.description,
-            assignedRole: template.role,
-            isCompleted: status === "RESOLVED" ? Math.random() > 0.1 : false,
-            completedAt:
-              status === "RESOLVED" && Math.random() > 0.1
-                ? new Date(declaredAt.getTime() + Math.random() * 1200000)
-                : null,
-          })),
-        },
-      },
-      include: { tasks: true },
-    });
-
-    incidentsCreated++;
-    tasksCreated += incident.tasks.length;
   }
 
+  for (const chunk of chunkArray(flightsData, 5000)) {
+    const dbData = chunk.map(({ aircraftTypeIataCode, ...rest }: any) => rest);
+    await prisma.flight.createMany({ data: dbData });
+  }
+
+  return flightsData;
+}
+
+async function seedBookings(passengers: any[], flights: any[], bookingCount = 400) {
+  console.log("🎫 Seeding bookings, tickets & transactions...");
+
+  const bookingsData: any[] = [];
+  const ticketsData: any[] = [];
+  const transactionsData: any[] = [];
+
+  const FLUSH_THRESHOLD = 500;
+  let totalBookingsCreated = 0;
+  let totalTicketsCreated = 0;
+  let totalTransactionsCreated = 0;
+
+  const flushBuffers = async (force = false) => {
+    if (
+      !force &&
+      bookingsData.length < FLUSH_THRESHOLD &&
+      ticketsData.length < FLUSH_THRESHOLD &&
+      transactionsData.length < FLUSH_THRESHOLD
+    ) {
+      return;
+    }
+
+    if (bookingsData.length > 0) {
+      totalBookingsCreated += bookingsData.length;
+      for (const chunk of chunkArray(bookingsData, 500)) {
+        await prisma.booking.createMany({ data: chunk });
+      }
+      bookingsData.length = 0;
+    }
+
+    if (ticketsData.length > 0) {
+      totalTicketsCreated += ticketsData.length;
+      for (const chunk of chunkArray(ticketsData, 500)) {
+        await prisma.ticket.createMany({ data: chunk });
+      }
+      ticketsData.length = 0;
+    }
+
+    if (transactionsData.length > 0) {
+      totalTransactionsCreated += transactionsData.length;
+      for (const chunk of chunkArray(transactionsData, 500)) {
+        await prisma.transaction.createMany({ data: chunk });
+      }
+      transactionsData.length = 0;
+    }
+  };
+
+  const usedSeatsPerFlight = new Map<string, Set<string>>();
+  const bookableFlights = flights.slice(0, Math.ceil(flights.length * 0.8));
+
+  for (let i = 0; i < bookingCount; i++) {
+    const user = pick(passengers);
+    const flight = pick(bookableFlights);
+
+    const hasFirst = aircraftHasClass(flight.aircraftTypeIataCode, TicketClass.FIRST_CLASS);
+    const hasBiz = aircraftHasClass(flight.aircraftTypeIataCode, TicketClass.BUSINESS);
+
+    let cls: TicketClass = TicketClass.ECONOMY;
+    const classRoll = Math.random();
+    if (hasFirst && classRoll > 0.92) cls = TicketClass.FIRST_CLASS;
+    else if (hasBiz && classRoll > 0.7) cls = TicketClass.BUSINESS;
+
+    const basePricePerTicket =
+      cls === TicketClass.FIRST_CLASS
+        ? Number(flight.basePriceFirst)
+        : cls === TicketClass.BUSINESS
+          ? Number(flight.basePriceBusiness)
+          : Number(flight.basePriceEconomy);
+
+    const paxCount = randInt(1, 4);
+    const statusRoll = Math.random();
+    const bookingStatus =
+      statusRoll > 0.92
+        ? BookingStatus.CANCELLED
+        : statusRoll > 0.05
+          ? BookingStatus.CONFIRMED
+          : BookingStatus.PENDING;
+
+    const isRefunded = bookingStatus === BookingStatus.CANCELLED;
+    const txStatus = isRefunded
+      ? TransactionStatus.REFUNDED
+      : bookingStatus === BookingStatus.CONFIRMED
+        ? TransactionStatus.SUCCESS
+        : TransactionStatus.PENDING;
+
+    const pmType = pick(PAYMENT_METHODS);
+
+    if (!usedSeatsPerFlight.has(flight.id)) {
+      usedSeatsPerFlight.set(flight.id, new Set());
+    }
+
+    const flightSeats = usedSeatsPerFlight.get(flight.id)!;
+    const allValid = allSeatsForCabin(flight.aircraftTypeIataCode, cls);
+    const remaining = allValid.filter((s) => !flightSeats.has(s));
+    if (remaining.length < paxCount) continue;
+
+    const bookingId = createCuid();
+    let ticketsAssigned = 0;
+    let bookingSubtotal = 0;
+
+    for (let p = 0; p < paxCount; p++) {
+      let seat: string | null = null;
+
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const candidate = generateSeatForAircraft(flight.aircraftTypeIataCode, cls);
+        if (candidate && !flightSeats.has(candidate)) {
+          seat = candidate;
+          break;
+        }
+      }
+
+      if (!seat) {
+        const stillFree = allValid.filter((s) => !flightSeats.has(s));
+        if (stillFree.length === 0) break;
+        seat = pick(stillFree);
+      }
+
+      flightSeats.add(seat);
+      const checkedIn = bookingStatus === BookingStatus.CONFIRMED && Math.random() > 0.45;
+      const ticketPrice = variedTicketPrice(basePricePerTicket, cls);
+      bookingSubtotal += ticketPrice;
+
+      ticketsData.push({
+        id: createCuid(),
+        bookingId,
+        flightId: flight.id,
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+        dateOfBirth: faker.date.birthdate({ min: 18, max: 75, mode: "age" }),
+        passportNumber: faker.string.alphanumeric({ length: 9, casing: "upper" }),
+        nationality: pick(PASSENGER_NATIONALITIES),
+        gender: pick(["MALE", "FEMALE"]),
+        seatNumber: seat,
+        class: cls,
+        price: ticketPrice,
+        checkedIn,
+        checkedInAt: checkedIn ? faker.date.recent({ days: 2 }) : null,
+        boardingPass: checkedIn
+          ? `BP-${faker.string.alphanumeric({ length: 12, casing: "upper" })}`
+          : null,
+      });
+
+      ticketsAssigned++;
+    }
+
+    if (ticketsAssigned === 0) continue;
+
+    bookingsData.push({
+      id: bookingId,
+      bookingRef: makeBookingRef(),
+      userId: user.id,
+      flightId: flight.id,
+      status: bookingStatus,
+      totalPrice: bookingSubtotal,
+      currency: "THB",
+      contactEmail: faker.internet.email().toLowerCase(),
+      contactPhone: faker.phone.number(),
+    });
+
+    const paymentTxId = createCuid();
+    const bookingTotal = bookingSubtotal;
+    const refundDate = isRefunded ? faker.date.recent({ days: 10 }) : null;
+    const refundReason = isRefunded ? pick(REFUND_REASONS) : null;
+
+    transactionsData.push({
+      id: paymentTxId,
+      bookingId,
+      amount: bookingTotal,
+      currency: "THB",
+      status: txStatus,
+      type: TransactionType.PAYMENT,
+      paymentMethodType: pmType,
+      refundedAt: refundDate,
+      refundReason,
+    });
+
+    if (isRefunded) {
+      transactionsData.push({
+        id: createCuid(),
+        bookingId,
+        amount: bookingTotal,
+        currency: "THB",
+        status: TransactionStatus.SUCCESS,
+        type: TransactionType.REFUND,
+        paymentMethodType: null,
+        originalTransactionId: paymentTxId,
+        refundedAt: refundDate,
+        refundReason,
+      });
+    }
+
+    await flushBuffers();
+  }
+
+  await flushBuffers(true);
+
+  console.log("  📊 Top-up flights by +5% seats...");
+  let extraReservedSeatCount = 0;
+
+  for (const flight of flights) {
+    const allValidSeats = allSeatsForAircraft(flight.aircraftTypeIataCode);
+    if (allValidSeats.length === 0) continue;
+
+    const takenSeats = usedSeatsPerFlight.get(flight.id) ?? new Set<string>();
+    const topUpSeats = Math.round(allValidSeats.length * 0.05);
+    const freeSeats = allValidSeats.filter((s) => !takenSeats.has(s));
+    const needed = Math.min(topUpSeats, freeSeats.length);
+    if (needed === 0 || freeSeats.length === 0) continue;
+
+    const shuffleLimit = Math.min(needed, freeSeats.length);
+    for (let i = freeSeats.length - 1; i > freeSeats.length - 1 - shuffleLimit; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [freeSeats[i], freeSeats[j]] = [freeSeats[j], freeSeats[i]];
+    }
+
+    const seatsToReserve = freeSeats.slice(-shuffleLimit);
+
+    for (const seat of seatsToReserve) {
+      const cls = ticketClassForSeat(flight.aircraftTypeIataCode, seat);
+      if (!cls) continue;
+
+      const user = pick(passengers);
+      const bookingId = createCuid();
+      const price =
+        cls === TicketClass.FIRST_CLASS
+          ? Number(flight.basePriceFirst)
+          : cls === TicketClass.BUSINESS
+            ? Number(flight.basePriceBusiness)
+            : Number(flight.basePriceEconomy);
+      const ticketPrice = variedTicketPrice(price, cls);
+
+      bookingsData.push({
+        id: bookingId,
+        bookingRef: makeBookingRef(),
+        userId: user.id,
+        flightId: flight.id,
+        status: BookingStatus.PENDING,
+        totalPrice: ticketPrice,
+        currency: "THB",
+        contactEmail: faker.internet.email().toLowerCase(),
+        contactPhone: faker.phone.number(),
+      });
+
+      ticketsData.push({
+        id: createCuid(),
+        bookingId,
+        flightId: flight.id,
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+        dateOfBirth: faker.date.birthdate({ min: 18, max: 75, mode: "age" }),
+        passportNumber: faker.string.alphanumeric({ length: 9, casing: "upper" }),
+        nationality: pick(PASSENGER_NATIONALITIES),
+        gender: pick(["MALE", "FEMALE"]),
+        seatNumber: seat,
+        class: cls,
+        price: ticketPrice,
+        checkedIn: false,
+        checkedInAt: null,
+        boardingPass: null,
+      });
+
+      const topUpPm = pick(PAYMENT_METHODS);
+
+      transactionsData.push({
+        id: createCuid(),
+        bookingId,
+        amount: ticketPrice,
+        currency: "THB",
+        status: TransactionStatus.PENDING,
+        type: TransactionType.PAYMENT,
+        paymentMethodType: topUpPm,
+        refundedAt: null,
+        refundReason: null,
+      });
+
+      extraReservedSeatCount++;
+    }
+
+    await flushBuffers();
+  }
+
+  await flushBuffers(true);
+
   console.log(
-    `   ✅ Created ${incidentsCreated} incidents with ${tasksCreated} tasks`,
+    `  ✅ ${totalBookingsCreated} bookings | ${totalTicketsCreated} tickets | ${totalTransactionsCreated} transactions | ${extraReservedSeatCount} top-up seats`,
   );
 }
 
 async function main() {
-  console.time("⏱️ Seeding Duration");
-  console.log("🌱 Starting complete seed...");
+  console.log("\n🌏  YokAirlines — Database Seed\n" + "─".repeat(50));
 
-  await seedCountries();
-  await seedAirports();
-  await seedAircraft();
-  await seedRoutes();
-  await seedAllUsers();
-  await seedFlights();
-  await seedBookings();
-  await seedEmergencyTypes();
-  await seedEmergencyIncidents();
+  const { passengers, staffProfiles, flights } = await seedSqlData(prisma, {
+    fetchOurAirports,
+    seedAircraftTypes,
+    seedSeatLayouts,
+    seedAircraft,
+    seedAirports,
+    seedRoutes,
+    seedUsers,
+    seedFlights,
+    loadSeatLayouts,
+    buildSeatCache,
+    seedBookings,
+  });
 
-  console.log("✨ Seeding completed successfully");
-  console.timeEnd("⏱️ Seeding Duration");
+  await seedMongoData(prisma, passengers, staffProfiles, flights);
+
+  console.log("\n" + "─".repeat(50));
+  console.log("✅  Seed complete!\n" + "─".repeat(50) + "\n");
 }
 
 main()
   .catch((e) => {
-    console.error("❌ Seeding failed:", e);
+    console.error("\n❌ Seed failed:", e);
     process.exit(1);
   })
   .finally(async () => {

@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# YokAirline ✈️
 
-## Getting Started
+> **01204351 Databases Project** — A comprehensive Airline Management System built with Next.js 16, PostgreSQL, and MongoDB, featuring real-time flight tracking, staff operations management, booking and payment flows, and a full administrative dashboard.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## สมาชิกในกลุ่ม
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- [นายสิรภัทร ทัพภะ](https://github.com/Siraphat-ohm)  6710504409
+- [นายธิติ ทรงพลวารินทร์](https://github.com/Thiti) 6710503992
+- [นายพงศ์พล บุญศิริ](https://github.com/Pongpol) 6710504131
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Database Schema
 
-## Learn More
+- [Schema](./docs/database-design.pdf)
 
-To learn more about Next.js, take a look at the following resources:
+## Video Presentation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- [Video Link](https://youtu.be/krmUC8MhBC8)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Run with Docker
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Copy env template:
+	- `cp .env.example .env`
+2. Update required values in `.env` (at minimum DB credentials, auth secret, and app URL).
+3. Start all services:
+	- `docker compose up --build -d`
+4. Open app:
+	- `http://localhost:3000`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Included services:
+- Next.js app (`app`)
+- PostgreSQL (`postgres`)
+- pgAdmin (`pgadmin`)
+- MongoDB (`mongo`)
+- Mongo web client (`mongo-compass`)
+
+To stop:
+- `docker compose down`
+
+To stop and remove volumes:
+- `docker compose down -v`
+
+## Tech Stack
+
+- **Frontend**: Next.js 16, Mantine UI, Mapbox GL JS
+- **Backend**: Next.js API Routes 
+- **Databases**: PostgreSQL, MongoDB
+- **Authentication**: BetterAuth
+- **Containerization**: Docker
+- **Testing**: Jest, React Testing Library
+- **Documentation**: Swagger
+- **Payment Integration**: Stripe
+
+## Features
+- Staff operations management
+- Booking and payment flows
+- Full administrative dashboard
+- Role-based access control
+- Comprehensive testing suite
+- API documentation with Swagger
+
+## How to Run Locally
+
+1. Clone the repository:
+   - `git clone
+2. Install dependencies:
+   - `bun install`
+3. Set up environment variables:
+   - Create a `.env` file based on `.env.example` and fill in the required values.
+4. Start the development server:
+   - `bun dev`
+5. Access the application at:
+   - `http://localhost:3000`
+6. Stripe Webhook Testing:
+   - Use Stripe CLI to forward webhooks to your local server:
+   - `stripe listen --forward-to localhost:3000/api/v1/stripe/webhook`
+
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
+
+

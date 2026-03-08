@@ -1,0 +1,373 @@
+import { flightRepository } from '@/repositories/flight.repository';
+import { aircraftRepository } from '@/repositories/aircraft.repository';
+import { bookingRepository } from '@/repositories/booking.repository';
+import { seatRepository } from '@/repositories/seat.repository';
+import { canAccessFlight } from '@/auth/permissions';
+import {
+  getSeatAvailability,
+  getBulkSeatAvailability,
+} from '@/services/seat.services';
+import {
+  changeFlightAircraftSchema,
+  createFlightSchema,
+  updateFlightSchema,
+  flightCodeSchema,
+  type ChangeFlightAircraftInput,
+  type CreateFlightInput,
+  type FlightListItem,
+  type FlightServiceAction,
+  type UpdateFlightInput,
+} from '@/types/flight.type';
+import {
+  FlightSearchSchema,
+  type FlightSearchParams,
+  type FlightCodeSearchParams,
+} from '@/schema/flight.schema';
+import { TicketClass } from '@/generated/prisma/client';
+import type { ServiceSession as Session } from '@/services/_shared/session';
+import { makePermissionHelpers } from '@/services/_shared/authorization';
+import type { PaginatedResponse } from '@/types/common';
+import type { Prisma } from '@/generated/prisma/client';
+import { resolvePagination, type PaginationParams } from '@/services/_shared/pagination';
+import { NotFoundError, ConflictError, UnauthorizedError } from '@/lib/errors';
+
+class FlightSeatReassignmentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FlightSeatReassignmentError';
+  }
+}
+
+type SeatLayout = NonNullable<Awaited<ReturnType<typeof seatRepository.findLayoutByAircraftTypeIataCode>>>;
+
+function cabinToTicketClass(cabin: 'FIRST' | 'BUSINESS' | 'ECONOMY'): TicketClass {
+  if (cabin === 'FIRST') return TicketClass.FIRST_CLASS;
+  if (cabin === 'BUSINESS') return TicketClass.BUSINESS;
+  return TicketClass.ECONOMY;
+}
+
+function downgradePriority(ticketClass: TicketClass, allowDowngrade: boolean): TicketClass[] {
+  if (!allowDowngrade) return [ticketClass];
+  if (ticketClass === TicketClass.FIRST_CLASS) {
+    return [TicketClass.FIRST_CLASS, TicketClass.BUSINESS, TicketClass.ECONOMY];
+  }
+  if (ticketClass === TicketClass.BUSINESS) {
+    return [TicketClass.BUSINESS, TicketClass.ECONOMY];
+  }
+  return [TicketClass.ECONOMY];
+}
+
+function buildSeatsByClass(layout: SeatLayout): Map<TicketClass, string[]> {
+  const byClass = new Map<TicketClass, string[]>([
+    [TicketClass.FIRST_CLASS, []],
+    [TicketClass.BUSINESS, []],
+    [TicketClass.ECONOMY, []],
+  ]);
+
+  for (const cabin of layout.cabins) {
+    const cls = cabinToTicketClass(cabin.cabin);
+    const list = byClass.get(cls)!;
+
+    for (let row = cabin.rowStart; row <= cabin.rowEnd; row++) {
+      for (const col of cabin.columns) {
+        const label = `${row}${col}`;
+        if (!cabin.blockedSeats.includes(label)) {
+          list.push(label);
+        }
+      }
+    }
+  }
+
+  return byClass;
+}
+
+function initTakenByClass(): Map<TicketClass, Set<string>> {
+  return new Map([
+    [TicketClass.FIRST_CLASS, new Set<string>()],
+    [TicketClass.BUSINESS, new Set<string>()],
+    [TicketClass.ECONOMY, new Set<string>()],
+  ]);
+}
+
+async function assertFlightCodeAvailable(flightCode: string) {
+  try {
+    await flightRepository.findByCode(flightCode);
+    throw new ConflictError(flightCode);
+  } catch (e) {
+    if (e instanceof ConflictError) throw e;
+  }
+}
+
+async function assertFlightDeletable(id: string) {
+  const bookingCount = await flightRepository.countBookings(id);
+  if (bookingCount > 0) {
+    throw new ConflictError(`Cannot delete flight with ${bookingCount} booking(s)`);
+  }
+}
+
+
+const { checkPermission } = makePermissionHelpers<FlightServiceAction>(
+  canAccessFlight,
+  'flight',
+  (a) => new UnauthorizedError(a),
+);
+
+const PUBLIC_SESSION: Session = {
+  user: {
+    id: 'public',
+    role: 'PASSENGER',
+  },
+};
+
+export const flightService = {
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams<Prisma.FlightWhereInput>,
+  ): Promise<PaginatedResponse<FlightListItem>> {
+    checkPermission(session, 'read');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
+    const [data, total] = await Promise.all([
+      flightRepository.findMany({ where, skip, take: limit }),
+      flightRepository.count(where),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  },
+
+  async findById(id: string, session: Session) {
+    checkPermission(session, 'read');
+    const flight = await flightRepository.findByIdForRole(id, session.user.role);
+    if (!flight) throw new NotFoundError(`Flight not found: ${id}`);
+    return flight;
+  },
+
+  async findByCode(code: string, session: Session) {
+    checkPermission(session, 'read');
+    const flightCode = flightCodeSchema.parse(code);
+    const flight = await flightRepository.findByCodeForRole(flightCode, session.user.role);
+    if (!flight) throw new NotFoundError(`Flight not found: ${flightCode}`);
+    return flight;
+  },
+
+  async findAll(session: Session) {
+    checkPermission(session, 'read');
+    return flightRepository.findAllForRole(session.user.role);
+  },
+
+  async searchWithAvailability(params: FlightSearchParams, session: Session) {
+    checkPermission(session, 'read');
+    const validated = FlightSearchSchema.parse(params);
+    const result    = await flightRepository.searchAvailable(validated);
+
+    const availabilityMap = await getBulkSeatAvailability(
+      result.data.map((f) => ({ id: f.id, aircraftTypeIataCode: f.aircraft.type.iataCode })),
+    );
+
+    return {
+      data: result.data.map((f) => ({ ...f, seatAvailability: availabilityMap.get(f.id) ?? null })),
+      meta: { ...result.meta, totalPages: Math.ceil(result.meta.total / result.meta.limit) },
+    };
+  },
+
+  async findDetailWithAvailability(params: FlightCodeSearchParams, session: Session) {
+    checkPermission(session, 'read');
+    const flight = await flightRepository.findDetailByCode(params);
+    if (!flight) throw new NotFoundError(`Flight not found: ${params.flightCode}`);
+
+    const seatAvailability = await getSeatAvailability(
+      flight.id,
+      flight.aircraft.type.iataCode,
+    );
+
+    return { ...flight, seatAvailability };
+  },
+
+  async findPublicDetailWithAvailability(params: FlightCodeSearchParams) {
+    checkPermission(PUBLIC_SESSION, 'read');
+
+    const flight = await flightRepository.findDetailByCode(params);
+    if (!flight || flight.status !== 'SCHEDULED') return null;
+
+    const seatAvailability = await getSeatAvailability(
+      flight.id,
+      flight.aircraft.type.iataCode,
+    );
+
+    return { ...flight, seatAvailability };
+  },
+
+  async createFlight(input: CreateFlightInput, session: Session) {
+    checkPermission(session, 'create');
+    const data = createFlightSchema.parse(input);
+    await assertFlightCodeAvailable(data.flightCode);
+    return flightRepository.create(data);
+  },
+
+  async updateFlight(id: string, input: UpdateFlightInput, session: Session) {
+    checkPermission(session, 'update');
+    const data = updateFlightSchema.parse(input);
+    const existing = await flightRepository.findById(id);
+    if (!existing) throw new NotFoundError(`Flight not found: ${id}`);
+    if (data.flightCode && data.flightCode !== existing.flightCode) {
+      await assertFlightCodeAvailable(data.flightCode);
+    }
+    return flightRepository.update(id, data);
+  },
+
+  async updateStatus(id: string, status: UpdateFlightInput['status'], session: Session) {
+    checkPermission(session, 'manage-status');
+    const flight = await flightRepository.findById(id);
+    if (!flight) throw new NotFoundError(`Flight not found: ${id}`);
+    return flightRepository.update(id, { status });
+  },
+
+  async changeAircraftAndReassignSeats(
+    id: string,
+    input: ChangeFlightAircraftInput,
+    session: Session,
+  ) {
+    checkPermission(session, 'update');
+
+    const data = changeFlightAircraftSchema.parse(input);
+    const existing = await flightRepository.findById(id);
+
+    if (existing.aircraftId === data.aircraftId) {
+      throw new ConflictError('New aircraft must be different from current aircraft');
+    }
+
+    const newAircraft = await aircraftRepository.findById(data.aircraftId);
+    if (!newAircraft) throw new NotFoundError(`Aircraft not found: ${data.aircraftId}`);
+
+    const layout = await seatRepository.findLayoutByAircraftTypeIataCode(newAircraft.type.iataCode);
+    if (!layout) {
+      throw new FlightSeatReassignmentError(
+        `Seat layout not found for aircraft type: ${newAircraft.type.iataCode}`,
+      );
+    }
+
+    const seatedTickets = await flightRepository.findSeatedTickets(id);
+    if (seatedTickets.length === 0) {
+      const updated = await flightRepository.update(id, { aircraftId: data.aircraftId });
+      return {
+        flight: updated,
+        reassignment: {
+          total: 0,
+          preserved: 0,
+          moved: 0,
+          downgraded: 0,
+          unseated: 0,
+          pendingReaccommodationBookings: 0,
+        },
+      };
+    }
+
+    const seatsByClass = buildSeatsByClass(layout);
+    const takenByClass = initTakenByClass();
+
+    const assignments = new Map<string, string>();
+    const classOverrides = new Map<string, TicketClass>();
+    const overflowTicketIds: string[] = [];
+    let preserved = 0;
+    let downgraded = 0;
+
+    // Pass 1: Keep existing seat if valid in new layout and still free.
+    for (const ticket of seatedTickets) {
+      const currentSeat = ticket.seatNumber;
+      if (!currentSeat) continue;
+
+      const classSeats = seatsByClass.get(ticket.class) ?? [];
+      const taken = takenByClass.get(ticket.class)!;
+
+      if (classSeats.includes(currentSeat) && !taken.has(currentSeat)) {
+        assignments.set(ticket.id, currentSeat);
+        taken.add(currentSeat);
+        preserved++;
+      }
+    }
+
+    // Pass 2: Assign new seats for remaining tickets (with optional downgrade).
+    for (const ticket of seatedTickets) {
+      if (assignments.has(ticket.id)) continue;
+
+      const priority = downgradePriority(ticket.class, data.allowDowngrade);
+      let nextSeat: string | null = null;
+      let assignedClass: TicketClass | null = null;
+
+      for (const cls of priority) {
+        const classSeats = seatsByClass.get(cls) ?? [];
+        const taken = takenByClass.get(cls)!;
+        const found = classSeats.find((s) => !taken.has(s));
+        if (found) {
+          nextSeat = found;
+          assignedClass = cls;
+          break;
+        }
+      }
+
+      if (!nextSeat || !assignedClass) {
+        overflowTicketIds.push(ticket.id);
+        continue;
+      }
+
+      assignments.set(ticket.id, nextSeat);
+      takenByClass.get(assignedClass)!.add(nextSeat);
+
+      if (assignedClass !== ticket.class) {
+        classOverrides.set(ticket.id, assignedClass);
+        downgraded++;
+      }
+    }
+
+    const seatAssignments = Array.from(assignments.entries()).map(([ticketId, seatNumber]) => ({
+      ticketId,
+      seatNumber,
+      ...(classOverrides.has(ticketId)
+        ? { ticketClass: classOverrides.get(ticketId)! }
+        : {}),
+    }));
+
+    const updatedFlight = await flightRepository.changeAircraftAndSeats({
+      flightId: id,
+      newAircraftId: data.aircraftId,
+      resetTicketIds: seatedTickets.map((t) => t.id),
+      seatAssignments,
+    });
+
+    if (!updatedFlight) throw new NotFoundError(`Flight not found: ${id}`);
+
+    const pendingBookingIds = await bookingRepository.markReaccommodationPendingByTicketIds(
+      overflowTicketIds,
+    );
+
+    return {
+      flight: updatedFlight,
+      reassignment: {
+        total: seatedTickets.length,
+        preserved,
+        moved: seatAssignments.length - preserved,
+        downgraded,
+        unseated: overflowTicketIds.length,
+        pendingReaccommodationBookings: pendingBookingIds.length,
+      },
+    };
+  },
+
+  async deleteFlight(id: string, session: Session) {
+    checkPermission(session, 'delete');
+    const flight = await flightRepository.findById(id);
+    if (!flight) throw new NotFoundError(`Flight not found: ${id}`);
+    await assertFlightDeletable(id);
+    return flightRepository.delete(id);
+  },
+};

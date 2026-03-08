@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -13,11 +10,9 @@ datasource db {
 enum Role {
   PASSENGER
   ADMIN
-
-  // Operational Staff
   PILOT
   CABIN_CREW
-  GROUND_STAFF   // Gate/Check-in
+  GROUND_STAFF
   MECHANIC
 }
 
@@ -51,6 +46,7 @@ enum FlightStatus {
 enum BookingStatus {
   PENDING
   CONFIRMED
+  REACCOMMODATION_PENDING
   CANCELLED
 }
 
@@ -67,225 +63,294 @@ enum TransactionStatus {
   REFUNDED
 }
 
-enum EmergencyStatus {
-  ACTIVE
-  RESOLVED
-  CLOSED
+enum TransactionType {
+  PAYMENT
+  REFUND
 }
 
+enum CabinClass {
+  FIRST
+  BUSINESS
+  ECONOMY
+}
 
 model User {
-  id           Int      @id @default(autoincrement())
-  username     String   @unique
-  passwordHash String
-  email        String   @unique
-  role         Role     @default(PASSENGER)
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  phone         String?
+  image         String?
+  emailVerified Boolean  @default(false)
+  role          Role     @default(PASSENGER)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  firstName    String?
-  lastName     String?
-  phone        String?
+  mongoProfileId String? @unique
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  sessions     Session[]
+  accounts     Account[]
+  staffProfile StaffProfile?
+  bookings     Booking[]
 
-  bookings        Booking[]
-  staffProfile    StaffProfile?
-  completedTasks  ActiveEmergencyTask[]
+  @@index([role])
+  @@map("user")
 }
 
 model StaffProfile {
-  id            Int      @id @default(autoincrement())
-  userId        Int      @unique
-  employeeId    String   @unique
+  id         String @id @default(cuid())
+  userId     String @unique
+  employeeId String @unique
+  role       Role
+  rank       Rank?
 
-  role          Role
-  rank          Rank?
+  baseAirportId String?
+  stationId     String?
 
-  // Operational Fields
-  baseAirportId Int?
-  stationId     Int?
-
-  mongoProfileId String?
-
-  user          User     @relation(fields: [userId], references: [id])
-  baseAirport   Airport? @relation("StaffBase", fields: [baseAirportId], references: [id])
-  station       Airport? @relation("StaffStation", fields: [stationId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  baseAirport Airport? @relation("StaffBase", fields: [baseAirportId], references: [id])
+  station     Airport? @relation("StaffStation", fields: [stationId], references: [id])
 
   pilotedFlights Flight[] @relation("CaptainFlights")
-}
 
-
-model Country {
-  code String @id
-  name String
+  @@index([role])
+  @@index([baseAirportId])
 }
 
 model Airport {
-  id        Int    @id @default(autoincrement())
-  iataCode  String @unique // e.g. "BKK"
-  name      String
-  city      String
-  country   String
+  id       String @id @default(cuid())
+  iataCode String @unique
+  name     String
+  city     String
+  country  String
+  lat      Float
+  lon      Float
 
-  origins         Route[]        @relation("OriginAirport")
-  destinations    Route[]        @relation("DestAirport")
+  origins      Route[] @relation("OriginAirport")
+  destinations Route[] @relation("DestAirport")
 
-  basedStaff      StaffProfile[] @relation("StaffBase")
-  stationedStaff  StaffProfile[] @relation("StaffStation")
+  basedStaff     StaffProfile[] @relation("StaffBase")
+  stationedStaff StaffProfile[] @relation("StaffStation")
 }
 
 model AircraftType {
-  id          Int    @id @default(autoincrement())
-  iataCode    String @unique
-  model       String
-  capacityEco Int
-  capacityBiz Int
+  id            String @id @default(cuid())
+  iataCode      String @unique
+  model         String
+  capacityEco   Int
+  capacityBiz   Int
+  capacityFirst Int    @default(0)
 
-  fleet       Aircraft[]
+  fleet      Aircraft[]
+  seatLayout SeatLayoutTemplate?
 }
 
 model Aircraft {
-  id             Int            @id @default(autoincrement())
+  id             String         @id @default(cuid())
   tailNumber     String         @unique
   status         AircraftStatus @default(ACTIVE)
+  aircraftTypeId String
 
-  aircraftTypeId Int
-  type           AircraftType   @relation(fields: [aircraftTypeId], references: [id])
+  type    AircraftType @relation(fields: [aircraftTypeId], references: [id])
+  flights Flight[]
 
-  flights        Flight[]
+  @@index([status])
+}
+
+model SeatLayoutTemplate {
+  id             String  @id @default(cuid())
+  aircraftTypeId String  @unique
+  reference      String?
+
+  aircraftType AircraftType      @relation(fields: [aircraftTypeId], references: [id], onDelete: Cascade)
+  cabins       SeatLayoutCabin[]
+}
+
+model SeatLayoutCabin {
+  id           String     @id @default(cuid())
+  templateId   String
+  cabin        CabinClass
+  rowStart     Int
+  rowEnd       Int
+  columns      String[]
+  aisleAfter   String[]
+  exitRows     Int[]
+  blockedSeats String[]
+  sortOrder    Int        @default(0)
+
+  template SeatLayoutTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
 }
 
 model Route {
-  id              Int    @id @default(autoincrement())
-  originAirportId Int
-  destAirportId   Int
+  id              String @id @default(cuid())
+  originAirportId String
+  destAirportId   String
   distanceKm      Int
   durationMins    Int?
 
-  origin          Airport  @relation("OriginAirport", fields: [originAirportId], references: [id])
-  destination     Airport  @relation("DestAirport", fields: [destAirportId], references: [id])
-  flights         Flight[]
+  origin      Airport  @relation("OriginAirport", fields: [originAirportId], references: [id])
+  destination Airport  @relation("DestAirport", fields: [destAirportId], references: [id])
+  flights     Flight[]
 
   @@unique([originAirportId, destAirportId])
 }
 
 model Flight {
-  id            Int          @id @default(autoincrement())
-  flightCode    String       @unique
-
-  routeId       Int
-  aircraftId    Int
-  captainId     Int?         // StaffProfile ID
-  gate          String?
+  id         String       @id @default(cuid())
+  flightCode String       @unique
+  routeId    String
+  aircraftId String
+  captainId  String?
+  gate       String?
+  status     FlightStatus @default(SCHEDULED)
 
   departureTime DateTime
   arrivalTime   DateTime
-  status        FlightStatus @default(SCHEDULED)
-  basePrice     Decimal      @db.Decimal(10, 2)
 
-  route         Route               @relation(fields: [routeId], references: [id])
-  aircraft      Aircraft            @relation(fields: [aircraftId], references: [id])
-  captain       StaffProfile?       @relation("CaptainFlights", fields: [captainId], references: [id])
+  basePriceEconomy  Decimal @db.Decimal(10, 2)
+  basePriceBusiness Decimal @db.Decimal(10, 2)
+  basePriceFirst    Decimal @db.Decimal(10, 2)
 
-  bookings      Booking[]
-  incidents     EmergencyIncident[]
+  activeIncidentId String?
+
+  route    Route         @relation(fields: [routeId], references: [id])
+  aircraft Aircraft      @relation(fields: [aircraftId], references: [id])
+  captain  StaffProfile? @relation("CaptainFlights", fields: [captainId], references: [id])
+
+  bookings Booking[]
+  tickets  Ticket[]  @relation("FlightTickets")
+
+  @@index([status])
+  @@index([departureTime])
+  @@index([routeId])
 }
 
-
 model Booking {
-  id           Int           @id @default(autoincrement())
-  bookingRef   String        @unique // PNR 6 digits
-
-  userId       Int           // Booker
-  flightId     Int
-  status       BookingStatus @default(PENDING)
-  totalPrice   Decimal       @db.Decimal(10, 2)
+  id         String        @id @default(cuid())
+  bookingRef String        @unique
+  userId     String
+  flightId   String
+  status     BookingStatus @default(PENDING)
+  totalPrice Decimal       @db.Decimal(10, 2)
+  currency   String        @default("THB")
 
   contactEmail String?
   contactPhone String?
 
-  createdAt    DateTime      @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   user         User          @relation(fields: [userId], references: [id])
   flight       Flight        @relation(fields: [flightId], references: [id])
   tickets      Ticket[]
   transactions Transaction[]
+
+  @@index([userId])
+  @@index([flightId])
+  @@index([status])
 }
 
 model Ticket {
-  id             Int         @id @default(autoincrement())
-  bookingId      Int
+  id         String      @id @default(cuid())
+  bookingId  String
+  flightId   String
+  class      TicketClass @default(ECONOMY)
+  seatNumber String?
+  price      Decimal     @db.Decimal(10, 2)
 
-  // Passenger Info
   firstName      String
   lastName       String
   dateOfBirth    DateTime?
   passportNumber String?
+  nationality    String?
   gender         String?
 
-  seatNumber     String
-  class          TicketClass @default(ECONOMY)
-  price          Decimal     @db.Decimal(10, 2)
+  checkedIn    Boolean   @default(false)
+  checkedInAt  DateTime?
+  boardingPass String?
 
-  booking        Booking     @relation(fields: [bookingId], references: [id])
+  seatSurcharge Decimal @default(0) @db.Decimal(10, 2)
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+  flight  Flight  @relation("FlightTickets", fields: [flightId], references: [id])
+
+  @@unique([flightId, seatNumber])
+  @@index([bookingId])
+  @@index([flightId])
 }
 
 model Transaction {
-  id             Int               @id @default(autoincrement())
-  bookingId      Int
-  amount         Decimal           @db.Decimal(10, 2)
-  status         TransactionStatus @default(PENDING)
-  paymentMethod  String
-  stripeChargeId String?
-  createdAt      DateTime          @default(now())
+  id        String            @id @default(cuid())
+  bookingId String
+  amount    Decimal           @db.Decimal(10, 2)
+  currency  String            @default("THB")
+  status    TransactionStatus @default(PENDING)
+  type      TransactionType   @default(PAYMENT)
 
-  booking        Booking           @relation(fields: [bookingId], references: [id])
+  paymentMethodType String?
+
+  refundedAt            DateTime?
+  refundReason          String?
+  originalTransactionId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+  originalTransaction Transaction?  @relation("TransactionRefunds", fields: [originalTransactionId], references: [id])
+  refundTransactions  Transaction[] @relation("TransactionRefunds")
+
+  @@index([bookingId])
+  @@index([status])
+  @@index([originalTransactionId])
 }
 
-model EmergencyType {
-  id            Int      @id @default(autoincrement())
-  code          String   @unique
-  name          String
-  description   String?
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
 
-  templates     EmergencyTaskTemplate[]
-  incidents     EmergencyIncident[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
 }
 
-model EmergencyTaskTemplate {
-  id              Int           @id @default(autoincrement())
-  emergencyTypeId Int
-  role            Role
-  description     String
-  priority        Int
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  emergencyType   EmergencyType @relation(fields: [emergencyTypeId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account")
 }
 
-model EmergencyIncident {
-  id              Int             @id @default(autoincrement())
-  flightId        Int
-  emergencyTypeId Int
-  status          EmergencyStatus @default(ACTIVE)
-  declaredAt      DateTime        @default(now())
-  resolvedAt      DateTime?
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  flight          Flight          @relation(fields: [flightId], references: [id])
-  type            EmergencyType   @relation(fields: [emergencyTypeId], references: [id])
-
-  tasks           ActiveEmergencyTask[]
-}
-
-model ActiveEmergencyTask {
-  id                Int               @id @default(autoincrement())
-  incidentId        Int
-  description       String
-  assignedRole      Role
-
-  isCompleted       Boolean           @default(false)
-  completedByUserId Int?
-  completedAt       DateTime?
-
-  incident          EmergencyIncident @relation(fields: [incidentId], references: [id])
-  completedBy       User?             @relation(fields: [completedByUserId], references: [id])
+  @@index([identifier])
+  @@map("verification")
 }

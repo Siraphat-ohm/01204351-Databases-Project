@@ -1,0 +1,115 @@
+import { bookingRepository } from '@/repositories/booking.repository';
+import { paymentLogRepository } from '@/repositories/payment-log.repository';
+import {
+  createPaymentLogSchema,
+  updatePaymentLogSchema,
+  type CreatePaymentLogInput,
+  type UpdatePaymentLogInput,
+} from '@/types/payment-log.type';
+import type { PaginatedResponse } from '@/types/common';
+import type { ServiceSession as Session } from '@/services/_shared/session';
+import { hasAnyRole } from '@/services/_shared/role';
+import {
+  resolvePagination,
+  type PaginationParams,
+} from '@/services/_shared/pagination';
+
+import { NotFoundError, UnauthorizedError } from '@/lib/errors';
+
+function isStaff(session: Session) {
+  return hasAnyRole(session, ['ADMIN', 'PILOT', 'CABIN_CREW', 'GROUND_STAFF', 'MECHANIC']);
+}
+
+function isAdmin(session: Session) {
+  return hasAnyRole(session, ['ADMIN']);
+}
+
+async function assertCanReadBooking(session: Session, bookingId: string) {
+  const booking = await bookingRepository.findById(bookingId);
+  if (!booking) throw new NotFoundError(`Booking not found: ${bookingId}`);
+
+  if (!isStaff(session) && booking.userId !== session.user.id) {
+    throw new UnauthorizedError('read');
+  }
+
+  return booking;
+}
+
+export const paymentLogService = {
+  async findById(id: string, session: Session) {
+    const log = await paymentLogRepository.findById(id);
+    if (!log) throw new NotFoundError(`Payment log not found: ${id}`);
+
+    const bookingId = String((log as { bookingId: unknown }).bookingId);
+    await assertCanReadBooking(session, bookingId);
+
+    return log;
+  },
+
+  async findByBookingId(bookingId: string, session: Session) {
+    await assertCanReadBooking(session, bookingId);
+    return paymentLogRepository.findByBookingId(bookingId);
+  },
+
+  async findByTransactionIds(transactionIds: string[], session: Session) {
+    if (!isStaff(session)) throw new UnauthorizedError('read-all');
+    return paymentLogRepository.findByTransactionIds(transactionIds);
+  },
+
+  async findAll(session: Session) {
+    if (!isStaff(session)) throw new UnauthorizedError('read-all');
+    return paymentLogRepository.findAll();
+  },
+
+  async findAllPaginated(
+    session: Session,
+    params?: PaginationParams<Record<string, unknown>>,
+  ): Promise<PaginatedResponse<Awaited<ReturnType<typeof paymentLogRepository.findAll>>[number]>> {
+    if (!isStaff(session)) throw new UnauthorizedError('read-all');
+
+    const { page, limit, skip } = resolvePagination(params);
+    const where = (params as any)?.where;
+    const [data, total] = await Promise.all([
+      paymentLogRepository.findMany({ where, skip, take: limit }),
+      paymentLogRepository.count(where),
+    ]);
+
+    return {
+      data,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  },
+
+  async create(input: CreatePaymentLogInput, session: Session) {
+    if (!isAdmin(session)) throw new UnauthorizedError('create');
+
+    const data = createPaymentLogSchema.parse(input);
+    await assertCanReadBooking(session, data.bookingId);
+
+    return paymentLogRepository.create(data);
+  },
+
+  async updateById(id: string, input: UpdatePaymentLogInput, session: Session) {
+    if (!isAdmin(session)) throw new UnauthorizedError('update');
+
+    const data = updatePaymentLogSchema.parse(input);
+    const updated = await paymentLogRepository.updateById(id, data);
+    if (!updated) throw new NotFoundError(`Payment log not found: ${id}`);
+
+    return updated;
+  },
+
+  async deleteById(id: string, session: Session) {
+    if (!isAdmin(session)) throw new UnauthorizedError('delete');
+
+    const deleted = await paymentLogRepository.deleteById(id);
+    if (!deleted) throw new NotFoundError(`Payment log not found: ${id}`);
+
+    return deleted;
+  },
+};
