@@ -22,6 +22,10 @@ interface IssueReport {
   status: IssueStatus;
   attachments: string[];
   createdAt: Date;
+  adminResolution?: {
+    note: string;
+    resolvedAt: Date;
+  } | null;
   user?: {
     name: string | null;
     email: string;
