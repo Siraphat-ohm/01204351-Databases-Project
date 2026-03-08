@@ -46,6 +46,8 @@ export default async function EditFlightPage({ params }: PageProps) {
       destCity: route.destination.city,
     }));
 
+    const selectedRoute = availableRoutes.find((route: any) => route.id === flight.routeId);
+
     // 🌟 Format Captain Options (with Image)
     const captainOptions = pilotsResponse.data
       .filter((pilot: any) => pilot.staffProfile?.id) 
@@ -68,8 +70,8 @@ export default async function EditFlightPage({ params }: PageProps) {
       basePriceFirst: Number(flight.basePriceFirst),
       aircraftId: flight.aircraftId,
       captainId: flight.captainId, // 🌟 Make sure captainId is passed
-      originCode: flight.route.origin.iataCode,
-      destCode: flight.route.destination.iataCode,
+      originCode: (flight as any).route?.origin?.iataCode ?? selectedRoute?.originCode ?? '',
+      destCode: (flight as any).route?.destination?.iataCode ?? selectedRoute?.destCode ?? '',
     };
     
     return (
