@@ -4,133 +4,83 @@
 
 ---
 
-## 📅 Submission Info
+## สมาชิกในกลุ่ม
 
-| Item | Detail |
-|------|--------|
-| **Course** | 01204351 Databases |
-| **Deadline** | Monday, March 9, 2026 (Class Time) |
-| **GitHub** | Switch repository to **Public** after the deadline for grading |
-
-### Deliverables
-1. **GitHub Repository** — this repo; must be runnable using the documentation below
-2. **Presentation Video** — uploaded to YouTube, max **7 minutes**, with clear video and excellent audio quality
-   - Must cover: Problem description · System overview · Application demonstration · Database design explanation
-3. **Database Design Document** — one A4 page, single side (`docs/database-design.pdf`), also included in this repository
-   - Must summarize: PostgreSQL schema · MongoDB document structure · Role of each database
+- [นายสิรภัทร ทัพภะ](https://github.com/Siraphat-ohm)  6710504409
+- [นายธิติ ทรงพลวารินทร์](https://github.com/Thiti) 6710503992
+- [นายพงศ์พล บุญศิริ](https://github.com/Pongpol) 6710504131
 
 ---
 
-## 🛠 Tech Stack
+## Database Schema
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 16 (App Router) |
-| Runtime | Bun |
-| UI | Mantine UI, Tabler Icons, Lucide Icons |
-| Database (SQL) | PostgreSQL + Prisma |
-| Database (NoSQL) | MongoDB + Mongoose |
-| Auth | Better Auth |
-| Payments | Stripe |
-| Maps | Mapbox GL |
-| Validation | Zod |
-| API Docs | Swagger UI / Zod-OpenAPI |
+- [Schema](./docs/database-design.pdf)
+
+## Video Presentation
+
+- [Video Link](https://youtu.be/krmUC8MhBC8)
 
 ---
 
-## 🚀 Getting Started
+## Run with Docker
 
-This project is optimized for [Bun](https://bun.sh/). Follow the steps below to run it locally.
+1. Copy env template:
+	- `cp .env.example .env`
+2. Update required values in `.env` (at minimum DB credentials, auth secret, and app URL).
+3. Start all services:
+	- `docker compose up --build -d`
+4. Open app:
+	- `http://localhost:3000`
 
-### 1. Clone & Install
+Included services:
+- Next.js app (`app`)
+- PostgreSQL (`postgres`)
+- pgAdmin (`pgadmin`)
+- MongoDB (`mongo`)
+- Mongo web client (`mongo-compass`)
 
-```bash
-git clone <repository-url>
-cd 01204351-Databases-Project
-bun install
-```
+To stop:
+- `docker compose down`
 
-### 2. Environment Configuration
+To stop and remove volumes:
+- `docker compose down -v`
 
-```bash
-cp .env.example .env
-```
+## Tech Stack
 
-Fill in the following values in `.env`:
+- **Frontend**: Next.js 16, Mantine UI, Mapbox GL JS
+- **Backend**: Next.js API Routes 
+- **Databases**: PostgreSQL, MongoDB
+- **Authentication**: BetterAuth
+- **Containerization**: Docker
+- **Testing**: Jest, React Testing Library
+- **Documentation**: Swagger
+- **Payment Integration**: Stripe
 
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `MONGO_USER_DATABASE_URL` | MongoDB connection string |
-| `BETTER_AUTH_SECRET` | Random 32+ character secret |
-| `STRIPE_SECRET_KEY` | From Stripe Dashboard |
-| `STRIPE_WEBHOOK_SECRET` | From `stripe listen` (local dev) |
-| `NEXT_PUBLIC_MAPBOX_TOKEN` | From Mapbox account |
+## Features
+- Staff operations management
+- Booking and payment flows
+- Full administrative dashboard
+- Role-based access control
+- Comprehensive testing suite
+- API documentation with Swagger
 
-### 3. Start Database Services
+## How to Run Locally
 
-```bash
-docker-compose up -d
-```
+1. Clone the repository:
+   - `git clone
+2. Install dependencies:
+   - `bun install`
+3. Set up environment variables:
+   - Create a `.env` file based on `.env.example` and fill in the required values.
+4. Start the development server:
+   - `bun dev`
+5. Access the application at:
+   - `http://localhost:3000`
+6. Stripe Webhook Testing:
+   - Use Stripe CLI to forward webhooks to your local server:
+   - `stripe listen --forward-to localhost:3000/api/v1/stripe/webhook`
 
-Admin UIs (once running):
-- **pgAdmin** → [http://localhost:8080](http://localhost:8080)
-- **MongoDB Compass (Web)** → [http://localhost:8081](http://localhost:8081)
+## License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
 
-### 4. Database Setup
 
-```bash
-bun db:generate   # Generate Prisma client
-bun db:migrate    # Apply PostgreSQL migrations
-```
-
-### 5. Seed Data
-
-```bash
-bun db:seed        # Seed airports, routes, staff, aircraft & seat layouts
-```
-
-### 6. Run the Application
-
-```bash
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) — staff portal login at [http://localhost:3000/admin/login](http://localhost:3000/admin/login).
-
-### 7. Run Tests
-
-```bash
-bun test
-```
-
----
-
-## 📜 Available Scripts
-
-| Script | Description |
-|--------|-------------|
-| `bun dev` | Start development server |
-| `bun build` | Build for production |
-| `bun start` | Start production server |
-| `bun test` | Run the test suite |
-| `bun db:generate` | Generate Prisma client |
-| `bun db:migrate` | Run Prisma migrations |
-| `bun db:seed` | Seed all primary data (airports, routes, staff, aircraft, seat layouts) |
-| `bun db:reset` | Reset and re-migrate the database |
-
----
-
-## 🗄 Database Design
-
-See [`docs/database-design.pdf`](docs/database-design.pdf) for the full one-page design document.
-
-### PostgreSQL (Prisma)
-Handles all core relational entities: Users, Staff, Flights, Aircraft, Routes, Airports, Bookings, Tickets, Payments, and Seat layouts.
-
-### MongoDB (Mongoose)
-Handles high-frequency operational data: Flight Operations Logs, Issue Reports, and audit trails that benefit from flexible schema and high write throughput.
-
-### Role of Each Database
-- **PostgreSQL** — Source of truth for transactional and relational data requiring ACID guarantees (bookings, payments, user accounts).
-- **MongoDB** — Operational and log data with flexible schema, suited for append-heavy workloads and rich nested documents.
