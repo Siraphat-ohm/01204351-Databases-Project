@@ -43,7 +43,7 @@ describe('AirportCreateForm Component', () => {
     fireEvent.change(iataInput, { target: { value: 'BKK' } });
     fireEvent.change(nameInput, { target: { value: 'Suvarnabhumi' } });
     
-    expect(iataInput.value).toBe('BKK');
-    expect(nameInput.value).toBe('Suvarnabhumi');
+    expect((iataInput as HTMLInputElement).value).toBe('BKK');
+    expect((nameInput as HTMLInputElement).value).toBe('Suvarnabhumi');
   });
 });

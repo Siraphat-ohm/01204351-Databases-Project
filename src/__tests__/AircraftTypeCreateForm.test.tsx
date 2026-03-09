@@ -41,7 +41,7 @@ describe('AircraftTypeCreateForm Component', () => {
     fireEvent.change(modelInput, { target: { value: 'Airbus A350' } });
     fireEvent.change(iataInput, { target: { value: '359' } });
     
-    expect(modelInput.value).toBe('Airbus A350');
-    expect(iataInput.value).toBe('359');
+    expect((modelInput as HTMLInputElement).value).toBe('Airbus A350');
+    expect((iataInput as HTMLInputElement).value).toBe('359');
   });
 });

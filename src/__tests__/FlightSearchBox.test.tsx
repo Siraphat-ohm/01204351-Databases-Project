@@ -12,11 +12,13 @@ jest.mock('next/navigation', () => ({
 }));
 
 // Mock fetch
-global.fetch = jest.fn(() =>
+const mockFetch = jest.fn(() =>
   Promise.resolve({
     json: () => Promise.resolve([]),
   })
-) as jest.Mock;
+);
+(mockFetch as any).preconnect = jest.fn();
+global.fetch = mockFetch as unknown as typeof fetch;
 
 describe('FlightSearchBox Component', () => {
   it('renders correctly', () => {
