@@ -1,5 +1,8 @@
 # YokAirline ✈️
 
+[![CI](https://github.com/Siraphat-ohm/01204351-Databases-Project/actions/workflows/ci.yml/badge.svg)](https://github.com/Siraphat-ohm/01204351-Databases-Project/actions/workflows/ci.yml)
+[![Docker](https://github.com/Siraphat-ohm/01204351-Databases-Project/actions/workflows/docker.yml/badge.svg)](https://github.com/Siraphat-ohm/01204351-Databases-Project/actions/workflows/docker.yml)
+
 > **01204351 Databases Project** — A comprehensive Airline Management System built with Next.js 16, PostgreSQL, and MongoDB, featuring real-time flight tracking, staff operations management, booking and payment flows, and a full administrative dashboard.
 
 ---
