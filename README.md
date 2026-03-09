@@ -22,33 +22,10 @@
 
 ---
 
-## Run with Docker
-
-1. Copy env template:
-	- `cp .env.example .env`
-2. Update required values in `.env` (at minimum DB credentials, auth secret, and app URL).
-3. Start all services:
-	- `docker compose up --build -d`
-4. Open app:
-	- `http://localhost:3000`
-
-Included services:
-- Next.js app (`app`)
-- PostgreSQL (`postgres`)
-- pgAdmin (`pgadmin`)
-- MongoDB (`mongo`)
-- Mongo web client (`mongo-compass`)
-
-To stop:
-- `docker compose down`
-
-To stop and remove volumes:
-- `docker compose down -v`
-
 ## Tech Stack
 
 - **Frontend**: Next.js 16, Mantine UI, Mapbox GL JS
-- **Backend**: Next.js API Routes 
+- **Backend**: Next.js API Routes
 - **Databases**: PostgreSQL, MongoDB
 - **Authentication**: BetterAuth
 - **Containerization**: Docker
@@ -57,6 +34,7 @@ To stop and remove volumes:
 - **Payment Integration**: Stripe
 
 ## Features
+
 - Staff operations management
 - Booking and payment flows
 - Full administrative dashboard
@@ -64,23 +42,136 @@ To stop and remove volumes:
 - Comprehensive testing suite
 - API documentation with Swagger
 
-## How to Run Locally
+---
 
-1. Clone the repository:
-   - `git clone
-2. Install dependencies:
-   - `bun install`
-3. Set up environment variables:
-   - Create a `.env` file based on `.env.example` and fill in the required values.
-4. Start the development server:
-   - `bun dev`
-5. Access the application at:
-   - `http://localhost:3000`
-6. Stripe Webhook Testing:
-   - Use Stripe CLI to forward webhooks to your local server:
-   - `stripe listen --forward-to localhost:3000/api/v1/stripe/webhook`
+## Run with Docker (Recommended)
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) & Docker Compose
+- [Stripe CLI](https://stripe.com/docs/stripe-cli) (for payment testing)
+
+### 1. Setup environment
+
+```bash
+cp .env.example .env
+```
+
+Fill in the required values in `.env` (at minimum: DB credentials, `BETTER_AUTH_SECRET`, Stripe keys, Mapbox token).
+
+### 2. Start all services
+
+```bash
+docker compose up --build -d
+```
+
+### 3. Seed the database
+
+```bash
+docker exec airline_app sh -c 'NODE_OPTIONS="--max-old-space-size=3072" ./node_modules/.bin/tsx prisma/seed.ts'
+```
+
+### 4. Open app
+
+- App: http://localhost:3000
+- pgAdmin: http://localhost:8080
+- Mongo Express: http://localhost:8081
+
+### 5. Stripe webhook (run on host machine, not in Docker)
+
+```bash
+stripe login
+stripe listen --forward-to http://localhost:3000/api/v1/stripe/webhook
+```
+
+Copy the `whsec_...` secret it prints into `STRIPE_WEBHOOK_SECRET` in `.env`, then restart:
+
+```bash
+docker compose up -d app
+```
+
+### Docker services
+
+| Service        | Container             | Port  |
+| -------------- | --------------------- | ----- |
+| Next.js App    | `airline_app`         | 3000  |
+| PostgreSQL     | `airline_postgres`    | 5432  |
+| pgAdmin        | `airline_pgadmin`     | 8080  |
+| MongoDB        | `airline_mongo`       | 27017 |
+| Mongo Express  | `airline_mongo_express` | 8081 |
+
+### Docker commands
+
+```bash
+# Stop all services
+docker compose down
+
+# Stop and remove volumes (deletes DB data)
+docker compose down -v
+
+# Rebuild without cache
+docker compose build --no-cache
+docker compose up -d
+
+# View app logs
+docker logs airline_app
+```
+
+---
+
+## Run Locally (Development)
+
+### Prerequisites
+
+- [Bun](https://bun.sh/)
+- PostgreSQL & MongoDB running (or use Docker for DBs only: `docker compose up -d postgres mongo`)
+- [Stripe CLI](https://stripe.com/docs/stripe-cli)
+
+### 1. Install dependencies
+
+```bash
+bun install
+```
+
+### 2. Setup environment
+
+```bash
+cp .env.example .env
+# Fill in the required values
+```
+
+### 3. Setup database
+
+```bash
+bunx prisma generate
+bunx prisma migrate dev
+bunx tsx prisma/seed.ts
+```
+
+### 4. Start dev server
+
+```bash
+bun dev
+```
+
+### 5. Stripe webhook testing
+
+```bash
+stripe listen --forward-to localhost:3000/api/v1/stripe/webhook
+```
+
+### 6. Open app
+
+- http://localhost:3000
+
+### Default seed credentials
+
+- **Admin**: `admin@yokairlines.com` / `Passw0rd123!`
+
+---
 
 ## License
+
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
 
 
