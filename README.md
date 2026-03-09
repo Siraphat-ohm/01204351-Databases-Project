@@ -92,13 +92,19 @@ docker compose up -d app
 
 ### Docker services
 
-| Service        | Container             | Port  |
-| -------------- | --------------------- | ----- |
-| Next.js App    | `airline_app`         | 3000  |
-| PostgreSQL     | `airline_postgres`    | 5432  |
-| pgAdmin        | `airline_pgadmin`     | 8080  |
-| MongoDB        | `airline_mongo`       | 27017 |
-| Mongo Express  | `airline_mongo_express` | 8081 |
+| Service       | Container               | Host Port | Notes                          |
+| ------------- | ----------------------- | --------- | ------------------------------ |
+| Next.js App   | `airline_app`           | 3000      |                                |
+| PostgreSQL    | `airline_postgres`      | —         | Internal only (use pgAdmin)    |
+| pgAdmin       | `airline_pgadmin`       | 8080      |                                |
+| MongoDB       | `airline_mongo`         | —         | Internal only (use Mongo Express) |
+| Mongo Express | `airline_mongo_express` | 8081      |                                |
+
+> **Note:** `NEXT_PUBLIC_*` environment variables (Mapbox token, Stripe publishable key, App URL) are embedded into the client bundle at **build time**. If you change any of them in `.env`, you must rebuild the image:
+>
+> ```bash
+> docker compose build --no-cache app && docker compose up -d app
+> ```
 
 ### Docker commands
 
