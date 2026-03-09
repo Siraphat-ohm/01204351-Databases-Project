@@ -34,7 +34,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: 4g
     networks:
       - airline_network
 
