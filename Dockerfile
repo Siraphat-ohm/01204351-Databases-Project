@@ -18,11 +18,14 @@ ENV MONGO_USER_DATABASE_URL="mongodb://root:password@localhost:27017/yok_logs?au
 ENV BETTER_AUTH_SECRET="docker-build-placeholder"
 ENV BETTER_AUTH_URL="http://localhost:3000"
 ENV BETTER_AUTH_BASE_URL="http://localhost:3000"
-ENV NEXT_PUBLIC_APP_URL="http://localhost:3000"
+ARG NEXT_PUBLIC_APP_URL="http://localhost:3000"
+ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_placeholder"
+ARG NEXT_PUBLIC_MAPBOX_TOKEN="pk.placeholder"
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_MAPBOX_TOKEN=$NEXT_PUBLIC_MAPBOX_TOKEN
 ENV STRIPE_SECRET_KEY="sk_test_placeholder"
-ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_placeholder"
 ENV STRIPE_WEBHOOK_SECRET="whsec_placeholder"
-ENV NEXT_PUBLIC_MAPBOX_TOKEN="pk.placeholder"
 
 RUN node node_modules/.bin/prisma generate
 RUN node node_modules/next/dist/bin/next build
