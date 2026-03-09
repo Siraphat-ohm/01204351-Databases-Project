@@ -66,6 +66,7 @@ describe('routeService', () => {
       destAirportId: 'cl00000000000000000000002',
       distanceKm: 600,
       durationMins: 120,
+      createReturn: false,
     };
 
     it('should create route for admin', async () => {

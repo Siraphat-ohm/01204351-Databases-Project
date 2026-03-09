@@ -57,7 +57,7 @@ describe('FlightCreateForm Component', () => {
 
   it('updates flight code input', () => {
     renderComponent();
-    const input = screen.getByLabelText(/Flight Code/i);
+    const input = screen.getByLabelText(/Flight Code/i) as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'TG101' } });
     expect(input.value).toBe('TG101');
   });

@@ -1,7 +1,18 @@
+/**
+ * @jest-environment node
+ */
 import { paymentService } from '../services/payment.services';
 import { paymentRepository } from '@/repositories/payment.repository';
 import { bookingRepository } from '@/repositories/booking.repository';
 import { UnauthorizedError, NotFoundError } from '@/lib/errors';
+
+// Mock mongoose to prevent real connections and open handles
+jest.mock('@/lib/mongoose', () => ({
+  connectMongo: jest.fn(),
+  PaymentLogModel: {
+    updateOne: jest.fn().mockReturnValue({ exec: jest.fn() }),
+  },
+}));
 
 // Mock stripe
 jest.mock('@/lib/stripe', () => ({

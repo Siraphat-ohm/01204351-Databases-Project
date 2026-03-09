@@ -14,7 +14,18 @@ const customJestConfig = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   testPathIgnorePatterns: ['<rootDir>/src/lib/openapi/'],
+  transformIgnorePatterns: [
+    'node_modules/(?!(bson|mongodb|mongoose)/)',
+  ],
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async
-module.exports = createJestConfig(customJestConfig)
+module.exports = async () => {
+  const jestConfig = await createJestConfig(customJestConfig)()
+  return {
+    ...jestConfig,
+    transformIgnorePatterns: [
+      '/node_modules/(?!(.pnpm|bson|mongodb|mongoose)/)(?!.*node_modules/(bson|mongodb)/)',
+    ],
+  }
+}

@@ -39,7 +39,7 @@ describe('AircraftCreateForm Component', () => {
 
   it('updates tail number input', () => {
     renderComponent();
-    const input = screen.getByLabelText(/Tail Number/i);
+    const input = screen.getByLabelText(/Tail Number/i) as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'HS-TKA' } });
     expect(input.value).toBe('HS-TKA');
   });
